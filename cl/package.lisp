@@ -1,0 +1,2 @@
+(defpackage #:frereth
+  (:use #:cl))
