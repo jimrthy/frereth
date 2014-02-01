@@ -1,0 +1,14 @@
+---
+- hosts: ubuntu-testers
+  user: ubuntu
+
+  roles:  
+  - normal-user
+  # Note that this is really the only part of this playbook
+  # that's specific to Ubuntu.
+  # Oh well. It's not like I care about other distros
+  # yet.
+  - must-have-ubuntu-packages
+  - clojure-runner
+  # This next should be run as the user created in the normal-user step
+  - frereth-hacker

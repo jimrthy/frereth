@@ -1,0 +1,10 @@
+---
+- name: Update/upgrade repo cache
+  sudo: True
+  apt: update_cache=yes upgrade=dist
+
+- name: Install absolute must-have packages  
+  sudo: True
+  apt: name={{item}} state=latest
+  with_items: ${system_packages}
+    

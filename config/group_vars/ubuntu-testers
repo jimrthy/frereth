@@ -1,0 +1,33 @@
+# -*- mode: yaml -*-
+---
+lein_dir: /usr/local/bin/lein
+system_packages:
+  # Would be using this if I were building a server
+  # - openjdk-7-jre-headless
+  - openjdk-7-jdk
+  - vim
+  - emacs
+  - tmux
+  - zsh
+  - python-pip
+  - git
+  - subversion
+  - ssh
+  # Included w/ ssh
+  # which means it'll be very useful for hosts where I just
+  # want to install something minimalist for the sake of time
+  # - wget
+  # e.g.
+  # - openssh-server
+frereth_repositories:
+  # This is hanging because, at the very least
+  # 1) github.com isn't a known host
+  - { repo: 'jzmq', folder: 'jzmq' }
+  # TODO: Uncomment the rest of these when the first one's working
+  #- cljeromq
+  #- frereth
+  #- frereth-client
+  #- frereth-server
+  #- frereth-terminal
+  #- frereth-renderer
+  #- penumbra

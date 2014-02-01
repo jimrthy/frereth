@@ -1,0 +1,18 @@
+---
+- name: Set up directory for local repos
+  file: path=/home/jimrthy/projects state=directory
+
+- name: Add github to known-hosts
+  # TODO: At least theoretically, we shouldn't need to do this
+  shell: ssh-key-can github.com >> /home/jimrthy/.ssh/known_hosts
+    
+- name: Clone repositories
+  # This isn't going to work with my existing setup. The version of
+  # ansible I have installed is just too old.
+      # Q: Should this happen on remote or locally?
+      # A: Right now, it's mostly a moot point. This 
+      # feature didn't get added until 1.5, which I don't have
+      # access to at the moment
+      #key_file=~/.ssh/id_rsa
+  git: remote=github force=no repo=git@github.com:jimrthy/github.com/jimrthy/{{ project.repo }}.git dest=/home/jimrthy/projects/{{ project.folder }}
+  with_items: ${frereth_repositories}

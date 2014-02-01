@@ -1,0 +1,6 @@
+#! /bin/sh
+
+# Set up some basic environment variables to make life easier
+
+export ANSIBLE_HOST_KEY_CHECKING=fALSE
+export ANSIBLE_HOSTS=`pwd`/hosts
