@@ -2,5 +2,11 @@
 
 # Set up some basic environment variables to make life easier
 
-export ANSIBLE_HOST_KEY_CHECKING=fALSE
+export ANSIBLE_HOST_KEY_CHECKING=False
 export ANSIBLE_HOSTS=`pwd`/hosts
+
+# Note that this assumes the ansible hacking env-setup script has already
+# been source'd to properly set up environment variables.
+# There are issues between '-c ssh' and '-c paramiko' that I haven't
+# had any chance to dig into
+ansible-playbook -i hosts -c ssh site.yml

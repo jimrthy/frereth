@@ -35,9 +35,10 @@
 - name: Clone repositories
   sudo: True
   sudo_user: jimrthy
-  #repo=git@github.com:jimrthy/{{ item }}.git
+  #repo=ssh://gh/jimrthy/{{ item }}.git
   git: remote=github force=no
-       repo=ssh://gh/jimrthy/{{ item }}.git       
+       repo=git@github.com:jimrthy/{{ item }}.git    
        dest=/home/jimrthy/projects/{{ item }}
+       key_file=/home/jimrthy/.ssh/github_key
        accept_hostkey=yes
   with_items: ${frereth_repositories}
