@@ -27,15 +27,10 @@
   sudo_user: jimrthy
   copy: src=resources/vimrc dest=/home/jimrthy/.vimrc backup=yes
 
-- name: Oh! My ZSH!
+- name: Clone Oh! My ZSH! Repository
   sudo: True
   sudo_user: jimrthy
-  # Yes, this is horribly insecure.
-  # For anything serious, need to clone the repo locally, verify its security holes,
-  # then deploy that.
-  # Aside from the minor little detail that it doesn't work.
-  # (First guess: ansible doesn't like command-line progress bars)
-  shell: curl -L https://raw.github.com/robbyrussel/oh-my-zsh/master/tools/install.sh | sh
+  git: repo=https://github.com/robbyrussell/oh-my-zsh.git dest=/home/jimrthy/.oh-my-zsh
 
 - name: Nice shell
   sudo: True
@@ -49,6 +44,7 @@
 
 
 # TODO: Uncomment this when I'm finished debugging
+# Q: Does it make any real difference?
 #- name: Pre-install Leiningen
 #  sudo_user: jimrthy
 #  sudo: True
