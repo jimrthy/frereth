@@ -1,18 +1,43 @@
 ---
+# TODO: Uncomment this when I'm finished debugging
+#- name: Pre-install Leiningen
+#  sudo_user: jimrthy
+#  sudo: True
+#  command: /usr/local/bin/lein
+
 - name: Set up directory for local repos
+  sudo: True
+  sudo_user: jimrthy
   file: path=/home/jimrthy/projects state=directory
 
 - name: Add github to known-hosts
+  sudo: True
+  sudo_user: jimrthy
   # TODO: At least theoretically, we shouldn't need to do this
-  shell: ssh-key-can github.com >> /home/jimrthy/.ssh/known_hosts
+  # That requires a newer version of ansible than I currently have
+  # available
+  # This one's a little tricky: I don't really want to append over
+  # any existing data. I also want to make sure that this gets added.
+  # Really need a way to make this idempotent.
+  # TODO: There are existing external modules for handling this
+  shell: ssh-keyscan github.com >> /home/jimrthy/.ssh/known_hosts_alt
+
+- name: Copy github private key over
+  sudo: True
+  sudo_user: jimrthy
+  copy: dest=/home/jimrthy/.ssh/github_key backup=yes src=resources/insecure.rsa mode=0600
     
+- name: Use that key
+  sudo: True
+  sudo_user: jimrthy
+  copy: dest=/home/jimrthy/.ssh/config backup=yes src=resources/ssh.config
+
 - name: Clone repositories
-  # This isn't going to work with my existing setup. The version of
-  # ansible I have installed is just too old.
-      # Q: Should this happen on remote or locally?
-      # A: Right now, it's mostly a moot point. This 
-      # feature didn't get added until 1.5, which I don't have
-      # access to at the moment
-      #key_file=~/.ssh/id_rsa
-  git: remote=github force=no repo=git@github.com:jimrthy/github.com/jimrthy/{{ project.repo }}.git dest=/home/jimrthy/projects/{{ project.folder }}
+  sudo: True
+  sudo_user: jimrthy
+  #repo=git@github.com:jimrthy/{{ item }}.git
+  git: remote=github force=no
+       repo=ssh://gh/jimrthy/{{ item }}.git       
+       dest=/home/jimrthy/projects/{{ item }}
+       accept_hostkey=yes
   with_items: ${frereth_repositories}

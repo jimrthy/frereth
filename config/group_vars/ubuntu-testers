@@ -20,10 +20,10 @@ system_packages:
   # e.g.
   # - openssh-server
 frereth_repositories:
-  # This is hanging because, at the very least
-  # 1) github.com isn't a known host
-  - { repo: 'jzmq', folder: 'jzmq' }
-  # TODO: Uncomment the rest of these when the first one's working
+  - clglui
+  # FIXME: Uncomment the rest (and get rid of that) when the
+  # basic idea is working
+  #- jzmq
   #- cljeromq
   #- frereth
   #- frereth-client

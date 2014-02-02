@@ -1,4 +1,3 @@
 ---
-# Eventually, I want this playbook to deploy a frereth installation.
-# For now, I'll be happy to get the basic communication pieces into place.
 - include: ubuntu-hosts.yml
+- include: all.yml

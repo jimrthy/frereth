@@ -1,6 +1,6 @@
 ---
 - hosts: ubuntu-testers
-  user: ubuntu
+  remote_user: ubuntu
 
   roles:  
   - normal-user
@@ -10,5 +10,3 @@
   # yet.
   - must-have-ubuntu-packages
   - clojure-runner
-  # This next should be run as the user created in the normal-user step
-  - frereth-hacker

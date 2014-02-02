@@ -2,10 +2,9 @@
 # Set up the pieces required to run clojure.
 # Note that this really means installing leiningen
 - name: Get leiningen
-  get_url: url=https://raw.github.com/technomancy/leiningen/stable/bin/lein dest=${lein_dir}
+  sudo: True
+  get_url: url=https://raw.github.com/technomancy/leiningen/stable/bin/lein dest={{ lein_dir }}
 
 - name: Leiningen permissions
-  file: path=${lein_dir} mode=0755
-
-- name: Pre-install Leiningen...although this may need to be done for every single user
-  command: /usr/local/bin/lein
+  sudo: True
+  file: path={{ lein_dir }} mode=0755
