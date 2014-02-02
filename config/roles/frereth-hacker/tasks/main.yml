@@ -1,4 +1,53 @@
 ---
+# Set up local user account customized the way I'm used to
+# TODO: It's annoying that I'm using so much sudo in here. I'm
+# obviously missing something basic.
+# When I try to set up the task to run as the user I created in
+# the beginning, things go haywire.
+# This version has a lot of duplication that I hate, but it's far
+# too late at night to worry about why.
+
+- name: Root git configuration
+  sudo: True
+  sudo_user: jimrthy
+  copy: src=resources/gitconfig dest=/home/jimrthy/.gitconfig backup=yes
+
+- name: Global git ignore
+  sudo: True
+  sudo_user: jimrthy
+  copy: src=resources/gitignore_global dest=/home/jimrthy/.gitignore_global backup=yes
+
+- name: Configure Terminal Multiplexer
+  sudo: True
+  sudo_user: jimrthy
+  copy: src=resources/tmux.conf dest=/home/jimrthy/.tmux.conf backup=yes
+
+- name: Make vi usable
+  sudo: True
+  sudo_user: jimrthy
+  copy: src=resources/vimrc dest=/home/jimrthy/.vimrc backup=yes
+
+- name: Oh! My ZSH!
+  sudo: True
+  sudo_user: jimrthy
+  # Yes, this is horribly insecure.
+  # For anything serious, need to clone the repo locally, verify its security holes,
+  # then deploy that.
+  # Aside from the minor little detail that it doesn't work.
+  # (First guess: ansible doesn't like command-line progress bars)
+  shell: curl -L https://raw.github.com/robbyrussel/oh-my-zsh/master/tools/install.sh | sh
+
+- name: Nice shell
+  sudo: True
+  sudo_user: jimrthy
+  copy: src=resources/zshrc dest=/home/jimrthy/.zshrc backup=yes
+
+- name: Personal theme
+  sudo: True
+  sudo_user: jimrthy
+  copy: src=resources/jimrthy.zsh-theme dest=/home/jimrthy/.oh-my-zsh/themes/jimrthy.zsh-theme backup=yes
+
+
 # TODO: Uncomment this when I'm finished debugging
 #- name: Pre-install Leiningen
 #  sudo_user: jimrthy
@@ -15,7 +64,10 @@
   sudo_user: jimrthy
   # TODO: At least theoretically, we shouldn't need to do this
   # That requires a newer version of ansible than I currently have
-  # available
+  # available.
+  # FIXME: That's past tense. This seems like an extremely likely
+  # candidate for just going away.
+  # TODO: Test that hypothesis.
   # This one's a little tricky: I don't really want to append over
   # any existing data. I also want to make sure that this gets added.
   # Really need a way to make this idempotent.
@@ -35,7 +87,6 @@
 - name: Clone repositories
   sudo: True
   sudo_user: jimrthy
-  #repo=ssh://gh/jimrthy/{{ item }}.git
   git: remote=github force=no
        repo=git@github.com:jimrthy/{{ item }}.git    
        dest=/home/jimrthy/projects/{{ item }}
