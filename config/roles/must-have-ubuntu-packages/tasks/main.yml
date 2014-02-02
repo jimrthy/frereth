@@ -1,5 +1,6 @@
 ---
-# TODO: Uncomment this when I'm finished debugging
+# This is an annoying time sink when I'm debugging, but it's
+# pretty vital when it comes to actual usage
 - name: Update/upgrade repo cache
   sudo: True
   apt: update_cache=yes upgrade=dist
@@ -9,3 +10,8 @@
   apt: name={{item}} state=latest
   with_items: ${system_packages}
     
+- name: Build Essentials
+  sudo: True
+  apt: name={{item}} state=latest
+  with_items: ${build_packages}
+

@@ -23,11 +23,18 @@ frereth_repositories:
   - clglui
   # FIXME: Uncomment the rest (and get rid of that) when the
   # basic idea is working
-  #- jzmq
-  #- cljeromq
-  #- frereth
-  #- frereth-client
-  #- frereth-server
-  #- frereth-terminal
-  #- frereth-renderer
-  #- penumbra
+  - jzmq
+  - cljeromq
+  - frereth
+  - frereth-client
+  - frereth-server
+  - frereth-terminal
+  - frereth-renderer
+  - penumbra
+  - libsodium
+build_packages:
+  - g++
+  - libtool
+  - autoconf
+  - gettext
+  
