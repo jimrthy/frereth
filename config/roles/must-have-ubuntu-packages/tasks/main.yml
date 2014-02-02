@@ -1,8 +1,8 @@
 ---
 # TODO: Uncomment this when I'm finished debugging
-#- name: Update/upgrade repo cache
-#  sudo: True
-#  apt: update_cache=yes upgrade=dist
+- name: Update/upgrade repo cache
+  sudo: True
+  apt: update_cache=yes upgrade=dist
 
 - name: Install absolute must-have packages  
   sudo: True
