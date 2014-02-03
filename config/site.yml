@@ -1,3 +1,4 @@
 ---
-- include: ubuntu-hosts.yml
-- include: all.yml
+- include: ubuntu-os-init.yml
+- include: all-build-basics.yml
+- include: ubuntu-installation.yml

@@ -1,0 +1,10 @@
+---
+# Install the pieces that were actually built in previous steps
+# by a 'normal' user.
+# The important point to keep in mind about this particular play
+# (as opposed to the ones that generated the pieces we'll be 
+# installing) is that it requires sudo
+
+- name: Install libsodium
+  sudo: True
+  command: make install chdir=/home/jimrthy/projects/libsodium

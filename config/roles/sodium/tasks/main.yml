@@ -18,9 +18,4 @@
   sudo: True
   sudo_user: jimrthy
   command: make check chdir=/home/jimrthy/projects/libsodium
-
-- name: Install libsodium
-  sudo: True
-  sudo_user: ubuntu
-  command: make install chdir=/home/jimrthy/projects/libsodium
     
