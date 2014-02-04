@@ -7,7 +7,7 @@
 # This version has a lot of duplication that I hate, but it's far
 # too late at night to worry about why.
 
-- name: Root git configuration
+- name: Base git configuration
   sudo: True
   sudo_user: jimrthy
   copy: src=resources/gitconfig dest=/home/jimrthy/.gitconfig backup=yes

@@ -1,21 +1,40 @@
 ---
-- name: autogen libsodium's configuration
+# TODO: Rename the directory this falls under.
+# This is no longer specific to libsodium.
+
+- name: autogen configurations
   sudo: True
   sudo_user: jimrthy
-  command: ./autogen.sh chdir=/home/jimrthy/projects/libsodium
+  command: ./autogen.sh chdir=/home/jimrthy/projects/{{ item }}
+  with_items: ${projects_to_build}
     
-- name: Configuring libsodium
+- name: Configuring libraries
   sudo: True
   sudo_user: jimrthy
-  command: ./configure chdir=/home/jimrthy/projects/libsodium
+  command: ./configure chdir=/home/jimrthy/projects/{{ item }}
+  with_items: ${projects_to_build}
 
-- name: Making libsodium
+- name: Making libraries
   sudo: True
   sudo_user: jimrthy
-  command: make chdir=/home/jimrthy/projects/libsodium
+  command: make chdir=/home/jimrthy/projects/{{ item }}
+  with_items: ${projects_to_build}
 
-- name: Checking libsodium
+- name: Add jzmq to local maven repo
+  # This really doesn't belong here. But where could possibly be better?
   sudo: True
   sudo_user: jimrthy
-  command: make check chdir=/home/jimrthy/projects/libsodium
+  # N.B. This is destined to fail. Absolutely must specify the passphrase to
+  # the 'default' ssh key for signing.
+  # Then again, we don't actually have a passphrase associated with that key
+  # (is there any such beast?), so maybe this isn't horrible.
+  command: mvn install chdir=/home/jimrthy/projects/jzmq
+
+- name: Checking
+  sudo: True
+  sudo_user: jimrthy
+  command: make check chdir=/home/jimrthy/projects/{{ item }}
+  with_items: ${projects_to_build}
+
+
     

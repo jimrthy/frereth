@@ -2,17 +2,18 @@
 ---
 lein_dir: /usr/local/bin/lein
 system_packages:
+  - emacs
+  - git
   # Would be using this if I were building a server
   # - openjdk-7-jre-headless
   - openjdk-7-jdk
-  - vim
-  - emacs
-  - tmux
-  - zsh
   - python-pip
-  - git
-  - subversion
   - ssh
+  - subversion
+  - tmux
+  - vim
+  - virtualenvwrapper
+  - zsh
   # Included w/ ssh
   # which means it'll be very useful for hosts where I just
   # want to install something minimalist for the sake of time
@@ -20,9 +21,10 @@ system_packages:
   # e.g.
   # - openssh-server
 frereth_repositories:
-  - clglui
-  # FIXME: Uncomment the rest (and get rid of that) when the
-  # basic idea is working
+  # This one's really just a waste of time/bandwidth at this point.
+  # But it was perfect for initial testing.
+  # TODO: Just finish deleting it.
+  #- clglui
   - jzmq
   - cljeromq
   - frereth
@@ -32,9 +34,17 @@ frereth_repositories:
   - frereth-renderer
   - penumbra
   - libsodium
+  - libzmq
 build_packages:
   - g++
   - libtool
   - autoconf
   - gettext
-  
+  # This next one is freaking huge!
+  # (Well, tons of dependencies)
+  - maven
+  - pkg-config
+projects_to_build:
+  - libsodium
+  - libzmq
+  - jzmq

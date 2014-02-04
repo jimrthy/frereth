@@ -5,6 +5,7 @@
 # (as opposed to the ones that generated the pieces we'll be 
 # installing) is that it requires sudo
 
-- name: Install libsodium
+- name: Install libraries
   sudo: True
-  command: make install chdir=/home/jimrthy/projects/libsodium
+  command: make install chdir=/home/jimrthy/projects/{{ item }}
+  with_items: ${projects_to_build}
