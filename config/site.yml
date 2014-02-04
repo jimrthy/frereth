@@ -2,3 +2,4 @@
 - include: ubuntu-os-init.yml
 - include: all-build-basics.yml
 - include: ubuntu-installation.yml
+- include: install-java-repositories.yml

@@ -1,0 +1,6 @@
+---
+# Build the required java pieces
+- hosts: all
+  remote_user: jimrthy
+  roles:
+  - jzmq

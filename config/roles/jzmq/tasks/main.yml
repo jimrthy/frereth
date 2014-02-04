@@ -1,0 +1,17 @@
+---
+# Install java pieces that are dependent on C libraries created in previous steps
+
+- name: autogen
+  command: ./autogen.sh chdir=projects/jzmq
+
+- name: configure
+  command: ./configure chdir=projects/jzmq
+
+- name: make
+  command: make chdir=projects/jzmq
+
+- name: check
+  command: make check chdir=projects/jzmq
+
+- name: Install to local maven repository
+  command: mvn install chdir=project=jzmq
