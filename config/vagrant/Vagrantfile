@@ -14,6 +14,24 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   config.vm.box = "precise32"
   config.vm.provision :shell, :path => "bootstrap.sh"
 
+  # Random advice from stackoverflow re: forwardng X
+  config.ssh.forward_agent = true
+  config.ssh.forward_x11 = true
+  # thoughtfulsoftware.blogspot.com/2013/04/how-to-run-ide-inside-vagrant-vm.html
+  # specifically mentions that x11 forwarding *must* be turned off in here, if
+  # we actually want to run X apps. Or, at least, netbeans. Which seems odd...
+  # I need to read the rest of that article.
+  # The conclusion from there: don't bother. Vagrant doesn't play nicely with X
+
+  # This seems like it should give the machine 1GB of RAM:
+  #config.vm.memory size = 1024
+  # According to devops.me/2011/10/10/vagrant-tricks-and-troubleshooting/
+  # I actually want to do:
+  #config.vm.customize do |vm|
+  #  vm.memory size = 1024
+  #end
+  # Try my first stab first, if needed.
+
   # The url from where the 'config.vm.box' box will be fetched if it
   # doesn't already exist on the user's system.
   # config.vm.box_url = "http://domain.com/path/to/above.box"
