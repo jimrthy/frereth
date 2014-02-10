@@ -46,4 +46,13 @@ plugins=(git)
 source $ZSH/oh-my-zsh.sh
 
 # Customize to your needs...
-export "PATH=$PATH:/usr/local/bin:/usr/bin:/cygdrive/c/Python33:/cygdrive/c/Program Files (x86)/Intel/iCLS Client:/cygdrive/c/Program Files/Intel/iCLS Client:/cygdrive/c/Windows/system32:/cygdrive/c/Windows:/cygdrive/c/Windows/System32/Wbem:/cygdrive/c/Windows/System32/WindowsPowerShell/v1.0:/cygdrive/c/Program Files/Intel/Intel(R) Management Engine Components/DAL:/cygdrive/c/Program Files/Intel/Intel(R) Management Engine Components/IPT:/cygdrive/c/Program Files (x86)/Intel/Intel(R) Management Engine Components/DAL:/cygdrive/c/Program Files (x86)/Intel/Intel(R) Management Engine Components/IPT:/cygdrive/c/Program Files (x86)/Windows Live/Shared:/cygdrive/c/MinGW/bin:/cygdrive/c/bin:/cygdrive/c/Program Files (x86)/scala/bin:/cygdrive/c/Users/James-PC/.lein/bin:/usr/bin:/home/James-PC/bin"
+export "PATH=$PATH:/usr/local/bin:/usr/bin:/:/home/jimrthy/bin"
+
+# This is causing all sorts of weird issues. It seems to be an environment
+# issue on my host. Until I have time to trace it down, deal with it on the
+# guest (as ugly as that option is)
+export TERM=screen-256color
+
+# This next piece is weird and, really, specific to ubuntu.
+# Oh well.
+source /etc/bash_completion.d/virtualenvwrapper

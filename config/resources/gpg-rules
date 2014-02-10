@@ -1,0 +1,12 @@
+%echo Generating an OpenGPG key (does your activity here help entropy generation?)
+%dry-run
+%echo But not really
+Key-Type: RSA
+Key-Length: 2048
+Name-Real: Bogie Green
+Name-Comment: just for installing test software in a VM
+Name-Email: jamesgatannah@gmail.com
+# Let the key last for a week
+Expire-Date: 7
+%commit
+%echo Key generated

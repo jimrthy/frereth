@@ -7,41 +7,29 @@
 # This version has a lot of duplication that I hate, but it's far
 # too late at night to worry about why.
 
-- name: Base git configuration
+- name: Configuration files
   sudo: True
   sudo_user: jimrthy
-  copy: src=resources/gitconfig dest=/home/jimrthy/.gitconfig backup=yes
-
-- name: Global git ignore
-  sudo: True
-  sudo_user: jimrthy
-  copy: src=resources/gitignore_global dest=/home/jimrthy/.gitignore_global backup=yes
-
-- name: Configure Terminal Multiplexer
-  sudo: True
-  sudo_user: jimrthy
-  copy: src=resources/tmux.conf dest=/home/jimrthy/.tmux.conf backup=yes
-
-- name: Make vi usable
-  sudo: True
-  sudo_user: jimrthy
-  copy: src=resources/vimrc dest=/home/jimrthy/.vimrc backup=yes
+  copy: src=resources/{{ item }} dest=/home/jimrthy/.{{ item }} backup=yes
+  with_items: ${config_files_to_copy}
 
 - name: Clone Oh! My ZSH! Repository
   sudo: True
   sudo_user: jimrthy
   git: repo=https://github.com/robbyrussell/oh-my-zsh.git dest=/home/jimrthy/.oh-my-zsh
 
-- name: Nice shell
-  sudo: True
-  sudo_user: jimrthy
-  copy: src=resources/zshrc dest=/home/jimrthy/.zshrc backup=yes
-
 - name: Personal theme
   sudo: True
   sudo_user: jimrthy
   copy: src=resources/jimrthy.zsh-theme dest=/home/jimrthy/.oh-my-zsh/themes/jimrthy.zsh-theme backup=yes
 
+- name: GPG Generation Rules
+  sudo: True
+  sudo_user: jimrthy
+  copy: src=resources/gpg-rules dest=/home/jimrthy/gpg-rules backup=yes
+# I'm a bit torn about building the GPG key now, vs. waiting until I actually need it.
+# It takes long enough that it seems wise to put it off as long as possible.
+# That may happen earlier if I start needing it in more places. Until then...
 
 # TODO: Uncomment this when I'm finished debugging
 # Q: Does it make any real difference?
@@ -80,6 +68,11 @@
   sudo_user: jimrthy
   copy: dest=/home/jimrthy/.ssh/config backup=yes src=resources/ssh.config
 
+# TODO: There are really 2 groups of repos, at least.
+# Some are directly related to things I'm trying to work on right now.
+# Others are pieces on which I'm building that just don't have go
+# public download options, for various reasons. It makes sense to branch
+# those here.
 - name: Clone repositories
   sudo: True
   sudo_user: jimrthy

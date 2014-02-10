@@ -1,0 +1,9 @@
+---
+- name: Set up a sudoer
+  sudo: True
+  # Apparently, this isn't enough.
+  user: name=frereth createhome=yes shell=/usr/bin/zsh state=present system=yes append=yes groups=adm,users,sudo
+
+- name: Let frereth user log in
+  sudo: True
+  authorized_key: user=frereth key="{{ lookup('file', '/home/james/.ssh/todds.key.pub') }}" state=present

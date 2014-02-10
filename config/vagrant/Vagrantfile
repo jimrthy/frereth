@@ -14,6 +14,9 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   config.vm.box = "precise32"
   config.vm.network "private_network", ip: "192.168.18.3"
 
+  # N.B. Have to get ansible onto PATH! (Duh)
+  # If you're running an install based on latest source, don't forget to
+  # source /wherever/ansible/hacking/env-setup
   config.vm.provision "ansible" do |ansible|
     ansible.inventory_path = "../hosts"
     ansible.playbook = "../site.yml"

@@ -6,18 +6,24 @@ lein_dir: /usr/local/bin/lein
 # TODO: I should really be doing this on arch linux.
 # Except that it doesn't play well with OpenStack.
 system_packages:
+  # Why is ubuntu still using v 23? This is just ridiculously
+  # painful.
+  # The annoying thing about this particular version is that
+  # I have packages I want to install, but that's another layer
+  # of pain that doesn't really interest me at the moment.
   - emacs
   - git
+  - gnupg2
   # Would be using this if I were building a server
   # - openjdk-7-jre-headless
   - openjdk-7-jdk
+  - python-dev
   - python-pip
   - ssh
-  - subversion
   - tmux
   - vim
   - virtualenvwrapper
-  # Another resource hog
+  # Another resource hog...do I have any use for this?
   - xrdp
   - zsh
   # Included w/ ssh
@@ -26,6 +32,10 @@ system_packages:
   # - wget
   # e.g.
   # - openssh-server
+  - libtool
+  - autoconf
+  - gettext
+  - g++
 frereth_repositories:
   # TODO: Honestly, there are two groups of libraries here.
   # One set is underlying system pieces that I don't have any interest
@@ -47,21 +57,35 @@ frereth_repositories:
   # a lot of alternatives. Since frereth-renderer is heavily dependent on
   # it.
   # It shouldn't be. That's a different story for another day.
+  # Much more importantly: there's a submodule (autodoc) that didn't
+  # really seem to get cloned correctly when I forked. So I get an error
+  # the first time I try to actually clone the repo.
+  # That's not a big enough stumbling point to be worth trying to track
+  # down and figure out what's going on, but it's pretty annoying.
   - penumbra
   # These are the system-level libraries that I really don't want to have
   # to ever think about.
+  - jzmq
   - libsodium
   - libzmq
-  - jzmq
+  - zeromq4-x
 build_packages:
   - g++
   - libtool
   - autoconf
   - gettext
+  - make
   # This next one is freaking huge!
   # (Well, tons of dependencies)
   - maven
   - pkg-config
 projects_to_build:
   - libsodium
-  - libzmq
+  #  - libzmq
+  - zeromq4-x
+config_files_to_copy:
+  - gitconfig
+  - gitignore_global
+  - tmux.conf
+  - vimrc
+  - zshrc

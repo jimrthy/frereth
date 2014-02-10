@@ -1,0 +1,10 @@
+---
+- hosts: ubuntu-basic
+  remote_user: ubuntu
+  roles:
+  - frereth-user
+
+- hosts: vagrant-basic
+  remote_user: vagrant
+  roles:
+  - frereth-user

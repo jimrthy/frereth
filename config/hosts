@@ -1,3 +1,10 @@
+[ubuntu-basic]
+# Exper
+
+[vagrant-basic]
+192.168.18.3 ansible_ssh_user=vagrant ansible_ssh_pass=vagrant
+
 [ubuntu-testers]
+# Exper
 192.168.18.3
 

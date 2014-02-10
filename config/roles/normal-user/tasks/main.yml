@@ -3,10 +3,6 @@
   sudo: True
   group: name=developers state=present
 
-- name: Set up frereth group
-  sudo: True
-  group: name=frereth state=present
-
 - name: Set up non-root user
   sudo: True
   user: name=jimrthy append=yes createhome=yes groups=frereth,developers shell=/usr/bin/zsh state=present

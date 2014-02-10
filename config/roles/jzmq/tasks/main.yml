@@ -2,16 +2,32 @@
 # Install java pieces that are dependent on C libraries created in previous steps
 
 - name: autogen
-  command: ./autogen.sh chdir=projects/jzmq
+  sudo: yes
+  sudo_user: jimrthy
+  command: ./autogen.sh chdir=/home/jimrthy/projects/jzmq
 
 - name: configure
-  command: ./configure chdir=projects/jzmq
+  sudo: yes
+  sudo_user: jimrthy
+  command: ./configure chdir=/home/jimrthy/projects/jzmq
 
 - name: make
-  command: make chdir=projects/jzmq
+  sudo: yes
+  sudo_user: jimrthy
+  command: make chdir=/home/jimrthy/projects/jzmq
 
 - name: check
-  command: make check chdir=projects/jzmq
+  sudo: yes
+  sudo_user: jimrthy
+  command: make check chdir=/home/jimrthy/projects/jzmq
 
+- name Default signing key (slow!)
+  # A 1024-bit key run interactively took over an hour to generate
+  sudo: yes
+  sudo_user: jimrthy
+  command: gpg2 --batch --gen-key gpg-rules
+
+# This is going to fail without a default GPG key
 - name: Install to local maven repository
-  command: mvn install chdir=project=jzmq
+  sudo_user: jimrthy
+  command: mvn install chdir=/home/jimrthy/project/jzmq
