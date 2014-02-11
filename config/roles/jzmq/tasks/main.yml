@@ -21,12 +21,6 @@
   sudo_user: jimrthy
   command: make check chdir=/home/jimrthy/projects/jzmq
 
-- name Default signing key (slow!)
-  # A 1024-bit key run interactively took over an hour to generate
-  sudo: yes
-  sudo_user: jimrthy
-  command: gpg2 --batch --gen-key gpg-rules
-
 # This is going to fail without a default GPG key
 - name: Install to local maven repository
   sudo_user: jimrthy

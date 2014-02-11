@@ -27,9 +27,17 @@
   sudo: True
   sudo_user: jimrthy
   copy: src=resources/gpg-rules dest=/home/jimrthy/gpg-rules backup=yes
+
 # I'm a bit torn about building the GPG key now, vs. waiting until I actually need it.
 # It takes long enough that it seems wise to put it off as long as possible.
 # That may happen earlier if I start needing it in more places. Until then...
+# It's breaking that way. So try moving it here.
+
+- name: Default signing key (slow!)
+  # A 1024-bit key run interactively took over an hour to generate
+  sudo: yes
+  sudo_user: jimrthy
+  command: gpg2 --batch --gen-key gpg-rules
 
 # TODO: Uncomment this when I'm finished debugging
 # Q: Does it make any real difference?
