@@ -62,7 +62,7 @@ frereth_repositories:
   # the first time I try to actually clone the repo.
   # That's not a big enough stumbling point to be worth trying to track
   # down and figure out what's going on, but it's pretty annoying.
-  - penumbra
+  # - penumbra
   # These are the system-level libraries that I really don't want to have
   # to ever think about.
   - jzmq

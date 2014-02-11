@@ -20,6 +20,8 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   config.vm.provision "ansible" do |ansible|
     ansible.inventory_path = "../hosts"
     ansible.playbook = "../site.yml"
+    ansible.sudo=true
+    ansible.verbose='vvvv'
   end
 
   # Random advice from stackoverflow re: forwardng X

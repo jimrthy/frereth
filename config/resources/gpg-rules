@@ -1,6 +1,6 @@
 %echo Generating an OpenGPG key (does your activity here help entropy generation?)
-%dry-run
-%echo But not really
+# %dry-run
+# %echo But not really
 Key-Type: RSA
 Key-Length: 2048
 Name-Real: Bogie Green

@@ -1,9 +1,9 @@
 ---
 # This is an annoying time sink when I'm debugging, but it's
 # pretty vital when it comes to actual usage
-#- name: Update/upgrade repo cache
-#  sudo: True
-#  apt: update_cache=yes upgrade=dist
+- name: Update/upgrade repo cache
+  sudo: True
+  apt: update_cache=yes upgrade=dist
 
 - name: Install absolute must-have packages  
   sudo: True
