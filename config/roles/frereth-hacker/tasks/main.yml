@@ -37,7 +37,8 @@
   # A 1024-bit key run interactively took over an hour to generate
   sudo: yes
   sudo_user: jimrthy
-  command: gpg2 --batch --gen-key gpg-rules
+  creates: /home/jimrthy/.gpg/secring.gpg
+  command: gpg2 --batch --gen-key /home/jimrthy/gpg-rules
 
 # TODO: Uncomment this when I'm finished debugging
 # Q: Does it make any real difference?

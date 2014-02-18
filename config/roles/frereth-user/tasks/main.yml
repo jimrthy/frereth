@@ -1,8 +1,8 @@
 ---
 - name: Set up a sudoer
   sudo: True
-  # Apparently, this isn't enough.
-  user: name=frereth createhome=yes shell=/usr/bin/zsh state=present system=yes append=yes groups=adm,users,sudo
+  # The groups involved seem to be OS-specific. Which may make this step more complicated.
+  user: name=frereth createhome=yes shell=/usr/bin/zsh state=present system=yes append=yes groups=adm,users,sudo,admin,wheel
 
 - name: Let frereth user log in
   sudo: True

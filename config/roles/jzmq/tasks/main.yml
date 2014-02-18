@@ -24,4 +24,4 @@
 # This is going to fail without a default GPG key
 - name: Install to local maven repository
   sudo_user: jimrthy
-  command: mvn install chdir=/home/jimrthy/project/jzmq
+  command: mvn install chdir=/home/jimrthy/projects/jzmq
