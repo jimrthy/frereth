@@ -3,4 +3,4 @@
 - hosts: ubuntu-basic:vagrant-basic
   remote_user: ubuntu
   roles:
-  - frereth-user
+  - ubuntu-sudoer

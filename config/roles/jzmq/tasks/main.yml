@@ -11,6 +11,13 @@
   sudo_user: jimrthy
   command: ./configure chdir=/home/jimrthy/projects/jzmq
 
+- name: Build the base .class
+  # Must be done before we can build the c++ pieces.
+  # It seems wrong, but who am I to complain?
+  sudo_user: jimrthy
+  # TODO: Verify that this really does build that required file
+  command: mvn clean compile chdir=/home/jimrthy/projects/jzmq
+
 - name: make
   sudo: yes
   sudo_user: jimrthy
@@ -19,9 +26,13 @@
 - name: check
   sudo: yes
   sudo_user: jimrthy
+  # Note that a failure here won't bother ansible.
   command: make check chdir=/home/jimrthy/projects/jzmq
 
-# This is going to fail without a default GPG key
+- name: globally install C wrapper
+  sudo: yes
+  command: make install chdir=/home/jimrthy/projects/jzmq
+
 - name: Install to local maven repository
   sudo_user: jimrthy
-  command: mvn install chdir=/home/jimrthy/projects/jzmq
+  command: mvn package install chdir=/home/jimrthy/projects/jzmq

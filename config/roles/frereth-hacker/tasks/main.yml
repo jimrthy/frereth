@@ -34,11 +34,11 @@
 # It's breaking that way. So try moving it here.
 
 - name: Default signing key (slow!)
-  # A 1024-bit key run interactively took over an hour to generate
+  # TODO: Generate this externally, copy it over, and import it.
+  # Doing it this way is just too ridiculously slow.
   sudo: yes
   sudo_user: jimrthy
-  creates: /home/jimrthy/.gpg/secring.gpg
-  command: gpg2 --batch --gen-key /home/jimrthy/gpg-rules
+  command: gpg2 --batch --gen-key /home/jimrthy/gpg-rules creates=/home/jimrthy/.gpg/secring.gpg
 
 # TODO: Uncomment this when I'm finished debugging
 # Q: Does it make any real difference?

@@ -5,6 +5,8 @@
 # (as opposed to the ones that generated the pieces we'll be 
 # installing) is that it requires sudo
 
+# Note that jzmq follows a very different set of rules/steps.
+
 - name: Install libraries
   sudo: True
   command: make install chdir=/home/jimrthy/projects/{{ item }}
