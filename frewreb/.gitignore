@@ -15,3 +15,5 @@ pom.xml
 .lein-repl*
 .crossover-cljs
 .repl
+.nrepl-port
+
