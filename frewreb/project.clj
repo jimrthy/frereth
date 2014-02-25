@@ -11,7 +11,8 @@
   ;; source-paths to the project source-paths
   :source-paths ["src/clj" "src/cljs"]
 
-  :dependencies [[org.clojure/clojure "1.5.1"]
+  :dependencies [[cljs-webgl "0.1.4-SNAPSHOT"]
+                 [org.clojure/clojure "1.5.1"]
                  [org.clojure/clojurescript "0.0-2138"]]
 
   :plugins [[lein-cljsbuild "1.0.1"]]
