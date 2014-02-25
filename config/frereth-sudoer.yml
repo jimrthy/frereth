@@ -1,6 +1,5 @@
 ---
-# Note that : really means "or"
-- hosts: ubuntu-basic:vagrant-basic
+- hosts: ubuntu-basic
   remote_user: ubuntu
   roles:
   - ubuntu-sudoer
