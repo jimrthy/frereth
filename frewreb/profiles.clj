@@ -23,10 +23,7 @@
            :test-commands {"phantomjs"
                            ["phantomjs" :runner "dev-resources/public/js/frewreb.js"]}}}
  :dev [:shared
-       {:source-paths ["dev-resources/tools/http" "dev-resources/tools/repl"]
-        :dependencies [[ring "1.2.1"]
-                       [compojure "1.1.6"]
-                       [enlive "1.1.4"]]
+       {:source-paths ["dev-resources/tools/repl"]
         :plugins [[com.cemerick/austin "0.1.3"]]
         :cljsbuild
         {:builds {:frewreb

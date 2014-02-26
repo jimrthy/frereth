@@ -12,8 +12,11 @@
   :source-paths ["src/clj" "src/cljs"]
 
   :dependencies [[cljs-webgl "0.1.4-SNAPSHOT"]
+                 [compojure "1.1.6"]
+                 [enlive "1.1.4"]
                  [org.clojure/clojure "1.5.1"]
-                 [org.clojure/clojurescript "0.0-2138"]]
+                 [org.clojure/clojurescript "0.0-2173"]
+                 [ring "1.2.1"]]
 
   :plugins [[lein-cljsbuild "1.0.1"]]
 
@@ -24,7 +27,8 @@
             ;; in the packaged jar when you issue lein jar command and
             ;; any other command that depends on it
             :frewreb
-            {:source-paths ["src/cljs"]
+            {:source-paths ["src/cljs"
+                            "resources/server"]
              ;; The :jar true option is not needed to include the CLJS
              ;; sources in the packaged jar. This is because we added
              ;; the CLJS source codebase to the Leiningen
