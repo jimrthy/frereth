@@ -27,8 +27,7 @@
             ;; in the packaged jar when you issue lein jar command and
             ;; any other command that depends on it
             :frewreb
-            {:source-paths ["src/cljs"
-                            "local"]
+            {:source-paths ["src/cljs"]
              ;; The :jar true option is not needed to include the CLJS
              ;; sources in the packaged jar. This is because we added
              ;; the CLJS source codebase to the Leiningen
@@ -36,6 +35,6 @@
              ;:jar true
              ;; Compilation Options
              :compiler
-             {:output-to "dev-resources/public/js/frewreb.js"
+             {:output-to "resources/public/js/frewreb.js"
               :optimizations :advanced
               :pretty-print false}}}})

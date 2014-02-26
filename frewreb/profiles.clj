@@ -12,22 +12,23 @@
 
 {:shared {:clean-targets ["out" :target-path]
           :test-paths ["test/clj" "test/cljs"]
-          :resources-paths ["dev-resources"]
+          :resources-paths ["resources"]
           :plugins [[com.cemerick/clojurescript.test "0.2.1"]]
           :cljsbuild
           {:builds {:frewreb
-                    {:source-paths ["test/cljs"]
+                    {:source-paths ["test/cljs" "local"]
                      :compiler
-                     {:output-dir "dev-resources/public/js"
-                      :source-map "dev-resources/public/js/frewreb.js.map"}}}
+                     {:output-dir "resources/public/js"
+                      :source-map "resources/public/js/frewreb.js.map"}}}
            :test-commands {"phantomjs"
-                           ["phantomjs" :runner "dev-resources/public/js/frewreb.js"]}}}
+                           ["phantomjs" :runner "resources/public/js/frewreb.js"]}}}
  :dev [:shared
-       {:source-paths ["dev-resources/tools/repl"]
+       {:resources-paths ["resources"]
+        :source-paths ["resources/dev/repl" "local"]
         :plugins [[com.cemerick/austin "0.1.3"]]
         :cljsbuild
         {:builds {:frewreb
-                 {:source-paths ["dev-resources/tools/repl"]
+                 {:source-paths ["resources/dev/repl"]
                   :compiler
                   {:optimizations :whitespace
                    :pretty-print true}}}}
