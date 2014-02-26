@@ -1,5 +1,4 @@
-;;; This namespace is used for development and testing purpose only.
-(ns ring.server
+(ns server
   (:require [cemerick.austin.repls :refer (browser-connected-repl-js)]
             [net.cgrand.enlive-html :as enlive]
             [compojure.route :refer  (resources)]

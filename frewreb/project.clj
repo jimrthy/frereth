@@ -28,7 +28,7 @@
             ;; any other command that depends on it
             :frewreb
             {:source-paths ["src/cljs"
-                            "resources/server"]
+                            "local"]
              ;; The :jar true option is not needed to include the CLJS
              ;; sources in the packaged jar. This is because we added
              ;; the CLJS source codebase to the Leiningen
