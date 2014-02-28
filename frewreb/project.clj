@@ -1,6 +1,6 @@
 (defproject frewreb "0.0.1-SNAPSHOT"
   :description "FIXME: write description"
-  :url "http://example.com/FIXME"
+  :url "http://frereth.com/FIXME"
   :license {:name "Eclipse Public License - v 1.0"
             :url "http://www.eclipse.org/legal/epl-v10.html"
             :distribution :repo}
@@ -14,8 +14,10 @@
   :dependencies [[cljs-webgl "0.1.4-SNAPSHOT"]
                  [compojure "1.1.6"]
                  [enlive "1.1.4"]
+                 [http-kit "2.1.16"]
                  [org.clojure/clojure "1.5.1"]
                  [org.clojure/clojurescript "0.0-2173"]
+                 [org.clojure/core.async "0.1.267.0-0d7780-alpha"]
                  [ring "1.2.1"]]
 
   :plugins [[lein-cljsbuild "1.0.1"]]

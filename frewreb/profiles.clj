@@ -16,7 +16,7 @@
           :plugins [[com.cemerick/clojurescript.test "0.2.1"]]
           :cljsbuild
           {:builds {:frewreb
-                    {:source-paths ["test/cljs" "local"]
+                    {:source-paths ["test/cljs"]
                      :compiler
                      {:output-dir "resources/public/js"
                       :source-map "resources/public/js/frewreb.js.map"}}}
@@ -24,7 +24,9 @@
                            ["phantomjs" :runner "resources/public/js/frewreb.js"]}}}
  :dev [:shared
        {:resources-paths ["resources"]
-        :source-paths ["resources/dev/repl" "local"]
+        :source-paths ["resources/dev/repl" "dev"]
+        :dependencies [[org.clojure/tools.namespace "0.2.4"]
+                       [org.clojure/java.classpath "0.2.2"]]
         :plugins [[com.cemerick/austin "0.1.3"]]
         :cljsbuild
         {:builds {:frewreb
@@ -33,8 +35,7 @@
                   {:optimizations :whitespace
                    :pretty-print true}}}}
 
-        :injections [(require '[ring.server :as http :refer [run]]
-                              'cemerick.austin.repls)
+        :injections [(require 'cemerick.austin.repls)
                      (defn browser-repl []
                        (cemerick.austin.repls/cljs-repl (reset! cemerick.austin.repls/browser-repl-env
                                                                 (cemerick.austin/repl-env))))]}]
