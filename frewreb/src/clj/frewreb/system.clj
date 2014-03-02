@@ -17,8 +17,8 @@
   (let [c (async/chan)
         ->renderer-atom (atom nil)
         socket-router (route/build-socket-handler ->renderer-atom c)]
-    (into system {:web-killer (httpd/start-web route/all-routes 8090)
-                  :socket-killer (httpd/start-web socket-router 8091)
+    (into system {:web-killer (httpd/start-web 8090 (route/all-routes))
+                  :socket-killer (httpd/start-web 8091 socket-router)
                   :internal-messaging-killer (fn []
                                                (async/close! c))}))
   system)
