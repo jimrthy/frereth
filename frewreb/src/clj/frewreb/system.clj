@@ -2,25 +2,33 @@
   (:require [clojure.core.async :as async]
             [clojure.java.io :as io]
             [frewreb.server :as httpd]
-            [frewreb.router :as route]
-            [frodo.web :as frodo]
-            [nomad :refer [defconfig]]))
+            [frewreb.router :as route]))
 
 (defn system
   "Returns a new instance of the whole application"
   []
-  {:web-server (ref nil)})
+  {:web-killer nil
+   :socket-killer nil
+   :internal-messaging-killer nil})
 
 (defn start
   "Peform the side-effects to make the system usable"
   [system]
-  (defconfig cfg (io/resource "config/nomad-config.edn"))
-  (#'frodo/start-web-server! (:web-server system) (cfg))
+  (let [c (async/chan)
+        ->renderer-atom (atom nil)
+        socket-router (route/build-socket-handler ->renderer-atom c)]
+    (into system {:web-killer (httpd/start-web route/all-routes 8090)
+                  :socket-killer (httpd/start-web socket-router 8091)
+                  :internal-messaging-killer (fn []
+                                               (async/close! c))}))
   system)
 
 (defn stop
   "Perform the side-effects to shut a system down"
   [system]
-  (when-let [server (:web-server system)]
-    (#'frodo/stop-web-server! server))  
-  system)
+  (let [doomed [:web-killer :socket-killer :internal-messaging-killer]
+        kill (fn [which]
+               (when-let [killer (which system)]
+                 (killer)))]
+    (dorun (map kill doomed)))
+  (system))

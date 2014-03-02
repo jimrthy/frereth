@@ -27,7 +27,7 @@
         :source-paths ["resources/dev/repl" "dev"]
         :dependencies [[org.clojure/tools.namespace "0.2.4"]
                        [org.clojure/java.classpath "0.2.2"]]
-        :plugins [[com.cemerick/austin "0.1.3"]]
+        :plugins [[com.cemerick/austin "0.1.3" :exclusions [org.clojure/clojurescript]]]
         :cljsbuild
         {:builds {:frewreb
                  {:source-paths ["resources/dev/repl"]
