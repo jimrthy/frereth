@@ -1,0 +1,7 @@
+{:nomad/environments {"dev" {:frodo/config {:nrepl {:port 7890}
+		             		    :web {:port 8090
+					          :handler-fn frewreb.web/make-handler}}}
+		      "prod" {:frodo/config {:nrepl {:port nil}
+		      	     		     :web {:port 8090
+					           :handler-fn frewreb.web/make-handler}}}}}
+		      	      

@@ -4,6 +4,7 @@
 /classes
 /checkouts
 /dev-resources/public/js/*
+/resources/public/js/*
 /out
 pom.xml
 *.jar

@@ -15,12 +15,20 @@
                  [compojure "1.1.6"]
                  [enlive "1.1.4"]
                  [http-kit "2.1.16"]
+                 [jarohen/chord "0.3.0"]
+                 [jarohen/frodo-core "0.2.11"]
+                 [jarohen/nomad "0.6.3"]
                  [org.clojure/clojure "1.5.1"]
                  [org.clojure/clojurescript "0.0-2173"]
                  [org.clojure/core.async "0.1.267.0-0d7780-alpha"]
                  [ring "1.2.1"]]
 
-  :plugins [[lein-cljsbuild "1.0.1"]]
+  :plugins [[lein-cljsbuild "1.0.1"]
+            [jarohen/lein-frodo "0.2.11"]
+            ]
+
+  ;; Note that this is really only used by the lein plugin.
+  :frodo/config-resource "config/nomad-config.edn"
 
   :hooks [leiningen.cljsbuild]
 
