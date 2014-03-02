@@ -20,15 +20,16 @@
     (into system {:web-killer (httpd/start-web 8090 (route/all-routes))
                   :socket-killer (httpd/start-web 8091 socket-router)
                   :internal-messaging-killer (fn []
-                                               (async/close! c))}))
-  system)
+                                               (async/close! c))})))
 
 (defn stop
-  "Perform the side-effects to shut a system down"
-  [system]
+  "Perform the side-effects to shut a system down.
+The parameter name was specifically chosen to not conflict with the
+system init function that gets called (and returned) at the end."
+  [sys]
   (let [doomed [:web-killer :socket-killer :internal-messaging-killer]
         kill (fn [which]
-               (when-let [killer (which system)]
+               (when-let [killer (which sys)]
                  (killer)))]
     (dorun (map kill doomed)))
   (system))

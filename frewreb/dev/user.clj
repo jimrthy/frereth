@@ -1,5 +1,6 @@
 (ns user
-  (:require [clojure.java.io :as io]
+  (:require [cemerick.austin.repls :as js-repl]
+            [clojure.java.io :as io]
             [clojure.string :as str]
             [clojure.pprint :refer (pprint)]
             [clojure.repl :refer :all]
@@ -38,3 +39,10 @@
   []
   (stop)
   (refresh :after 'user/go))
+
+(defn cljs-repl
+  "Note that going back and forth between this and the clojure environment
+seems to be a bad idea."
+  []
+  (js-repl/cljs-repl (reset! js-repl/browser-repl-env
+                             (cemerick.austin/repl-env))))

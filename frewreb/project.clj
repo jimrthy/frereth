@@ -5,29 +5,6 @@
             :url "http://www.eclipse.org/legal/epl-v10.html"
             :distribution :repo}
 
-  :min-lein-version "2.3.4"
-
-  ;; We need to add src/cljs too, because cljsbuild does not add its
-  ;; source-paths to the project source-paths
-  :source-paths ["src/clj" "src/cljs"]
-
-  :dependencies [[cljs-webgl "0.1.4-SNAPSHOT"]
-                 [compojure "1.1.6"]
-                 [enlive "1.1.4"]
-                 [http-kit "2.1.16"]
-                 [org.clojure/clojure "1.5.1"]
-                 [org.clojure/clojurescript "0.0-2173"]
-                 [org.clojure/core.async "0.1.267.0-0d7780-alpha"]
-                 [ring "1.2.1"]]
-
-  :plugins [[lein-cljsbuild "1.0.1"]]
-
-  :hooks [leiningen.cljsbuild]
-
-  :main frewreb.core
-
-  :pedantic? :abort
-
   :cljsbuild
   {:builds {;; This build is only used for including any cljs source
             ;; in the packaged jar when you issue lein jar command and
@@ -43,4 +20,31 @@
              :compiler
              {:output-to "resources/public/js/frewreb.js"
               :optimizations :advanced
-              :pretty-print false}}}})
+              :pretty-print false}}}}
+
+  :dependencies [[cljs-webgl "0.1.4-SNAPSHOT"]
+                 [compojure "1.1.6"]
+                 [enlive "1.1.4"]
+                 [http-kit "2.1.16"]
+                 [org.clojure/clojure "1.5.1"]
+                 [org.clojure/clojurescript "0.0-2173"]
+                 [org.clojure/core.async "0.1.267.0-0d7780-alpha"]
+                 [ring "1.2.1"]]
+
+  :hooks [leiningen.cljsbuild]
+
+  :main frewreb.core
+
+  :min-lein-version "2.3.4"
+
+  :pedantic? :warn
+
+  :plugins [[lein-cljsbuild "1.0.1"]]
+
+  :repl-options {:init-ns user}
+
+  ;; We need to add src/cljs too, because cljsbuild does not add its
+  ;; source-paths to the project source-paths
+  :source-paths ["src/clj" "src/cljs"]
+
+)
