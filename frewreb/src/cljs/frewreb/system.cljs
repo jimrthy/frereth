@@ -1,19 +1,25 @@
 (ns frewreb.system
   (:require [frewreb.render :as draw]
-            [frewreb.communication :as comms]))
+            [frewreb.communication :as comms]
+            [frewreb.connection :as connect]))
 
 (defn init
   []
   {:communications (comms/init)
-   :core (draw/init)})
+   :renderer (draw/init)
+   :connection (connect/init)})
 
 (defn start
   [system]
   (comment (js/alert "start everything"))
-  (into system {:communications (comms/start (:communications system))
-                :core (draw/start (:core system))}))
+  (let [communications (comms/start (:communications system))
+        renderer (draw/start (:renderer system))]
+    (into system {:connection (connect/start  {:connection (:connection system)
+                                               :communications communications
+                                               :renderer renderer})})))
 
 (defn stop
   [system]
-  (into system {:communications (comms/stop (:communications system))
-                :core (draw/stop (:core system))}))
+  (into system {:connection (connect/stop system)
+                :communications (comms/stop (:communications system))
+                :renderer (draw/stop (:renderer system))}))

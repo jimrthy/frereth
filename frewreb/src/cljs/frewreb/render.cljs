@@ -143,7 +143,7 @@ void main() {
          ;; Check for updates.
          ;; I'd actually rather do this before drawing, but that approach
          ;; leaves me with lots of duplicate code.
-         (let [command-channel @(:channel system)
+         (let [command-channel @(:->renderer system)
                ;; Really don't want to block
                alt (async/timeout 1)
                [v c] (async/alts! [command-channel alt])]
@@ -153,7 +153,8 @@ void main() {
 
 (defn init
   []
-  {:channel (atom nil)
+  {:->renderer (atom nil)
+   :renderer-> (atom nil)
    :state (atom :initialized)
    :frame (atom 0)
    ;; It's tempting to try to make these fit into :state as an FSM.
@@ -162,18 +163,25 @@ void main() {
    :paused (atom false)})
 
 (defn start [system]
-  (let [c (async/chan)]
-    (reset! (:channel system) c)
+  (let [->c (async/chan)
+        c-> (async/chan)]
+    (reset! (:->renderer system) ->c)
+    (reset! (:renderer-> system) c->)
     (reset! (:state system) :started)
-    (.requestAnimationFrame js/window (fn [time-elapsed] (main-loop system main-loop)))))
+    (.requestAnimationFrame js/window (fn [time-elapsed] (main-loop system main-loop)))
+    system))
 
 (defn stop [system]
   (reset! (:done system) true)
-  (let [channel-atom (:channel system)]
-    (if-let [chan @channel-atom]
-      (do
-        (async/close! chan))
-      (js/alert "No channel for renderer to close"))
-    (reset! channel-atom nil)
-    (reset! (:state system) :stopped)
-    system))
+  (let [channel-atom (:->renderer system)]
+    ;; This is an input channel. The other side has to close.
+    (comment (if-let [chan @channel-atom]
+               (do
+                 (async/close! chan))
+               (js/alert "No channel for renderer to close")))
+    (reset! channel-atom nil))
+  (if-let [out-channel @(:renderer-> system)]
+    (async/close! out-channel)
+    (js/alert "No output channel for renderer to close"))
+  (reset! (:state system) :stopped)
+  system)

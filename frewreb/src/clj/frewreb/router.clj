@@ -8,20 +8,25 @@
             [org.httpkit.server :as httpd]))
 
 (defn build-socket-handler
-  [->renderer renderer->]
-  (let [handler (fn [req]
-                  (httpd/with-channel req ws
-                    (httpd/on-close ws (fn [status]
-                                         (println "Channel closed: " status)))
-                    (httpd/on-receive ws (fn [data]
-                                                (async/>!! renderer-> data)))
-                    (async/go
-                     (loop [msg (async/<! ->renderer)]
-                       (when msg
-                         (println "Message going to renderer: " msg)
-                         (httpd/send! ws msg)
-                         (recur (async/<! ->renderer)))))))]
-    handler))
+  [system]
+  (let [->renderer @(:->renderer system)
+        renderer->-atom (:renderer-> system)]
+    (reset! renderer->-atom (async/chan))
+    (let [handler (fn [req]
+                    (httpd/with-channel req ws
+                      (httpd/on-close ws (fn [status]
+                                           (println "Channel closed: " status)
+                                           (async/close! @renderer->-atom)))
+                      (httpd/on-receive ws (fn [data]
+                                             (println "Received: " data)
+                                             (async/>!! @renderer->-atom data)))
+                      (async/go
+                       (loop [msg (async/<! ->renderer)]
+                         (when msg
+                           (println "Message going to renderer: " msg)
+                           (httpd/send! ws msg)
+                           (recur (async/<! ->renderer)))))))]
+      handler)))
 
 ;;; We use enlive lib to add to the body of the index.html page the
 ;;; script tag containing the JS code which activates the bREPL
@@ -38,3 +43,20 @@
    (GET "/" _ (page))
    (resources "/")
    (not-found "Missing")))
+
+(defn init
+  []
+  {:->renderer (atom nil)
+   :renderer-> (atom nil)})
+
+(defn start
+  [system]
+  (reset! (:->renderer system) (async/chan))
+  system)
+
+(defn stop
+  [system]
+  (if-let [->renderer-atom (:->renderer system)]
+    (do (async/close! @->renderer-atom)
+        (reset! (:->renderer system) nil))
+    (println "Warning: Missing atom for the channel going out to renderer")))

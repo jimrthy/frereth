@@ -9,27 +9,31 @@
   []
   {:web-killer nil
    :socket-killer nil
-   :internal-messaging-killer nil})
+   :router (route/init)})
 
 (defn start
   "Peform the side-effects to make the system usable"
   [system]
-  (let [c (async/chan)
-        ->renderer-atom (atom nil)
-        socket-router (route/build-socket-handler ->renderer-atom c)]
+  (let [started-router (route/start (:router system))
+        c (async/chan)
+        socket-router (route/build-socket-handler started-router)]
+    ;; TODO:
+    ;; Messages that come from the server should dispatch to @->renderer-atom.
+    ;; Something needs to be listening on c to dispatch user input
+    ;; messages (and any other events the renderer thinks is relevant)
+    ;; to the appropriate server.
     (into system {:web-killer (httpd/start-web 8090 (route/all-routes))
                   :socket-killer (httpd/start-web 8091 socket-router)
-                  :internal-messaging-killer (fn []
-                                               (async/close! c))})))
+                  :router started-router})))
 
 (defn stop
   "Perform the side-effects to shut a system down.
 The parameter name was specifically chosen to not conflict with the
 system init function that gets called (and returned) at the end."
   [sys]
-  (let [doomed [:web-killer :socket-killer :internal-messaging-killer]
+  (let [doomed [:web-killer :socket-killer]
         kill (fn [which]
                (when-let [killer (which sys)]
                  (killer)))]
     (dorun (map kill doomed)))
-  (system))
+  (into system {:router (route/stop (:router system))}))
