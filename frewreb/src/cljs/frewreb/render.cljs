@@ -42,36 +42,37 @@ void main() {
                                            constants/static-draw)]
   (defn draw [[command-channel frame] continue]
     (buffers/clear-color-buffer gl 0 0 0 1)
-    
-    (let [alt (async/timeout 1)
-          [v c] (async/alts!! [command-channel alt])
-          quit (atom false)]
-      (when (= c command-channel)
-        (if (= v "exit")
-          (reset! quit true)
-          (js/alert v)))
-      (when-not @quit
-        (buffers/draw! gl
-                       shader
-                       {:buffer vertex-buffer
-                        :attrib-array (shaders/get-attrib-location gl
-                                                                   shader
-                                                                   "vertex_position")
-                        :mode constants/triangles
-                        :first 0
-                        :count 3
-                        :components-per-vertex 3
-                        :type constants/float
-                        :normalized? false
-                        :stride 0
-                        :offset 0}
-                       [{:name "frame" :type :int :values [frame]}]
-                       {:buffer element-buffer
-                        :count 3
-                        :type constants/unsigned-short
-                        :offset 0})
-        (.requestAnimationFrame js/window (fn [time-elapsed]
-                                            (continue [command-channel (inc frame)] continue)))))))
+
+    (go
+     (let [alt (async/timeout 1)
+           [v c] (async/alts! [command-channel alt])
+           quit (atom false)]
+       (when (= c command-channel)
+         (if (= v "exit")
+           (reset! quit true)
+           (js/alert v)))
+       (when-not @quit
+         (buffers/draw! gl
+                        shader
+                        {:buffer vertex-buffer
+                         :attrib-array (shaders/get-attrib-location gl
+                                                                    shader
+                                                                    "vertex_position")
+                         :mode constants/triangles
+                         :first 0
+                         :count 3
+                         :components-per-vertex 3
+                         :type constants/float
+                         :normalized? false
+                         :stride 0
+                         :offset 0}
+                        [{:name "frame" :type :int :values [frame]}]
+                        {:buffer element-buffer
+                         :count 3
+                         :type constants/unsigned-short
+                         :offset 0})
+         (.requestAnimationFrame js/window (fn [time-elapsed]
+                                             (continue [command-channel (inc frame)] continue))))))))
 
 (defn init
   []
