@@ -41,8 +41,8 @@ void main() {
                                            constants/element-array-buffer
                                            constants/static-draw)]
   (defn draw [[command-channel frame] continue]
-    (buffers/clear-color-buffer gl 0 0 0 1)
-
+    ;; OpenGL really wants the drawing to happen in the main thread.
+    ;; Since javascript is single-threaded, that really isn't a factor
     (go
      (let [alt (async/timeout 1)
            [v c] (async/alts! [command-channel alt])
@@ -52,6 +52,9 @@ void main() {
            (reset! quit true)
            (js/alert v)))
        (when-not @quit
+         ;; We are definitely getting here and trying to draw stuff.
+         (comment (.log js/console frame))
+         (buffers/clear-color-buffer gl 0 0 0 1)
          (buffers/draw! gl
                         shader
                         {:buffer vertex-buffer
