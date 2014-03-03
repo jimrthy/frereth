@@ -5,6 +5,10 @@
             :url "http://www.eclipse.org/legal/epl-v10.html"
             :distribution :repo}
 
+  ;; We need to add src/cljs too, because cljsbuild does not add its
+  ;; source-paths to the project source-paths
+  :source-paths ["src/clj" "src/cljs"]
+
   :cljsbuild
   {:builds {;; This build is only used for including any cljs source
             ;; in the packaged jar when you issue lein jar command and
