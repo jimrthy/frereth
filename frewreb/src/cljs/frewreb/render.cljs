@@ -4,7 +4,7 @@
 ;;; if you can add files containing macros and compile-time only
 ;;; functions in the :source-paths setting of the :builds, it is
 ;;; strongly suggested to add them to the leiningen :source-paths.
-(ns frewreb.core
+(ns frewreb.render
   (:require-macros [cljs.core.async.macros :refer [go]])
   (:require [cljs-webgl.context :as context]
             [cljs-webgl.shaders :as shaders]

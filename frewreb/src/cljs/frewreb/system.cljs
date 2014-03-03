@@ -1,19 +1,19 @@
 (ns frewreb.system
-  (:require [frewreb.core :as core]
+  (:require [frewreb.render :as draw]
             [frewreb.communication :as comms]))
 
 (defn init
   []
   {:communications (comms/init)
-   :core (core/init)})
+   :core (draw/init)})
 
 (defn start
   [system]
   (comment (js/alert "start everything"))
   (into system {:communications (comms/start (:communications system))
-                :core (core/start (:core system))}))
+                :core (draw/start (:core system))}))
 
 (defn stop
   [system]
   (into system {:communications (comms/stop (:communications system))
-                :core (core/stop (:core system))}))
+                :core (draw/stop (:core system))}))
