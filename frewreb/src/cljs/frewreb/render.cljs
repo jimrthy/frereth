@@ -13,6 +13,7 @@
             [cljs-webgl.typed-arrays :as ta]
             [cljs.core.async :as async]))
 
+;;; TODO: These draw methods desperately need to be a multimethod
 (defn draw-default
   [system gl shader vertex-buffer element-buffer triangle-count]
   (buffers/clear-color-buffer gl 0 0 0 1)
@@ -163,10 +164,8 @@ void main() {
    :paused (atom false)})
 
 (defn start [system]
-  (let [->c (async/chan)
-        c-> (async/chan)]
+  (let [->c (async/chan)]
     (reset! (:->renderer system) ->c)
-    (reset! (:renderer-> system) c->)
     (reset! (:state system) :started)
     (.requestAnimationFrame js/window (fn [time-elapsed] (main-loop system main-loop)))
     system))
@@ -180,8 +179,5 @@ void main() {
                  (async/close! chan))
                (js/alert "No channel for renderer to close")))
     (reset! channel-atom nil))
-  (if-let [out-channel @(:renderer-> system)]
-    (async/close! out-channel)
-    (js/alert "No output channel for renderer to close"))
   (reset! (:state system) :stopped)
   system)

@@ -28,6 +28,7 @@
 
   :dependencies [[cljs-webgl "0.1.4-SNAPSHOT"]
                  [compojure "1.1.6"]
+                 [enfocus "2.0.2"]
                  [enlive "1.1.4"]
                  [http-kit "2.1.16"]
                  [org.clojure/clojure "1.5.1"]
@@ -49,6 +50,4 @@
 
   ;; We need to add src/cljs too, because cljsbuild does not add its
   ;; source-paths to the project source-paths
-  :source-paths ["src/clj" "src/cljs"]
-
-)
+  :source-paths ["src/clj" "src/cljs"])
