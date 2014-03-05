@@ -9,13 +9,16 @@
 
 (defn build-socket-handler
   [system]
+  ;; Can't have just 1 renderer pair per system. Have to
+  ;; accomodate multiple connections. This is where
+  ;; 0mq is *really* nice.
   (let [->renderer @(:->renderer system)
         renderer->-atom (:renderer-> system)]
     (reset! renderer->-atom (async/chan))
     (let [handler (fn [req]
                     (httpd/with-channel req ws
                       (httpd/on-close ws (fn [status]
-                                           (println "Channel closed: " status)
+                                           (println "Web socket closed: " status)
                                            (async/close! @renderer->-atom)))
                       (httpd/on-receive ws (fn [data]
                                              (println "Received: " data)

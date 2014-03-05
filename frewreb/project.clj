@@ -31,6 +31,7 @@
                  [enfocus "2.0.2"]
                  [enlive "1.1.4"]
                  [http-kit "2.1.16"]
+                 [org.clojars.jimrthy/cljeromq "0.1.0-SNAPSHOT" :exclusions [org.clojure/tools.macro]]
                  [org.clojure/clojure "1.5.1"]
                  [org.clojure/clojurescript "0.0-2173"]
                  [org.clojure/core.async "0.1.267.0-0d7780-alpha"]
@@ -42,7 +43,9 @@
 
   :min-lein-version "2.3.4"
 
-  :pedantic? :warn
+  ;; I don't think this is the problem, but just to double-check.
+  ;; Austin quit working after I turned this on.
+  ;;:pedantic? :warn
 
   :plugins [[lein-cljsbuild "1.0.1"]]
 
