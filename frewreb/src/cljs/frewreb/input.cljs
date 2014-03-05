@@ -1,6 +1,6 @@
 (ns frewreb.input
   (:require-macros [cljs.core.async.macros :refer [go]]
-                   [enfocu.macros :as em])
+                   [enfocus.macros :as em])
   (:require [cljs.core.async :as async]
             [enfocus.events :as events]))
 
@@ -12,11 +12,20 @@
   [system]
   (let [c-> (async/chan)]
     (reset! (:renderer-> system) c->)
-    (em/defaction event [msg]
-      (go (async/>! c-> msg)))
-    (em/defaction setup []
-      ["#reality"] (events/listen :click #(event [:click :where :make-this-useful]))
-      )
+    (let [event (fn [which args]
+                  (go (async/>! c-> [which args])))]
+      (em/defaction setup []
+        ["#reality"]
+        (let [listener (fn [which e]
+                         (event which e))
+              ;; This seems more than a little silly. Are there
+              ;; any other events that make sense? Maybe a timer?
+              events [:click :dblclick :mousedown :mouseup :mouseout
+                      :mouseenter :mouseleave :mousemove
+                      :keypress :keydown :keyup
+                      :blur :focus
+                      :resize]]
+          (dorun (map listener events)))))
     (set! (.-onload js/window) setup))  
   system)
 

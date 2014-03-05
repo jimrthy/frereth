@@ -52,17 +52,9 @@ Some messages from the client will really be for here
                (loop [msg (async/<! client->)]
                  (when msg
                    (dispatch ->renderer msg)
-                   (recur (async/<! client->)))))
-              ;; UI messages.
-              ;; Which, honestly, shouldn't come from the renderer
-              (let [renderer-> @(:renderer-> draw)]
-                (go
-                 (loop [msg (async/<! renderer->)]
-                   (when msg
-                     (.send <->client msg)
-                     (recur (async/<! renderer->)))))))
+                   (recur (async/<! client->))))))
             (do
-              (.error js/console "No atom for the user interface Channel"))))
+              (.error js/console "No atom for the user interface output Channel"))))
         (do
           (.error js/console "No atom for the async channel reporting Web Socket messages from the Client")))
       (do
