@@ -1,4 +1,5 @@
 ---
+      
 # I really wanted to make this fairly generic so I could build
 # a bunch of pieces as one user, install them as a sudoer, then
 # move along.
@@ -7,38 +8,32 @@
 # => This particular approach cannot work.
 # In all honesty, I'm back to needing a module for doing this sort
 # of build.
+# I'm more than a little shocked that this isn't part of core.
 
 - name: autogen configurations
   sudo: True
   sudo_user: jimrthy
   command: ./autogen.sh chdir=/home/jimrthy/projects/{{ item }}
-  with_items: ${projects_to_build}
+  with_items: projects_to_build
+
     
 - name: Configuring libraries
   sudo: True
   sudo_user: jimrthy
   command: ./configure chdir=/home/jimrthy/projects/{{ item }}
-  with_items: ${projects_to_build}
+  with_items: projects_to_build
 
 - name: Making libraries
   sudo: True
   sudo_user: jimrthy
   command: make chdir=/home/jimrthy/projects/{{ item }}
-  with_items: ${projects_to_build}
+  with_items: projects_to_build
 
 - name: Checking
   sudo: True
   sudo_user: jimrthy
   command: make check chdir=/home/jimrthy/projects/{{ item }}
-  # Trying to run make check w/ various incarnations of 0mq
-  # is failing pretty spectacularly inside vagrant.
-  # Several tests fail specifically, followed by test_conflate
-  # seemingly getting stuck in an infinite loop.
-  # This happens with both 0mq 4 and the latest dev branch.
-  # TODO: Collect those results by piping to an output file
-  # and report to the dev mailing list.
-  # 
-  # So, for now, just skip that and hope for the best.
-  #  with_items: ${projects_to_build}
-  with_items: libsodium
+  with_items: projects_to_build
 
+
+    

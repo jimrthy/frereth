@@ -1,0 +1,5 @@
+---
+projects_to_build:
+  - libsodium
+  #  - libzmq
+  - zeromq4-x

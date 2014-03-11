@@ -1,0 +1,10 @@
+# -*- mode: yaml -*-
+---
+lein_dir: /usr/local/bin/lein
+
+config_files_to_copy:
+  - gitconfig
+  - gitignore_global
+  - tmux.conf
+  - vimrc
+  - zshrc
