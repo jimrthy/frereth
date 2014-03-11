@@ -30,6 +30,7 @@
     # Which, mostly, I am.
     # - openjdk-7-jre-headless
     - openjdk-7-jdk
+    - pkg-config
     - python-dev
     - python-pip
     - ssh
