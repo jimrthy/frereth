@@ -1,0 +1,4 @@
+---
+- remote:user: jimrthy
+- roles:
+  - communicator

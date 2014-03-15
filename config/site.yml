@@ -1,6 +1,15 @@
 ---
 - include: frereth-sudoer.yml
 - include: ubuntu-os-init.yml
-- include: all-build-basics.yml
+
+# These were all lumped together.
+# Switching users and privilege levels
+# makes that more complicated.
+- include: build-basics.yml
+- include: sodium-installer.yml
+- include: build-0mq.yml
+- include: install-0mq.yml
+- include: communicator.yml
+
 - include: ubuntu-installation.yml
 - include: install-java-repositories.yml

@@ -1,0 +1,5 @@
+---
+- hosts: all
+  remote_user: jimrthy
+  roles:
+  - build-0mq

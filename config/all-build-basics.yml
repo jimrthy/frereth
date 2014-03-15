@@ -1,7 +1,6 @@
 ---
 - hosts: all
   remote_user: ubuntu
-  sudo: true
   sudo_user: jimrthy
   roles:
   - frereth-hacker
@@ -20,8 +19,3 @@
 # or variable, or some such, to eliminate code duplication.
 # However that actually works, it doesn't seem worth the trouble.
   - build-sodium
-  - install-sodium
-  - build-0mq
-  - install-0mq
-
-  - communicator
