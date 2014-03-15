@@ -1,4 +1,6 @@
 ---
+# Obsoleted by individual installation pieces.
+
 # Install the pieces that were built earlier
 # This should really be OS-agnostic, except for the ID of the sudoer.
 # Actually, should be able to set that user up in earlier steps so

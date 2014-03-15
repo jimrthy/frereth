@@ -55,4 +55,7 @@ export TERM=screen-256color
 
 # This next piece is weird and, really, specific to ubuntu.
 # Oh well.
+# More importantly, it's really for python environments, which I'm not
+# particularly worried about for this scenario.
+# And I'm getting an error with some users.
 source /etc/bash_completion.d/virtualenvwrapper

@@ -1,4 +1,6 @@
 ---
+# TODO: This piece can just go away as obsolete.
+
 # Install the pieces that were actually built in previous steps
 # by a 'normal' user.
 # The important point to keep in mind about this particular play
