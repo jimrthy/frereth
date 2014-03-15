@@ -1,11 +1,27 @@
 ---
 - hosts: all
   remote_user: ubuntu
+  sudo: true
   sudo_user: jimrthy
   roles:
   - frereth-hacker
+
+# I really wanted to make this fairly generic so I could build
+# a bunch of pieces as one user, install them as a sudoer, then
+# move along.
+# But libzmq really depends on libsodium being installed, if
+# I want to actually use it (and I do).
+# => This particular approach cannot work.
+# In all honesty, I'm back to needing a module for doing this sort
+# of build.
+# I'm more than a little shocked that this isn't part of core.
+
+# I really want to pass the component name in as a parameter,
+# or variable, or some such, to eliminate code duplication.
+# However that actually works, it doesn't seem worth the trouble.
   - build-sodium
   - install-sodium
   - build-0mq
   - install-0mq
+
   - communicator

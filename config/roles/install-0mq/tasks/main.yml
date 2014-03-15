@@ -1,0 +1,4 @@
+---
+- name: Install 0mq
+  sudo: True
+  command: make install chdir=/home/jimrthy/projects/libzmq

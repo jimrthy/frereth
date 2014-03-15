@@ -1,0 +1,5 @@
+---
+- name: Install Libsodium
+  sudo: True
+  command: make install chdir=/home/jimrthy/projects/libsodium
+

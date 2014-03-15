@@ -1,21 +1,4 @@
 ---
-      
-# I really wanted to make this fairly generic so I could build
-# a bunch of pieces as one user, install them as a sudoer, then
-# move along.
-# But libzmq really depends on libsodium being installed, if
-# I want to actually use it (and I do).
-# => This particular approach cannot work.
-# In all honesty, I'm back to needing a module for doing this sort
-# of build.
-# I'm more than a little shocked that this isn't part of core.
-
-# I really want to pass the component name in as a parameter,
-# or variable, or some such, to eliminate code duplication.
-# However that actually works, it doesn't seem worth the trouble.
-
-# Set up libsodium first
-
 - name: autogen libsodium configuration
   sudo: True
   sudo_user: jimrthy
@@ -35,36 +18,3 @@
   sudo: True
   sudo_user: jimrthy
   command: make check chdir=/home/jimrthy/projects/libsodium
-
-- name: Install Libsodium
-  sudo: True
-  command: make install chdir=/home/jimrthy/projects/libsodium
-
-# Now 0mq
-
-- name: autogen 0mq configuration
-  sudo: True
-  sudo_user: jimrthy
-  command: ./autogen.sh chdir=/home/jimrthy/projects/libzmq
-
-- name: Configuring 0mq
-  sudo: True
-  sudo_user: jimrthy
-  command: ./configure chdir=/home/jimrthy/projects/libzmq
-
-- name: Make 0mq
-  sudo: True
-  sudo_user: jimrthy
-  command: make chdir=/home/jimrthy/projects/libzmq
-
-- name: Check 0mq
-  sudo: True
-  sudo_user: jimrthy
-  command: make check chdir=/home/jimrthy/projects/libzmq
-
-- name: Install 0mq
-  sudo: True
-  command: make install chdir=/home/jimrthy/projects/libzmq
-
-
-    
