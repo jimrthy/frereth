@@ -4,5 +4,8 @@
   sudo_user: jimrthy
   roles:
   - frereth-hacker
-  - sodium
+  - build-sodium
+  - install-sodium
+  - build-0mq
+  - install-0mq
   - communicator
