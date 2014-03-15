@@ -1,5 +1,0 @@
----
-- hosts: all
-  remote_user: jimrthy
-  roles:
-  - communicator

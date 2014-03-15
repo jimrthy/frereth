@@ -4,10 +4,5 @@
 
   roles:  
   - normal-user
-  # TODO: Set up a sudoer so library installation can be OS-agnostic
-  # Note that this is really the only part of this playbook
-  # that's specific to Ubuntu.
-  # Oh well. It's not like I care about other distros
-  # yet.
   - must-have-ubuntu-packages
   - clojure-runner
