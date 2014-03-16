@@ -58,4 +58,5 @@ export TERM=screen-256color
 # More importantly, it's really for python environments, which I'm not
 # particularly worried about for this scenario.
 # And I'm getting an error with some users.
-source /etc/bash_completion.d/virtualenvwrapper
+#source /etc/bash_completion.d/virtualenvwrapper
+source /usr/share/virtualenvwrapper/virtualenvwrapper.sh

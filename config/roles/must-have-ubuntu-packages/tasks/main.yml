@@ -15,17 +15,13 @@
   # Except that it doesn't play well with OpenStack.
   with_items:
     - autoconf
-    # Why is ubuntu still using v 23? This is just ridiculously
-    # painful.
-    # The annoying thing about this particular version is that
-    # I have packages I want to install, but that's another layer
-    # of pain that doesn't really interest me at the moment.
     - emacs
     - g++
     - gettext
     - git
     - gnupg2
     - libtool
+    - maven2
     # Would be using this if I were building a server.
     # Which, mostly, I am.
     # - openjdk-7-jre-headless
