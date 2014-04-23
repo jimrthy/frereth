@@ -1,3 +1,3 @@
 [ubuntu-basic]
-192.168.0.20 ansible_ssh_user=james ansible_ssh_pass=abc123 ansible_sudo_pass=abc123
+10.0.3.73 ansible_ssh_user=james ansible_ssh_pass=abc123 ansible_sudo_pass=abc123
 
