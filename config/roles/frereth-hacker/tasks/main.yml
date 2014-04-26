@@ -9,36 +9,44 @@
 
 - name: Configuration files
   sudo: True
-  sudo_user: jimrthy
-  copy: src=resources/{{ item }} dest=/home/jimrthy/.{{ item }} backup=yes
-  with_items: ${config_files_to_copy}
+  #sudo_user: jimrthy
+  #remote_user: james
+  copy: src=resources/{{ item }} dest=/home/jimrthy/.{{ item }} backup=yes owner=jimrthy group=jimrthy
+  with_items: config_files_to_copy
 
 - name: Clone Oh! My ZSH! Repository
   sudo: True
-  sudo_user: jimrthy
-  git: repo=https://github.com/robbyrussell/oh-my-zsh.git dest=/home/jimrthy/.oh-my-zsh
+  #sudo_user: jimrthy
+  git: repo=https://github.com/jimrthy/oh-my-zsh.git dest=/home/jimrthy/.oh-my-zsh update=yes
 
-- name: Personal theme
+- name: Oh! My ZSH! owned by normal user
   sudo: True
-  sudo_user: jimrthy
-  copy: src=resources/jimrthy.zsh-theme dest=/home/jimrthy/.oh-my-zsh/themes/jimrthy.zsh-theme backup=yes
+  file: path=/home/jimrthy/.oh-my-zsh recurse=yes state=directory owner=jimrthy group=jimrthy
+
+# I should probably roll that back and then add this as an optional piece to spread the
+# appeal. Who would want to be stuck with my theme?
+# But this is a stupid little throw-away learning script, so who cares?
+#- name: Personal theme
+#  #sudo: True
+#  sudo_user: jimrthy
+#  copy: src=resources/jimrthy.zsh-theme dest=/home/jimrthy/.oh-my-zsh/themes/jimrthy.zsh-theme backup=yes
 
 - name: GPG Generation Rules
   sudo: True
-  sudo_user: jimrthy
-  copy: src=resources/gpg-rules dest=/home/jimrthy/gpg-rules backup=yes
+  #sudo_user: jimrthy
+  copy: src=resources/gpg-rules dest=/home/jimrthy/gpg-rules backup=yes owner=jimrthy group=jimrthy
 
 # I'm a bit torn about building the GPG key now, vs. waiting until I actually need it.
 # It takes long enough that it seems wise to put it off as long as possible.
 # That may happen earlier if I start needing it in more places. Until then...
 # It's breaking that way. So try moving it here.
 
-- name: Default signing key (slow!)
-  # TODO: Generate this externally, copy it over, and import it.
-  # Doing it this way is just too ridiculously slow.
-  sudo: yes
-  sudo_user: jimrthy
-  command: gpg2 --batch --gen-key /home/jimrthy/gpg-rules creates=/home/jimrthy/.gpg/secring.gpg
+#- name: Default signing key (slow!)
+#  # TODO: Generate this externally, copy it over, and import it.
+#  # Doing it this way is just too ridiculously slow.
+#  #sudo: yes
+#  sudo_user: jimrthy
+#  command: gpg2 --batch --gen-key /home/jimrthy/gpg-rules creates=/home/jimrthy/.gpg/secring.gpg
 
 # TODO: Uncomment this when I'm finished debugging
 # Q: Does it make any real difference?
@@ -49,12 +57,18 @@
 
 - name: Set up directory for local repos
   sudo: True
-  sudo_user: jimrthy
-  file: path=/home/jimrthy/projects state=directory
+  #sudo_user: jimrthy
+  file: path=/home/jimrthy/projects state=directory owner=jimrthy group=jimrthy
 
+# Honestly, thish should already exist.
+- name: Need an ssh directory for working the magic
+  sudo: True
+  #sudo_user: jimrthy
+  file: path=/home/jimrthy/.ssh state=directory mode=0700 owner=jimrthy group=jimrthy
+  
 - name: Add github to known-hosts
   sudo: True
-  sudo_user: jimrthy
+  #sudo_user: jimrthy
   # TODO: At least theoretically, we shouldn't need to do this
   # That requires a newer version of ansible than I currently have
   # available.
@@ -65,17 +79,17 @@
   # any existing data. I also want to make sure that this gets added.
   # Really need a way to make this idempotent.
   # TODO: There are existing external modules for handling this
-  shell: ssh-keyscan github.com >> /home/jimrthy/.ssh/known_hosts_alt
+  shell: ssh-keyscan github.com >> /home/jimrthy/.ssh/known_hosts
 
 - name: Copy github private key over
   sudo: True
-  sudo_user: jimrthy
-  copy: dest=/home/jimrthy/.ssh/github_key backup=yes src=resources/insecure.rsa mode=0600
+  #sudo_user: jimrthy
+  copy: dest=/home/jimrthy/.ssh/github_key backup=yes src=resources/insecure.rsa mode=0600 owner=jimrthy group=jimrthy
     
 - name: Use that key
   sudo: True
-  sudo_user: jimrthy
-  copy: dest=/home/jimrthy/.ssh/config backup=yes src=resources/ssh.config
+  #sudo_user: jimrthy
+  copy: dest=/home/jimrthy/.ssh/config backup=yes src=resources/ssh.config owner=jimrthy group=jimrthy
 
 # TODO: There are really 2 groups of repos, at least.
 # Some are directly related to things I'm trying to work on right now.
@@ -84,7 +98,7 @@
 # those here.
 - name: Clone repositories
   sudo: True
-  sudo_user: jimrthy
+  #sudo_user: jimrthy
   git: remote=github force=no
        repo=git@github.com:jimrthy/{{ item }}.git    
        dest=/home/jimrthy/projects/{{ item }}
@@ -124,3 +138,20 @@
     - libzmq
     - zeromq4-x
 
+# TODO: Since the with_items was copy/pasted from above, pretty desperately
+# need to move them both into a common var.
+- name: Give normal user repo access
+  sudo: True
+  file: path=/home/jimrthy/projects={{ item }}/ recurse=yes state=directory owner=jimrthy group=developers
+  with_items:
+    - cljeromq
+    - frereth
+    - frereth-client
+    - frereth-server
+    - frereth-terminal
+    - frereth-renderer
+    - jzmq
+    - libsodium
+    - libzmq
+    - zeromq4-x
+    

@@ -5,8 +5,12 @@
 
 - name: Set up non-root user
   sudo: True
-  user: name=jimrthy append=yes createhome=yes groups=frereth,developers shell=/usr/bin/zsh state=present
+  user: name=jimrthy append=yes createhome=yes groups=frereth,developers state=present
 
 - name: Let that new user log in
   sudo: True
-  authorized_key: user=jimrthy key="{{ lookup('file', '/home/james/.ssh/todds.key.pub') }}" state=present
+  authorized_key: user=jimrthy
+                  state=present
+                  key="{{lookup('file', '/home/james/.ssh/todds.key.pub')}}"
+                  manage_dir=yes
+
