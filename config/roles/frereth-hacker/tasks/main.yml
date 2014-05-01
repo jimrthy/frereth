@@ -142,7 +142,7 @@
 # need to move them both into a common var.
 - name: Give normal user repo access
   sudo: True
-  file: path=/home/jimrthy/projects={{ item }}/ recurse=yes state=directory owner=jimrthy group=developers
+  file: path=/home/jimrthy/projects/{{ item }}/ recurse=yes state=directory owner=jimrthy group=developers
   with_items:
     - cljeromq
     - frereth
