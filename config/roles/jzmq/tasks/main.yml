@@ -11,12 +11,24 @@
   sudo_user: jimrthy
   command: ./configure chdir=/home/jimrthy/projects/jzmq
 
+# Because this isn't getting created automatically by maven
+# Then again, mvn clean turns right back around and deletes it.
+#- name: place for java binary output
+#  sudo: yes
+#  sudo_user: jimrthy
+#  file: name=/home/jimrthy/projects/jzmq/target/classes/ group=developers owner=jimrthy state=directory
+
+- name: Remove previous build attempts
+  sudo_user: jimrthy
+  command: mvn clean chdir=/home/jimrthy/projects/jzmq
+  ignore_errors: True
+
 - name: Build the base .class
   # Must be done before we can build the c++ pieces.
   # It seems wrong, but who am I to complain?
   sudo_user: jimrthy
   # TODO: Verify that this really does build that required file
-  command: mvn clean compile chdir=/home/jimrthy/projects/jzmq
+  command: mvn compile chdir=/home/jimrthy/projects/jzmq
 
 - name: make
   sudo: yes
