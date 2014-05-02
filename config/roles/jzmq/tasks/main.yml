@@ -1,6 +1,14 @@
 ---
 # Install java pieces that are dependent on C libraries created in previous steps
 
+# Q: Aren't I already running this as jimrthy to begin with?
+# Shouldn't I be able to ditch that part of it?
+
+- name: experimental branch
+  sudo: yes
+  sudo_user: jimrthy
+  command: git checkout curve chdir=/home/jimrthy/projects/jzmq
+
 - name: autogen
   sudo: yes
   sudo_user: jimrthy

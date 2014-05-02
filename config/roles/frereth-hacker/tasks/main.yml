@@ -81,14 +81,16 @@
   # TODO: There are existing external modules for handling this
   shell: ssh-keyscan github.com >> /home/jimrthy/.ssh/known_hosts
 
+- name: let hacker control known-hosts  
+  sudo: True
+  file: path=/home/jimrthy/.ssh/known_hosts owner=jimrthy group=jimrthy
+
 - name: Copy github private key over
   sudo: True
-  #sudo_user: jimrthy
   copy: dest=/home/jimrthy/.ssh/github_key backup=yes src=resources/insecure.rsa mode=0600 owner=jimrthy group=jimrthy
     
 - name: Use that key
   sudo: True
-  #sudo_user: jimrthy
   copy: dest=/home/jimrthy/.ssh/config backup=yes src=resources/ssh.config owner=jimrthy group=jimrthy
 
 # TODO: There are really 2 groups of repos, at least.
@@ -99,6 +101,9 @@
 - name: Clone repositories
   sudo: True
   #sudo_user: jimrthy
+  # Using this remote causes issues when I try to push changes back.
+  # FIXME: Really need to do the checkout as jimrthy, using the
+  # gh alias that I've set up in his ssh config.
   git: remote=github force=no
        repo=git@github.com:jimrthy/{{ item }}.git    
        dest=/home/jimrthy/projects/{{ item }}
