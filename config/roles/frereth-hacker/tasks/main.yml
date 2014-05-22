@@ -9,7 +9,7 @@
 
 - name: Configuration files
   sudo: True
-  #sudo_user: jimrthy
+  sudo_user: jimrthy
   #remote_user: james
   copy: src=resources/{{ item }} dest=/home/jimrthy/.{{ item }} backup=yes owner=jimrthy group=jimrthy
   with_items: config_files_to_copy

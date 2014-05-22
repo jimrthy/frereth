@@ -1,7 +1,7 @@
 ---
 - hosts: all
-  remote_user: jimrthy
-  #sudo_user: jimrthy
+  #  remote_user: jimrthy
+  sudo_user: jimrthy
   roles:
   - frereth-hacker
 
