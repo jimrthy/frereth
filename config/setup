@@ -1,5 +1,13 @@
 #! /bin/bash
 
+# Generate GPG key for later upload
+# TODO: Merge that into the config file
+UUID=`python -c 'import uuid; print str(uuid.uuid4())'`
+
+# This next part's slow...don't do it often
+#gpg2 --batch --gen-key roles/frereth-hacker/files/gpg-rules
+#gpg2 --export-secret-key --armor jamesgatannah+77ca8b53-cc1a-4b39-8a6d-6b2f8b6b0804@gmail.com > roles/frereth-hacker/files/hacker-priv_key.asc
+
 # Set up some basic environment variables to make life easier
 
 export ANSIBLE_HOST_KEY_CHECKING=False

@@ -10,6 +10,7 @@
 # though they seem to be getting easier.
 # https://www.stgraber.org/2014/01/17/lxc-1-0-unprivileged-containers/
 # was my template for this.
+
 # Although, really, all I had to do was make my home directory 
 # world-executable (so it might be an excellent idea to set up a
 # user account with no purpose in life except to run containers...
@@ -21,13 +22,6 @@
 # containers on my laptop. I'm torn between frustration that it works
 # like a charm on my desktop and not caring. After all, that's just
 # a very tiny 'nice to have' for what I'm trying to accomplish.
-# Once upon a time, unprivileged lxc containers required a
-# service to set a bunch of clone_children values under 
-# /sys/fs/cgroup.
-# I hoped that was my problem, although I haven't been able to
-# find the instructions for actually doing it.
-# According to the user mailing list, the requirement is now
-# gone.
 
 # Get the bare configuration downloaded
 lxc-create -t download -n baseline -- -d ubuntu -r trusty -a amd64
@@ -81,10 +75,12 @@ lxc-ls --fancy
 # Now install and configure ansible, and you should be ready to begin
 # The pre-reqs for that step look at least vaguely along
 # these lines:
-mkvirtualenv ansible
 sudo apt-get install python-dev libgmp-dev sshpass
 # It'd be much better to set up keys and something like
 # ssh-agent than using a password
+
+mkvirtualenv ansible
 pip install paramiko PyYAML jinja2 httplib2
 # Note to self: really should make the virtualenv set up
 # the ansible environment automatically, during activate
+
