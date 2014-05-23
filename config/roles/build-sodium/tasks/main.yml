@@ -1,19 +1,20 @@
 ---
 - name: autogen libsodium configuration
-  sudo_user: jimrthy
+  sudo: True
+  remote_user: jimrthy
   command: ./autogen.sh chdir=/home/jimrthy/projects/libsodium
 
 - name: Configuring Libsodium
-  #sudo: True
-  sudo_user: jimrthy
+  sudo: True
+  remote_user: jimrthy
   command: ./configure chdir=/home/jimrthy/projects/libsodium
 
 - name: Make Libsodium
-  #sudo: True
-  sudo_user: jimrthy
+  sudo: True
+  remote_user: jimrthy
   command: make chdir=/home/jimrthy/projects/libsodium
 
 - name: Check Libsodium
-  #sudo: True
-  sudo_user: jimrthy
+  sudo: True
+  remote_user: jimrthy
   command: make check chdir=/home/jimrthy/projects/libsodium

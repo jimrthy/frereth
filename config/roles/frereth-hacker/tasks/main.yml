@@ -4,7 +4,8 @@
 # obviously missing something basic.
 
 - name: Basic Configuration files
-  sudo_user: jimrthy
+  sudo: True
+  remote_user: jimrthy
   copy: src={{ item }} dest=/home/jimrthy/.{{ item }} backup=yes owner=jimrthy group=jimrthy
   with_items: config_files_to_copy
 
@@ -12,12 +13,13 @@
 # time in this thing.
 
 - name: Clone Oh! My ZSH! Repository
-  sudo_user: jimrthy
+  sudo: True
+  remote_user: jimrthy
   git: repo=https://github.com/jimrthy/oh-my-zsh.git dest=/home/jimrthy/.oh-my-zsh update=yes
 
-#- name: Oh! My ZSH! owned by normal user
-#  sudo: True
-#  file: path=/home/jimrthy/.oh-my-zsh recurse=yes state=directory owner=jimrthy group=jimrthy
+- name: Oh! My ZSH! owned by normal user
+  sudo: True
+  file: path=/home/jimrthy/.oh-my-zsh recurse=yes state=directory owner=jimrthy group=jimrthy
 
 # I should probably roll that back and then add this as an optional piece to spread the
 # appeal. Who would want to be stuck with my theme?
@@ -28,22 +30,23 @@
 #  copy: src=resources/jimrthy.zsh-theme dest=/home/jimrthy/.oh-my-zsh/themes/jimrthy.zsh-theme backup=yes
 
 - name: Need an ssh directory for working the magic
-  #sudo: True
-  sudo_user: jimrthy
+  sudo: True
+  remote_user: jimrthy
   file: path=/home/jimrthy/.ssh/keys state=directory mode=0700 owner=jimrthy group=jimrthy
 
-# I really should be able to do this without the previous step.
-#- name: And a place to store keys
-#  sudo_user: jimrthy
-#  file: path=/home/jimrthy/.ssh/keys state=directory mode=0700 owner=jimrthy group=jimrthy
-  
 - name: Default signing key
-  sudo_user: jimrthy
+  sudo: True
+  remote_user: jimrthy
   copy: src=hacker-priv_key.asc dest=/home/jimrthy/.ssh/keys/hacker-priv_key.asc
+        owner=jimrthy group=jimrthy
 
 - name: Import signing key
-  sudo_user: jimrthy
+  sudo: True
+  remote_user: jimrthy
   command: gpg2 --import /home/jimrthy/.ssh/keys/hacker-priv_key.asc
+  # Don't want to really do this. But it makes life easier while I'm
+  # debugging (and you can't import the same key twice)
+  ignore_errors: True
 
 # TODO: Uncomment this when I'm finished debugging
 # Q: Does it make any real difference?
@@ -53,13 +56,13 @@
 #  command: /usr/local/bin/lein
 
 - name: Set up directory for local repos
-  #sudo: True
-  sudo_user: jimrthy
+  sudo: True
+  remote_user: jimrthy
   file: path=/home/jimrthy/projects state=directory owner=jimrthy group=jimrthy
 
 - name: Get github ssh key
-  #sudo: True
-  sudo_user: jimrthy
+  sudo: True
+  remote_user: jimrthy
   # TODO: At least theoretically, we shouldn't need to do this
   # That requires a newer version of ansible than I currently have
   # available.
@@ -74,20 +77,22 @@
   register: git_repo_host_key
 
 - name: Register github as a known host
-  sudo_user: jimrthy
+  sudo: True
+  remote_user: jimrthy
   lineinfile: create=yes dest=/home/jimrthy/.ssh/known_hosts line='{{ git_repo_host_key.stdout }}' state=present
 
-- name: let hacker control known-hosts  
-  sudo_user: jimrthy
+- name: let hacker control known-hosts
+  sudo: True
   file: path=/home/jimrthy/.ssh/known_hosts owner=jimrthy group=jimrthy
 
 - name: Copy github private key over
-  sudo_user: jimrthy
+  sudo: True
+  remote_user: jimrthy
   copy: dest=/home/jimrthy/.ssh/github_key backup=yes src=resources/insecure.rsa mode=0600 owner=jimrthy group=jimrthy
     
 - name: Use that key
   sudo: True
-  copy: dest=/home/jimrthy/.ssh/config backup=yes src=resources/ssh.config owner=jimrthy group=jimrthy
+  copy: dest=/home/jimrthy/.ssh/config backup=yes src=ssh.config owner=jimrthy group=jimrthy
 
 # TODO: There are really 2 groups of repos, at least.
 # Some are directly related to things I'm trying to work on right now.
@@ -95,8 +100,8 @@
 # public download options, for various reasons. It makes sense to branch
 # those here.
 - name: Clone repositories
-  #sudo: True
-  sudo_user: jimrthy
+  sudo: True
+  remote_user: jimrthy
   # Using this remote causes issues when I try to push changes back.
   # FIXME: Really need to do the checkout as jimrthy, using the
   # gh alias that I've set up in his ssh config.
