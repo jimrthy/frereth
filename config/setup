@@ -21,4 +21,8 @@ lxc-attach -n frewreb -- apt-get install -y python-apt
 # been source'd to properly set up environment variables.
 # There are issues between '-c ssh' and '-c paramiko' that I haven't
 # had any chance to dig into
-ansible-playbook -i hosts -c ssh site.yml
+#ansible-playbook -i hosts -c ssh site.yml
+ansible-playbook -i hosts -c ssh baseline.yml
+ansible-playbook -i hosts -c ssh comms.yml
+ansible-playbook -i hosts -c ssh install-java-repositories.yml
+

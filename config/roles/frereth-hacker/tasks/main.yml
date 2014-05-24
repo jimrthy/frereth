@@ -4,8 +4,8 @@
 # obviously missing something basic.
 
 - name: Basic Configuration files
-  sudo: True
-  remote_user: jimrthy
+  #sudo: True
+  #remote_user: jimrthy
   copy: src={{ item }} dest=/home/jimrthy/.{{ item }} backup=yes owner=jimrthy group=jimrthy
   with_items: config_files_to_copy
 
@@ -13,8 +13,8 @@
 # time in this thing.
 
 - name: Clone Oh! My ZSH! Repository
-  sudo: True
-  remote_user: jimrthy
+  #sudo: True
+  #remote_user: jimrthy
   git: repo=https://github.com/jimrthy/oh-my-zsh.git dest=/home/jimrthy/.oh-my-zsh update=yes
 
 - name: Oh! My ZSH! owned by normal user
@@ -30,8 +30,8 @@
 #  copy: src=resources/jimrthy.zsh-theme dest=/home/jimrthy/.oh-my-zsh/themes/jimrthy.zsh-theme backup=yes
 
 - name: Need an ssh directory for working the magic
-  sudo: True
-  remote_user: jimrthy
+  #sudo: True
+  #remote_user: jimrthy
   file: path=/home/jimrthy/.ssh/keys state=directory mode=0700 owner=jimrthy group=jimrthy
 
 - name: Default signing key

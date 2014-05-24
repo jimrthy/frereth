@@ -5,9 +5,9 @@
 # These were all lumped together.
 # Switching users and privilege levels
 # makes that more complicated.
-- include: build-basics.yml
+- { include: build-basics.yml, user: jimrthy }
 - include: sodium-installer.yml
-- include: build-0mq.yml
+- { include: build-0mq.yml, user: jimrthy }
 - include: install-0mq.yml
 
 # Back to doing lots of work at once
