@@ -1,17 +1,17 @@
 ---
 - name: autogen 0mq configuration
   sudo: True
-  sudo_user: jimrthy
+  remote_user: jimrthy
   command: ./autogen.sh chdir=/home/jimrthy/projects/libzmq
 
 - name: Configuring 0mq
   sudo: True
-  sudo_user: jimrthy
+  remote_user: jimrthy
   command: ./configure chdir=/home/jimrthy/projects/libzmq
 
 - name: Make 0mq
   sudo: True
-  sudo_user: jimrthy
+  remote_user: jimrthy
   command: make chdir=/home/jimrthy/projects/libzmq
 
 # I really shouldn't be ignoring errors on this one.
@@ -23,6 +23,6 @@
 # happen here.
 - name: Check 0mq (keep an eye on this!)
   sudo: True
-  sudo_user: jimrthy
+  remote_user: jimrthy
   command: make check chdir=/home/jimrthy/projects/libzmq
   ignore_errors: True

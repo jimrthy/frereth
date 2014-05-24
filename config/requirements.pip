@@ -1,0 +1,4 @@
+paramiko == 1.14.0
+PyYAML == 3.11
+jinja2 == 2.7.2
+ansible == 1.6.2

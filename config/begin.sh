@@ -80,7 +80,7 @@ sudo apt-get install python-dev libgmp-dev sshpass
 # ssh-agent than using a password
 
 mkvirtualenv ansible
-pip install paramiko PyYAML jinja2 httplib2
+pip install -r requirements.pip
 # Note to self: really should make the virtualenv set up
 # the ansible environment automatically, during activate
 

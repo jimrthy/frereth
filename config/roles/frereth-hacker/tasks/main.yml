@@ -87,8 +87,11 @@
 
 - name: Copy github private key over
   sudo: True
-  remote_user: jimrthy
-  copy: dest=/home/jimrthy/.ssh/github_key backup=yes src=resources/insecure.rsa mode=0600 owner=jimrthy group=jimrthy
+  remote_user: "{{ item }}"
+  copy: dest=/home/{{ item }}/.ssh/github_key backup=yes src=resources/insecure.rsa mode=0600 owner={{ item }} group={{ item }}
+  with_items:
+    - jimrthy
+    - james
     
 - name: Use that key
   sudo: True
@@ -102,10 +105,11 @@
 - name: Clone repositories
   sudo: True
   remote_user: jimrthy
+  #sudo_user: jimrthy
   # Using this remote causes issues when I try to push changes back.
   # FIXME: Really need to do the checkout as jimrthy, using the
   # gh alias that I've set up in his ssh config.
-  git: remote=github force=no
+  git: remote=gh force=no
        repo=git@github.com:jimrthy/{{ item }}.git    
        dest=/home/jimrthy/projects/{{ item }}
        key_file=/home/jimrthy/.ssh/github_key
@@ -148,6 +152,7 @@
 # need to move them both into a common var.
 - name: Give normal user repo access
   sudo: True
+  remote_user: jimrthy
   file: path=/home/jimrthy/projects/{{ item }}/ recurse=yes state=directory owner=jimrthy group=developers
   with_items:
     - cljeromq

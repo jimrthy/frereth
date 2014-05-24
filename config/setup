@@ -13,6 +13,10 @@ UUID=`python -c 'import uuid; print str(uuid.uuid4())'`
 export ANSIBLE_HOST_KEY_CHECKING=False
 export ANSIBLE_HOSTS=`pwd`/hosts
 
+# This is the sort of specific detail that I don't want to involve here.
+# TODO: Move this sort of thing into a pre-set-up script.
+lxc-attach -n frewreb -- apt-get install -y python-apt
+
 # Note that this assumes the ansible hacking env-setup script has already
 # been source'd to properly set up environment variables.
 # There are issues between '-c ssh' and '-c paramiko' that I haven't
