@@ -1,6 +1,7 @@
 ---
-- { include: build-basics.yml, user: jimrthy }
+- hosts: all
+- include: build-basics.yml
 - include: sodium-installer.yml
-- { include: build-0mq.yml, user: jimrthy }
+- include: build-0mq.yml
 - include: install-0mq.yml
 

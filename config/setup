@@ -23,6 +23,12 @@ lxc-attach -n frewreb -- apt-get install -y python-apt
 # had any chance to dig into
 #ansible-playbook -i hosts -c ssh site.yml
 ansible-playbook -i hosts -c ssh baseline.yml
-ansible-playbook -i hosts -c ssh comms.yml
+
+#ansible-playbook -i hosts -c ssh comms.yml
+ansible-playbook -i hosts -c ssh build-basics.yml
+ansible-playbook -i hosts -c ssh sodium-installer.yml
+ansible-playbook -i hosts -c ssh build-0mq.yml
+ansible-playbook -i hosts -c ssh install-0mq.yml
+
 ansible-playbook -i hosts -c ssh install-java-repositories.yml
 

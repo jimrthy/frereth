@@ -5,6 +5,9 @@
 # These were all lumped together.
 # Switching users and privilege levels
 # makes that more complicated.
+# Don't try to do that here. Handle it with
+# hosts (although that seems like a misuse,
+# if not abuse)
 - { include: build-basics.yml, user: jimrthy }
 - include: sodium-installer.yml
 - { include: build-0mq.yml, user: jimrthy }

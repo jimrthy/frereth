@@ -1,11 +1,8 @@
 ---
-# Set up local user account customized the way I'm used to
-# TODO: It's annoying that I'm using so much sudo in here. I'm
-# obviously missing something basic.
+# Customize the unprivileged user account the way I'm used to
 
 - name: Basic Configuration files
-  #sudo: True
-  #remote_user: jimrthy
+  remote_user: jimrthy
   copy: src={{ item }} dest=/home/jimrthy/.{{ item }} backup=yes owner=jimrthy group=jimrthy
   with_items: config_files_to_copy
 
@@ -13,13 +10,7 @@
 # time in this thing.
 
 - name: Clone Oh! My ZSH! Repository
-  #sudo: True
-  #remote_user: jimrthy
   git: repo=https://github.com/jimrthy/oh-my-zsh.git dest=/home/jimrthy/.oh-my-zsh update=yes
-
-- name: Oh! My ZSH! owned by normal user
-  sudo: True
-  file: path=/home/jimrthy/.oh-my-zsh recurse=yes state=directory owner=jimrthy group=jimrthy
 
 # I should probably roll that back and then add this as an optional piece to spread the
 # appeal. Who would want to be stuck with my theme?
@@ -30,19 +21,13 @@
 #  copy: src=resources/jimrthy.zsh-theme dest=/home/jimrthy/.oh-my-zsh/themes/jimrthy.zsh-theme backup=yes
 
 - name: Need an ssh directory for working the magic
-  #sudo: True
-  #remote_user: jimrthy
   file: path=/home/jimrthy/.ssh/keys state=directory mode=0700 owner=jimrthy group=jimrthy
 
 - name: Default signing key
-  sudo: True
-  remote_user: jimrthy
   copy: src=hacker-priv_key.asc dest=/home/jimrthy/.ssh/keys/hacker-priv_key.asc
         owner=jimrthy group=jimrthy
 
 - name: Import signing key
-  sudo: True
-  remote_user: jimrthy
   command: gpg2 --import /home/jimrthy/.ssh/keys/hacker-priv_key.asc
   # Don't want to really do this. But it makes life easier while I'm
   # debugging (and you can't import the same key twice)
@@ -56,45 +41,23 @@
 #  command: /usr/local/bin/lein
 
 - name: Set up directory for local repos
-  sudo: True
-  remote_user: jimrthy
   file: path=/home/jimrthy/projects state=directory owner=jimrthy group=jimrthy
 
 - name: Get github ssh key
-  sudo: True
-  remote_user: jimrthy
-  # TODO: At least theoretically, we shouldn't need to do this
-  # That requires a newer version of ansible than I currently have
-  # available.
-  # FIXME: That's past tense. This seems like an extremely likely
-  # candidate for just going away.
-  # TODO: Test that hypothesis.
-  # This one's a little tricky: I don't really want to append over
-  # any existing data. I also want to make sure that this gets added.
-  # Really need a way to make this idempotent.
-  # TODO: There are existing external modules for handling this
   shell: ssh-keyscan github.com
   register: git_repo_host_key
 
 - name: Register github as a known host
-  sudo: True
-  remote_user: jimrthy
   lineinfile: create=yes dest=/home/jimrthy/.ssh/known_hosts line='{{ git_repo_host_key.stdout }}' state=present
 
-- name: let hacker control known-hosts
-  sudo: True
-  file: path=/home/jimrthy/.ssh/known_hosts owner=jimrthy group=jimrthy
-
 - name: Copy github private key over
-  sudo: True
   remote_user: "{{ item }}"
   copy: dest=/home/{{ item }}/.ssh/github_key backup=yes src=resources/insecure.rsa mode=0600 owner={{ item }} group={{ item }}
   with_items:
     - jimrthy
-    - james
+    #- james
     
 - name: Use that key
-  sudo: True
   copy: dest=/home/jimrthy/.ssh/config backup=yes src=ssh.config owner=jimrthy group=jimrthy
 
 # TODO: There are really 2 groups of repos, at least.
@@ -103,16 +66,15 @@
 # public download options, for various reasons. It makes sense to branch
 # those here.
 - name: Clone repositories
-  sudo: True
-  remote_user: jimrthy
-  #sudo_user: jimrthy
   # Using this remote causes issues when I try to push changes back.
   # FIXME: Really need to do the checkout as jimrthy, using the
   # gh alias that I've set up in his ssh config.
-  git: remote=gh force=no
-       repo=git@github.com:jimrthy/{{ item }}.git    
+  git: force=no
+       repo=ssh://gh/jimrthy/{{ item }}.git    
        dest=/home/jimrthy/projects/{{ item }}
        key_file=/home/jimrthy/.ssh/github_key
+       recursive=yes
+       update=yes
        accept_hostkey=yes
   with_items:
     # TODO: Honestly, there are two groups of libraries here.
@@ -147,22 +109,3 @@
     - libsodium
     - libzmq
     - zeromq4-x
-
-# TODO: Since the with_items was copy/pasted from above, pretty desperately
-# need to move them both into a common var.
-- name: Give normal user repo access
-  sudo: True
-  remote_user: jimrthy
-  file: path=/home/jimrthy/projects/{{ item }}/ recurse=yes state=directory owner=jimrthy group=developers
-  with_items:
-    - cljeromq
-    - frereth
-    - frereth-client
-    - frereth-server
-    - frereth-terminal
-    - frereth-renderer
-    - jzmq
-    - libsodium
-    - libzmq
-    - zeromq4-x
-    

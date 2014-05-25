@@ -1,5 +1,5 @@
 ---
-- hosts: all
+- hosts: ubuntu-non-privileged
   #sudo: yes
   #sudo_user: jimrthy
   remote_user: jimrthy

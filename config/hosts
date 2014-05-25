@@ -1,3 +1,6 @@
-[ubuntu-basic]
+[ubuntu-priveleged]
 10.0.3.73 ansible_ssh_user=james ansible_ssh_pass=abc123 ansible_sudo_pass=abc123
+
+[ubuntu-non-privileged]
+10.0.3.73 ansible_ssh_user=jimrthy ansible_ssh_pass=xyz456
 

@@ -1,5 +1,5 @@
 ---
-- hosts: all
+- hosts: ubuntu-non-privileged
   remote_user: jimrthy
   roles:
   - build-0mq

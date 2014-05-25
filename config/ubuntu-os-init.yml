@@ -1,8 +1,9 @@
 ---
-- hosts: all
+- hosts: ubuntu-privileged
   remote_user: frereth
 
   roles:  
   - normal-user
   - must-have-ubuntu-packages
   - clojure-runner
+

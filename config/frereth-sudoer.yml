@@ -1,5 +1,5 @@
 ---
-- hosts: ubuntu-basic
+- hosts: ubuntu-privileged
   remote_user: ubuntu
   roles:
   - ubuntu-sudoer
