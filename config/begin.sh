@@ -72,11 +72,13 @@ lxc-start -d -n frereth
 # to pick this up automatically.
 lxc-ls --fancy
 
-# Now install and configure ansible, and you should be ready to begin
+# Now install and configure ansible (on the machine
+# the will be configuring the VMs that will do the actual work),
+# and you should be ready to begin
 # The pre-reqs for that step look at least vaguely along
 # these lines:
 sudo apt-get install python-dev libgmp-dev sshpass
-# It'd be much better to set up keys and something like
+# It would be better to set up ssh keys and something like
 # ssh-agent than using a password
 
 mkvirtualenv ansible

@@ -1,6 +1,4 @@
 ---
 - hosts: ubuntu-privileged
-  remote_user: frereth
-  sudo: yes
   roles:
   - install-sodium
