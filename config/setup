@@ -5,8 +5,9 @@
 UUID=`python -c 'import uuid; print str(uuid.uuid4())'`
 
 # This next part's slow...don't do it often
-#gpg2 --batch --gen-key roles/frereth-hacker/files/gpg-rules
+gpg2 --batch --gen-key roles/frereth-hacker/files/gpg-rules
 #gpg2 --export-secret-key --armor jamesgatannah+77ca8b53-cc1a-4b39-8a6d-6b2f8b6b0804@gmail.com > roles/frereth-hacker/files/hacker-priv_key.asc
+gpg2 --export-secret-key --armor jamesgatannah+78752647-fecc-4be3-b814-0fe40c1198b3@gmail.com > roles/frereth-hacker/files/hacker-priv_key.asc
 
 # Set up some basic environment variables to make life easier
 
@@ -15,13 +16,15 @@ export ANSIBLE_HOSTS=`pwd`/hosts
 
 # This is the sort of specific detail that I don't want to involve here.
 # TODO: Move this sort of thing into a pre-set-up script.
-lxc-attach -n frewreb -- apt-get install -y python-apt
+lxc-attach -n frereth -- apt-get install -y python-apt
 
 # Note that this assumes the ansible hacking env-setup script has already
 # been source'd to properly set up environment variables.
 # There are issues between '-c ssh' and '-c paramiko' that I haven't
 # had any chance to dig into
-#ansible-playbook -i hosts -c ssh site.yml
+# TODO: This has issues if the hosts file has a non-privileged user pointing
+# at the same IP address.
+# Q: What's the problem?
 ansible-playbook -i hosts -c ssh baseline.yml
 
 #ansible-playbook -i hosts -c ssh comms.yml

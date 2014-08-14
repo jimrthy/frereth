@@ -1,6 +1,12 @@
-[ubuntu-priveleged]
-10.0.3.73 ansible_ssh_user=james ansible_ssh_pass=abc123 ansible_sudo_pass=abc123
+[ubuntu-privileged]
+10.0.3.152 ansible_ssh_user=james ansible_ssh_pass=abc123 ansible_sudo_pass=abc123
 
 [ubuntu-non-privileged]
-10.0.3.73 ansible_ssh_user=jimrthy ansible_ssh_pass=xyz456
+# If I have this line listed, the playbook that tries to work with that other
+# host uses this instead.
+# Q: What's going on?
+# A: When there are multiple groups w/ the same host, the last one
+# wins.
+# Better Q: How was this ever working? This was as issue back in 1.4
+10.0.3.152 ansible_ssh_user=jimrthy ansible_ssh_pass=xyz456
 

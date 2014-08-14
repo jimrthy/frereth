@@ -43,6 +43,8 @@ lxc-attach -n installable -- useradd -m james
 # So just break down and accept some interactivity for now
 lxc-attach -n installable -- passwd james
 
+# TODO: Move this into another play
+
 # Install python
 lxc-attach -n installable -- apt-get update
 lxc-attach -n installable -- apt-get install -y python
@@ -52,8 +54,8 @@ lxc-stop -n installable
 
 # Make james a password-less sudoer:
 INSTALLABLE_ROOT=$HOME/.local/share/lxc/installable/rootfs
-cp resources/master $INSTALLABLE_ROOT/etc/sudoers.d/
-chmod 0400 $INSTALLABLE_ROOT/etc/sudoers.d/master
+sudo cp resources/master $INSTALLABLE_ROOT/etc/sudoers.d/
+sudo chmod 0400 $INSTALLABLE_ROOT/etc/sudoers.d/master
 # Ownership of that file is problematic, because of
 # the way user/group ids get mapped
 # This happened to be the numbers on the system I

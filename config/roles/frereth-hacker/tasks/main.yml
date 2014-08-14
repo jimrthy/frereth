@@ -43,13 +43,20 @@
 - name: Set up directory for local repos
   file: path=/home/jimrthy/projects state=directory owner=jimrthy group=jimrthy
 
+# There have been issues in the past with getting git working over ssh.
+# Particularly with freezing at "Accept new known_host?" in the background
+# when there is no UI.
+# This is one old-school work-around.
 - name: Get github ssh key
   shell: ssh-keyscan github.com
   register: git_repo_host_key
 
+# Adding the host key manually used to work. It doesn't seem to any longer.
 - name: Register github as a known host
   lineinfile: create=yes dest=/home/jimrthy/.ssh/known_hosts line='{{ git_repo_host_key.stdout }}' state=present
 
+# Key for connecting to github
+# N.B.: Use your own. Make sure it doesn't become publicly available.
 - name: Copy github private key over
   remote_user: "{{ item }}"
   copy: dest=/home/{{ item }}/.ssh/github_key backup=yes src=resources/insecure.rsa mode=0600 owner={{ item }} group={{ item }}
@@ -70,7 +77,7 @@
   # FIXME: Really need to do the checkout as jimrthy, using the
   # gh alias that I've set up in his ssh config.
   git: force=no
-       repo=ssh://gh/jimrthy/{{ item }}.git    
+       repo=ssh://git@github.com/jimrthy/{{ item }}.git
        dest=/home/jimrthy/projects/{{ item }}
        key_file=/home/jimrthy/.ssh/github_key
        recursive=yes
