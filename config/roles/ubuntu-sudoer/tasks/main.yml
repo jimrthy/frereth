@@ -1,6 +1,7 @@
 ---
 - name: Set up a sudoer
   sudo: True
+  remote_user: james
   # The groups involved seem to be OS-specific. Which may make this step more complicated.
   # An important note: we probably do *not* want a system account. At least for
   # dev time. It actually probably makes a lot of sense for a release version.

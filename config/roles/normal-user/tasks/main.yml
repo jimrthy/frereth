@@ -5,7 +5,7 @@
 
 - name: Set up non-root user
   sudo: True
-  user: name=jimrthy append=yes createhome=yes groups=frereth,developers state=present
+  user: name=jimrthy append=yes createhome=yes groups=frereth,developers state=present shell=/usr/bin/zsh
 
 - name: Let that new user log in
   sudo: True
