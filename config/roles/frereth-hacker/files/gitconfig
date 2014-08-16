@@ -2,4 +2,4 @@
 	name = James Gatannah
 	email = jgatannah@gmail.com
 [core]
-	excludesfile = /home/bp/.gitignore_global
+	excludesfile = /home/jimrthy/.gitignore_global
