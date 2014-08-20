@@ -21,6 +21,7 @@
     - git
     - gnupg2
     - libtool
+    - man-db
     - maven2
     # Would be using this if I were building a server.
     # Which, mostly, I am.

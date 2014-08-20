@@ -54,6 +54,8 @@
   sudo: yes
   command: make install chdir=/home/jimrthy/projects/jzmq
 
+# Note that this will probably fail from ansible: it needs manual
+# intervention to enter the GPG password
 - name: Install to local maven repository
   remote_user: jimrthy
   command: mvn package install chdir=/home/jimrthy/projects/jzmq

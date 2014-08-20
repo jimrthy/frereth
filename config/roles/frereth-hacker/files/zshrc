@@ -48,11 +48,6 @@ source $ZSH/oh-my-zsh.sh
 # Customize to your needs...
 export "PATH=$PATH:/usr/local/bin:/usr/bin:/:/home/jimrthy/bin"
 
-# This is causing all sorts of weird issues. It seems to be an environment
-# issue on my host. Until I have time to trace it down, deal with it on the
-# guest (as ugly as that option is)
-export TERM=screen-256color
-
 # This next piece is weird and, really, specific to ubuntu.
 # Oh well.
 # More importantly, it's really for python environments, which I'm not
