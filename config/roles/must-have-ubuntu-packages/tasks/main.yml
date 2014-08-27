@@ -25,8 +25,9 @@
     - maven2
     # Would be using this if I were building a server.
     # Which, mostly, I am.
-    # - openjdk-7-jre-headless
-    - openjdk-7-jdk
+    # TODO: Split this up to build multiple machines
+    # for differences in details like this.
+    - openjdk-7-jre-headless
     - pkg-config
     - python-dev
     - python-pip
@@ -34,13 +35,4 @@
     - tmux
     - vim
     - virtualenvwrapper
-    - xpra
-    # Another resource hog...do I have any use for this?
-    #- xrdp
     - zsh
-    # Included w/ ssh
-    # which means it'll be very useful for hosts where I just
-    # want to install something minimalist for the sake of time
-    # - wget
-    # e.g.
-    # - openssh-server
