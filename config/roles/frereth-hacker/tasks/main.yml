@@ -95,6 +95,7 @@
     # libraries once they're installed, so they really should be hidden
     # away elsewhere anyway.
     - cljeromq
+    - cljzmq
     - frereth
     - frereth-client
     - frereth-server
