@@ -3,6 +3,7 @@ config_files_to_copy:
   - emacs.d/init.el
   - gitconfig
   - gitignore_global
+  - lein/profiles.clj
   - tmux.conf
   - vimrc
   - zshrc

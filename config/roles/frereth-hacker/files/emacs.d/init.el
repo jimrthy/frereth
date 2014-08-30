@@ -15,24 +15,21 @@
 ;; There are interesting debates about marmalade vs. melpa.
 (add-to-list 'package-archives
              '("marmalade" . "http://marmalade-repo.org/packages/"))
-(when nil (add-to-list 'package-archives
-		       '("melpa" . "http://melpa.milkbox.net/packages/")))
+(when t (add-to-list 'package-archives
+		       '("melpa-stable" . "http://melpa-stable.milkbox.net/packages/")))
 (package-initialize)
 (when (not package-archive-contents)
   (package-refresh-contents))
 
 (defvar my-packages '(clojure-mode
-		      clojure-test-mode
 		      cider
-		      ;;nrepl-ritz
 		      paredit
-		      ;;scala-mode2
 		      ;; No such package...even though the package
 		      ;; manager seemed to install it just fine
 		      ;;scss
 		      ))
 (dolist (p my-packages)
-  (when (not (package-installed-p p))
+  (when (t (package-installed-p p))
     (package-install p)))
 
 ;; Clojurescript files should be edited in clojure-mode
@@ -64,8 +61,10 @@
 
 ;; Recommendations from the nrepl README:
 
-; eldoc (whatever that is):
+; eldoc:
 (add-hook 'cider-interaction-mode-hook
+          'cider-turn-on-eldoc-mode)
+(add-hook 'cider-mode-hook
           'cider-turn-on-eldoc-mode)
 
 ;; turn off auto-complete with tab
