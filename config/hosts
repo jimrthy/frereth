@@ -1,5 +1,5 @@
 [ubuntu-privileged]
-10.0.3.152 ansible_ssh_user=james ansible_ssh_pass=abc123 ansible_sudo_pass=abc123
+#10.0.3.152 ansible_ssh_user=james ansible_ssh_pass=abc123 ansible_sudo_pass=abc123
 
 [ubuntu-non-privileged]
 # If I have this line listed, the playbook that tries to work with that other
