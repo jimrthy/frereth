@@ -29,7 +29,7 @@
 		      ;;scss
 		      ))
 (dolist (p my-packages)
-  (when (t (package-installed-p p))
+  (when (not (package-installed-p p))
     (package-install p)))
 
 ;; Clojurescript files should be edited in clojure-mode
@@ -84,15 +84,7 @@
 ;; Especially under something like TMUX.
 ;;(add-hook 'nrepl-mode-hook 'paredit-mode)
 
-;;; Ritz middleware
-(when nil (require 'nrepl-ritz)
-(define-key nrepl-interaction-mode-map (kbd "C-c C-j") 'nrepl-javadoc)
-(define-key nrepl-mode-map (kbd "C-c C-j") 'nrepl-javadoc)
-(define-key nrepl-interaction-mode-map (kbd "C-c C-a") 'nrepl-apropos)
-(define-key nrepl-mode-map (kbd "C-c C-a") 'nrepl-apropos))
-
 ;;; org mode
-(add-to-list 'load-path "/home/james/projects/programming/3rd/elisp/org-mode")
 (setq org-todo-keywords
       '((sequence "TODO(t)" "STARTED(s)" "|" "DONE(d)" "DELEGATED(g)")
 	(sequence "BUG(b)" "KNOWNCAUSE(k)" "|" "FIXED(f)")
@@ -115,39 +107,7 @@
 (autoload 'htmlize-buffer "htmlize" 
   "Convert buffer to HTML, preserving colors and decorations." t)
 
-;;; slime
-;(load (expand-file-name "~/quicklisp/slime-helper.el"))
-;(setq inferior-lisp-program "ccl")
-;(load "~/quicklisp/log4slime-setup.el")
-;(global-log4slime-mode 1)
-
-;;; nrepl-ritz
-(when nil
-  (defun my-nrepl-mode-setup ()
-    (require 'nrepl-ritz))
-  (add-hook 'nrepl-interaction-mode-hook 'my-nrepl-mode-setup))
-
 (eval-after-load 'tramp '(setenv "SHELL" "/bin/bash"))
-
-;;; Ruby On Rails
-
-;; Rake files are ruby too, as are gemspecs, rackup files, and gemfiles
-(add-to-list 'auto-mode-alist '("\\.rake$" . ruby-mode))
-(add-to-list 'auto-mode-alist '("Rakefile$" . ruby-mode))
-(add-to-list 'auto-mode-alist '("\\.gemspec$" . ruby-mode))
-(add-to-list 'auto-mode-alist '("\\.ru$" . ruby-mode))
-(add-to-list 'auto-mode-alist '("Gemfile$" . ruby-mode))
-(add-to-list 'auto-mode-alist '("Guardfile$" . ruby-mode))
-
-;; Never want to edit bytecode
-(add-to-list 'completion-ignored-extensions ".rbc")
-(add-to-list 'completion-ignored-extensions ".pyc")
-
-;; HAML...although the haml mode seems broken
-(add-hook 'haml-mode-hook
-	  (lambda ()
-	    (setq indent-tabs-mode nil)
-	    (define-key haml-mode-map "\C-m" 'newline-and-indent)))
 
 ;;; Auto-customized pieces
 
@@ -163,11 +123,11 @@
  ;; Your init file should contain only one such instance.
  ;; If there is more than one, they won't work right.
  '(font-lock-builtin-face ((t (:foreground "green"))))
- '(font-lock-comment-face ((t (:foreground "cyan"))))
- '(font-lock-constant-face ((t (:foreground "red"))))
+ '(font-lock-comment-face ((t (:foreground "dark violet"))))
+ '(font-lock-constant-face ((t (:foreground "brightred"))))
  '(font-lock-function-name-face ((t (:foreground "medium blue"))))
- '(font-lock-keyword-face ((t (:foreground "cyan"))))
- '(font-lock-string-face ((t (:foreground "color-88"))))
+ '(font-lock-keyword-face ((t (:foreground "orange red"))))
+ '(font-lock-string-face ((t (:foreground "cornflower blue"))))
  '(font-lock-type-face ((t (:foreground "color-29"))))
  '(font-lock-variable-name-face ((t (:foreground "color-100"))))
  '(org-date ((t (:foreground "black" :underline t))))
