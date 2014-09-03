@@ -21,6 +21,7 @@ repositories:
     # away elsewhere anyway.
     - cljeromq
     - cljzmq
+    - dareshi
     - frereth
     - frereth-client
     - frereth-server
