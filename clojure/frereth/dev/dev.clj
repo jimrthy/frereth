@@ -1,4 +1,4 @@
-(ns user
+(ns dev
   (:require [clojure.java.io :as io]
             [clojure.inspector :as i]
             [clojure.string :as str]
