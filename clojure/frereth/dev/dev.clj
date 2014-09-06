@@ -49,4 +49,4 @@ Can't just call this go: that conflicts with a macro from core.async."
   ;; ever to get a REPL working there internally.
   ;; But I don't need it yet.
   (throw (RuntimeException. "Currently broken"))
-  (refresh :after 'user/go-go))
+  (refresh :after 'dev/go-go))
