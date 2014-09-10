@@ -3,7 +3,7 @@
   :url "http://frereth.com"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
-  :dependencies [[com.stuartsierra/component "0.2.1"]
+  :dependencies [[com.stuartsierra/component "0.2.2"]
                  [com.taoensso/timbre "3.2.1"]
                  [frereth-renderer "0.0.1-SNAPSHOT"]
                  [frereth-server "0.1.0-SNAPSHOT"]
@@ -15,7 +15,7 @@
              :dev {:source-paths ["dev"]
                    :dependencies  [[clj-ns-browser "1.3.1"]
                                    [midje "1.6.3"]
-                                   [org.clojure/tools.namespace "0.2.5"]
+                                   [org.clojure/tools.namespace "0.2.6"]
                                    [org.clojure/java.classpath "0.2.2"]
                                    ;; Umm...do I really not want this for
                                    ;; real??
