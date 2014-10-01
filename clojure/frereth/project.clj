@@ -3,7 +3,8 @@
   :url "http://frereth.com"
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
-  :dependencies [[com.stuartsierra/component "0.2.2"]
+  :dependencies [[com.cemerick/pomegranate "0.3.0"]
+                 [com.stuartsierra/component "0.2.2"]
                  [com.taoensso/timbre "3.2.1"]
                  [frereth-renderer "0.0.1-SNAPSHOT"]
                  [frereth-server "0.1.0-SNAPSHOT"]
