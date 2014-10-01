@@ -23,11 +23,11 @@
 
 (defn ^:private user-config
   []
-  (config-from (io/file (System/getProperty "user.home") ".dareshi.edn")))
+  (config-from (io/file (System/getProperty "user.home") ".config/frereth/system.edn")))
 
 (defn ^:private config-from-classpath
   []
-  (if-let [res (io/resource "dareshi.edn")]
+  (if-let [res (io/resource "frereth.edn")]
     (config-from (io/file res))
     {}))
 

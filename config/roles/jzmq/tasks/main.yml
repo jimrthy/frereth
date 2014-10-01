@@ -54,6 +54,10 @@
   sudo: yes
   command: make install chdir=/home/jimrthy/projects/jzmq
 
+- name: Ensure future steps can find that piece
+  sudo: yes
+  command: ldconfig
+
 # Note that this will probably fail from ansible: it needs manual
 # intervention to enter the GPG password
 - name: Install to local maven repository
