@@ -24,6 +24,7 @@ repositories:
     - dareshi
     - frereth
     - frereth-client
+    - frereth-common
     - frereth-server
     - frereth-terminal
     - frereth-renderer
