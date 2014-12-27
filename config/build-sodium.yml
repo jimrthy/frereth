@@ -1,0 +1,5 @@
+---
+- hosts: ubuntu-non-privileged
+  remote_user: jimrthy
+  roles:
+  - build-sodium

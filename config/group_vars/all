@@ -1,0 +1,4 @@
+# -*- mode: yaml -*-
+---
+lein_dir: /usr/local/bin/lein
+

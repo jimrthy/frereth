@@ -1,0 +1,6 @@
+---
+- hosts: ubuntu-privileged
+  remote_user: frereth
+  sudo: yes
+  roles:
+  - install-0mq

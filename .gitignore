@@ -1,3 +1,4 @@
 config/resources/insecure.rsa
 *~
+config/vagrant/.vagrant
 

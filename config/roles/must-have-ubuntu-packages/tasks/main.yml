@@ -3,15 +3,36 @@
 # pretty vital when it comes to actual usage
 - name: Update/upgrade repo cache
   sudo: True
-  apt: update_cache=yes upgrade=dist
+  # Keep the cache around for (* 60 60 24) == 1 day because it gets
+  # really annoying sitting around waiting on it.
+  apt: update_cache=yes upgrade=dist cache_valid_time=86400
 
 - name: Install absolute must-have packages  
   sudo: True
   apt: name={{item}} state=latest
-  with_items: ${system_packages}
-    
-- name: Build Essentials
-  sudo: True
-  apt: name={{item}} state=latest
-  with_items: ${build_packages}
-
+  # N.B. These names are really ubuntu-specific.
+  # TODO: I should really be doing this on arch linux.
+  # Except that it doesn't play well with OpenStack.
+  with_items:
+    - autoconf
+    - emacs
+    - g++
+    - gettext
+    - git
+    - gnupg2
+    - libtool
+    - man-db
+    - maven2
+    # Would be using this if I were building a server.
+    # Which, mostly, I am.
+    # TODO: Split this up to build multiple machines
+    # for differences in details like this.
+    - openjdk-7-jre-headless
+    - pkg-config
+    - python-dev
+    - python-pip
+    - ssh
+    - tmux
+    - vim
+    - virtualenvwrapper
+    - zsh

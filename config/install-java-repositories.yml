@@ -1,6 +1,6 @@
 ---
 # Build the required java pieces
-- hosts: all
+- hosts: ubuntu-non-privileged
   remote_user: jimrthy
   roles:
   - jzmq

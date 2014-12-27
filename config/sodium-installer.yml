@@ -1,0 +1,4 @@
+---
+- hosts: ubuntu-privileged
+  roles:
+  - install-sodium

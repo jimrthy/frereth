@@ -1,0 +1,20 @@
+---
+- name: autogen 0mq configuration
+  command: ./autogen.sh chdir=/home/jimrthy/projects/libzmq
+
+- name: Configuring 0mq
+  command: ./configure chdir=/home/jimrthy/projects/libzmq
+
+- name: Make 0mq
+  command: make chdir=/home/jimrthy/projects/libzmq
+
+# I really shouldn't be ignoring errors on this one.
+# So far, every error I've seen is these tests is because
+# some of the more severe tests overstress my VM.
+# The tests probably need to be tweaked.
+# Until I can get something concrete that I can offer
+# as a pull request, just ignore any problems that
+# happen here.
+- name: Check 0mq (keep an eye on this!)
+  command: make check chdir=/home/jimrthy/projects/libzmq
+  ignore_errors: True

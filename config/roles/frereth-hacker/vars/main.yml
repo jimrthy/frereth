@@ -1,0 +1,46 @@
+---
+config_files_to_copy:
+  - emacs.d/init.el
+  - gitconfig
+  - gitignore_global
+  - lein/profiles.clj
+  - tmux.conf
+  - vimrc
+  - zshrc
+
+repositories:
+    # TODO: Honestly, there are two groups of libraries here.
+    # One set is underlying system pieces that I don't have any interest
+    # in ever updating. I really just want a personal copy so I have a
+    # baseline that doesn't get broken by everyone else.
+    # Those pieces should really be attached to a 'builder' user
+    # (who doesn't really have any good reason to have sudo access)
+    # then installed by a sudoer.
+    # The main dev user doesn't have any reason to ever think about these
+    # libraries once they're installed, so they really should be hidden
+    # away elsewhere anyway.
+    - cljeromq
+    - cljzmq
+    - dareshi
+    - frereth
+    - frereth-client
+    - frereth-server
+    - frereth-terminal
+    - frereth-renderer
+    # It's more than a little silly to install this here, but there aren't
+    # a lot of alternatives. Since frereth-renderer is heavily dependent on
+    # it.
+    # It shouldn't be. That's a different story for another day.
+    # Much more importantly: there's a submodule (autodoc) that didn't
+    # really seem to get cloned correctly when I forked. So I get an error
+    # the first time I try to actually clone the repo.
+    # That's not a big enough stumbling point to be worth trying to track
+    # down and figure out what's going on, but it's pretty annoying.
+    # - penumbra
+    # These are the system-level libraries that I really don't want to have
+    # to ever think about.
+    - jzmq
+    - libsodium
+    - libzmq
+    - zeromq4-x
+

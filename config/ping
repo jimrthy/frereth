@@ -3,5 +3,5 @@
 # Really just an example of the syntax I'm using to issue a really basic
 # command without ssh-agent for a default VM I just kicked off using
 # the base Ubuntu distro
-ansible all --private-key=~/.ssh/norse.pem -m ping -u ubuntu -i hosts
+ansible all --private-key=~/.ssh/todds.key -m ping -u ubuntu -i hosts
 

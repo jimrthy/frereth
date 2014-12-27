@@ -1,0 +1,23 @@
+---
+# Pieces that only make sense on the renderer
+
+- name: System UI packages
+  sudo: True
+  apt: name={{ item }} state=latest
+  with_items:
+    - openjdk-7-jdk
+    - pulseaudio
+    - rxvt-unicode-256color
+    - xpra
+    # Another resource hog...do I have any use for this?
+    #- xrdp
+
+# Q: Do I need to create this virtualenv first?
+- name: Python Wrappers
+  sudo: False
+  remote_user: jimrthy
+  pip: name={{ item }} virtualenv=/home/jimrthy/.virtualenv/render state=latest
+       virtualenv_site_packages=no
+  with_items:
+    - PyOpenGL  # really for xpra, though this approach is probably a dead end.
+    - numpy

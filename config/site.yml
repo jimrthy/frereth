@@ -1,6 +1,17 @@
 ---
 - include: frereth-sudoer.yml
 - include: ubuntu-os-init.yml
-- include: all-build-basics.yml
-- include: ubuntu-installation.yml
+
+# These were all lumped together.
+# Switching users and privilege levels
+# makes that more complicated.
+# Don't try to do that here. Handle it with
+# hosts (although that seems like a misuse,
+# if not abuse)
+- { include: build-basics.yml, user: jimrthy }
+- include: sodium-installer.yml
+- { include: build-0mq.yml, user: jimrthy }
+- include: install-0mq.yml
+
+# Back to doing lots of work at once
 - include: install-java-repositories.yml

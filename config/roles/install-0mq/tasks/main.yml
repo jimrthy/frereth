@@ -1,0 +1,12 @@
+---
+- name: Install 0mq
+  sudo: True
+  command: make install chdir=/home/jimrthy/projects/libzmq
+
+# This is duplicated from the install-sodium role.
+# It's duplicate code, but adding the extra boiler
+# plate of a new common role for something this simple
+# doesn't seem like an improvement
+- name: Fix up libraries
+  sudo: True
+  command: ldconfig
