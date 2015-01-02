@@ -20,7 +20,12 @@
     - gettext
     - git
     - gnupg2
+    - libgl1-mesa-dev
     - libtool
+    - libxcursor-dev
+    - libxi-dev
+    - libxinerama-dev
+    - libxrandr-dev
     - man-db
     - maven2
     # Would be using this if I were building a server.

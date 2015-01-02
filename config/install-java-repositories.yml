@@ -4,3 +4,4 @@
   remote_user: jimrthy
   roles:
   - jzmq
+  - lwjgl3
