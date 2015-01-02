@@ -47,6 +47,8 @@ source $ZSH/oh-my-zsh.sh
 
 # Customize to your needs...
 export "PATH=$PATH:/usr/local/bin:/usr/bin:/:/home/jimrthy/bin"
+# Needed to build lwjgl3
+export JAVA_HOME=/usr/lib/jvm/java-7-openjdk-amd64
 
 # This next piece is weird and, really, specific to ubuntu.
 # Oh well.
