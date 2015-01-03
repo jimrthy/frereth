@@ -26,6 +26,10 @@
 # Get the bare configuration downloaded
 lxc-create -t download -n baseline -- -d ubuntu -r trusty -a amd64
 
+# This is needed for the way GLFW binds input devices.
+# TODO: Update baseline's config file with the following line:
+lxc.mount.entry = /dev/input/mice dev/input/mice none bind,create=file 0 0
+
 # Clone it, so we can set up a baseline to work with
 lxc-clone -o baseline -n installable
 

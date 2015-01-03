@@ -28,11 +28,16 @@
     - libxrandr-dev
     - man-db
     - maven2
+    - mesa-utils
+    # TODO: Figure out a good way to keep this updated
+    - nvidia-331-uvm
     # Would be using this if I were building a server.
     # Which, mostly, I am.
     # TODO: Split this up to build multiple machines
     # for differences in details like this.
-    - openjdk-7-jre-headless
+    # Very specifically, the renderer isn't headless.
+    # Then again...that should probably run natively
+    - openjdk-7-jdk
     - pkg-config
     - python-dev
     - python-pip
@@ -40,4 +45,6 @@
     - tmux
     - vim
     - virtualenvwrapper
+    - xserver-xorg-input-kbd
+    - xserver-xorg-input-mouse
     - zsh
