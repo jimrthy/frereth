@@ -4,13 +4,13 @@
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[com.cemerick/pomegranate "0.3.0"]
-                 [com.stuartsierra/component "0.2.2"]
-                 [com.taoensso/timbre "3.3.1"]
+                 [com.stuartsierra/component "0.2.3"]
+                 [com.taoensso/timbre "3.4.0"]
                  [frereth-renderer "0.0.1-SNAPSHOT"]
                  [frereth-server "0.1.0-SNAPSHOT"]
                  [im.chit/ribol "0.4.0"]
-                 [org.clojure/clojure "1.7.0-alpha1"]
-                 [prismatic/schema "0.3.3"]]
+                 [org.clojure/clojure "1.7.0-RC1"]
+                 [prismatic/schema "0.4.2"]]
   :main frereth.core
   :profiles {:uberjar {:aot :all}
              :dev {:source-paths ["dev"]
