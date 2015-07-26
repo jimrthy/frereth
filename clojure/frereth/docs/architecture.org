@@ -1,0 +1,133 @@
+* Why?
+
+Frereth's goal is to make it easier, simpler, and more fun
+to create and share 3-d worlds.
+
+* What?
+
+** Key Point
+
+Interactivity and instant feedback.
+
+When you're managing a world, you should be able to click on
+any aspect of it and get to the code that controls, transforms,
+and render it. You should be able to update that code and
+see your changes happening live. Bret Victor gave a talk in
+2012 called "Inventing on Principle" that describes this
+much better than I ever could.
+
+Lisp programmers have always pushed for highly interactive
+development environments. You don't really write a lisp
+program as much as you use lisp to create the programming language
+that you're going to use to interactively build the program.
+
+Sure, you want to save that as source code so you can
+recreate the state when your computer crashes, and so you can
+share it with others. But there are servers that have been
+running for 30 years. It's a totally different process than
+developing in a language where you run a test, stop your app,
+make some changes, compile, start the app, and then re-run
+your tests.
+
+Bruce Hauman recently gave a talk called "Developing ClojureScript
+with Figwheel" that demonstrates the differences pretty
+vividly.
+
+** Renderer
+This is the part
+that the end-user interacts with. In the current implementation,
+this is an app that runs in your web browser.
+
+** Server
+Keeps track of what's going on in your worlds.
+
+** Client
+This piece sits between the renderer and the server. It's both
+a translation layer (between web sockets and the 0mq messages that
+the server understands) and a scripting layer.
+
+It would probably make more sense to rename this to something like
+middleware.
+
+In this incarnation, it's implemented as a web server.
+
+* How?
+
+The end-user starts by opening their web browser and connecting
+to the client. My original vision was to have a client running
+locally (or in a VM, for safety) for speed. But there isn't any
+real reason that it couldn't be a web server anywhere.
+
+The client connects to the server and gets the landing page. Odds
+are, this is a login screen.
+
+Once the user is authenticated/authorized (assuming the server
+doesn't allow anonymous access, which is also possible), the
+server will send whatever data the player needs to start doing
+whatever the player is authorized to do.
+
+In my current vision, this starts with things like local server
+management.
+
+In particular, managing whichever worlds that player controls.
+
+And allowing other players to connect, with different levels
+of access. Maybe you allow anyone from the same subnet. Maybe
+you allow access from the internet, but only allow white-listed
+accounts (which implies some sort of centralized accounting
+mechanism...something like oauth would probably make a lot of
+sense for this aspect). And maybe you allow anyone to play.
+
+That last is pretty scary, of course. So we need some way to
+easily publish your world.
+
+It really can't be any more onerous than deploying a PHP website
+or minecraft server
+if it's to be successful. Although hosting providers will
+obviously have to do more up-front work.
+
+* History
+
+This entire project was inspired by the idea of the Metaverse
+in the class Neal Stephenson novel _Snow Crash_.
+
+My initial research into the current state of the art led me
+to Alan Kay's Croquet project (which has spawned Open Cobalt). I'd
+hoped that my work was done, but both projects seem to have stagnated.
+
+Since then (as evidenced by the mess that is this repository), I've
+gone through several fits and starts, trying to pick the fundamental
+technology.
+
+I spent a lot of time trying to get it to work in common lisp, but
+I never managed to get a 3-d graphics library to build on 64-bit
+windows, and I never could convince the maintainers that I had
+a legitimate problem.
+
+One of my main concerns is the scripting language. I knew I didn't
+want something as cobbled-together and broken as javascript. I
+wanted the highest level language I could get away with (c.f.
+Paul Graham's excellent essay, "Beating the Averages"), and I figured
+I could get away with something extremely high level. After all,
+I'm bucking the latest trend and targeting high-end desktops rather
+than cell phones.
+
+In mid-2012, I realized that all the features I wanted for the scripting
+language (except for easy mutability) were already implemented in
+(or a fundamental part of) clojure. I'd dabbled with it before, but
+I'd never managed to get to "Hello world." It was just too java-centric,
+and I didn't want to learn anything about CLASSPATH.
+
+In the years between the last time I'd downloaded it, Phil Hagelberg
+had written a tool that completely changed that barrier to entry:
+leiningen makes getting started pretty much painless.
+
+* Status
+
+Currently, it's not much more than a pie-in-the-sky pipe dream.
+
+The basic outline of the different pieces are in place, and I'm
+working on getting them to communicate.
+
+But I only manage about an hour a night, and there are months when
+I don't even get that much. So...it's slow going.

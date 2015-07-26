@@ -25,10 +25,14 @@ repositories:
     - frereth
     - frereth-client
     - frereth-common
+    - frereth-renderer
     - frereth-server
     - frereth-terminal
-    - frereth-renderer
+    - frereth-web
     - lwjgl3
+    # There's really no excuse for putting this in here. It will pretty
+    # much never run well on a container.
+    #- occultation
     # It's more than a little silly to install this here, but there aren't
     # a lot of alternatives. Since frereth-renderer is heavily dependent on
     # it.
