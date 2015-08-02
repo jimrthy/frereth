@@ -7,7 +7,7 @@
   # really annoying sitting around waiting on it.
   apt: update_cache=yes upgrade=dist cache_valid_time=86400
 
-- name: Install absolute must-have packages  
+- name: Install absolute must-have packages
   sudo: True
   apt: name={{item}} state=latest
   # N.B. These names are really ubuntu-specific.
@@ -41,6 +41,7 @@
     - pkg-config
     - python-dev
     - python-pip
+    - rlwrap
     - ssh
     - tmux
     - vim
