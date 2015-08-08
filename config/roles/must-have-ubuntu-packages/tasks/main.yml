@@ -13,6 +13,7 @@
   # N.B. These names are really ubuntu-specific.
   # TODO: I should really be doing this on arch linux.
   # Except that it doesn't play well with OpenStack.
+  # TODO: Move these into ../vars/main.yml
   with_items:
     - autoconf
     - emacs
@@ -20,12 +21,18 @@
     - gettext
     - git
     - gnupg2
+    - libasound2
+    - libc6
+    - libgcc1
     - libgl1-mesa-dev
+    - libgtk2.0-0
+    - libstdc++6
     - libtool
     - libxcursor-dev
     - libxi-dev
     - libxinerama-dev
     - libxrandr-dev
+    - libxrender1
     - man-db
     - maven2
     - mesa-utils
@@ -49,3 +56,11 @@
     - xserver-xorg-input-kbd
     - xserver-xorg-input-mouse
     - zsh
+
+# TODO: How do I download/extract the slimerjs .zip?
+# The binary is available at
+# http://download.slimerjs.org/releases/0.9.6/slimerjs-0.9.6-linux-x86_64.tar.bz2
+# while the checksum is at
+# http://download.slimerjs.org/releases/0.9.6/slimerjs-0.9.6-linux-x86_64.tar.bz2.asc
+# Q: Is there a standard ansible play for this sort of thing?
+
