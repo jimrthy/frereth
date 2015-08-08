@@ -52,7 +52,9 @@
     - ssh
     - tmux
     - vim
+    # Q: Do I really have a use for this?
     - virtualenvwrapper
+    - xvfb
     - xserver-xorg-input-kbd
     - xserver-xorg-input-mouse
     - zsh
