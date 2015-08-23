@@ -36,6 +36,8 @@
     - man-db
     - maven2
     - mesa-utils
+    # FIXME: Need to set up the cofiguration
+    - nginx
     # TODO: Figure out a good way to keep this updated
     - nvidia-331-uvm
     # Would be using this if I were building a server.
