@@ -1,0 +1,6 @@
+---
+- hosts: ubuntu-non-privileged
+  remote_user: root
+  roles:
+  - web-server
+
