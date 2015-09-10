@@ -1,5 +1,8 @@
 #! /bin/bash
 
+echo "This isn't really runnable yet. It's just a template"
+exit -1
+
 # HOWTO setup the baseline appliance so we can run an install on it
 # You may have issues running this as a normal user. At this current
 # point in time, you really need lxc 1.0, which currently means
@@ -24,34 +27,53 @@
 # a very tiny 'nice to have' for what I'm trying to accomplish.
 
 # Get the bare configuration downloaded
+# Q: How much trouble to set up a vivid container template?
 lxc-create -t download -n baseline -- -d ubuntu -r trusty -a amd64
 
 # This is needed for the way GLFW binds input devices.
 # TODO: Update baseline's config file with the following line:
+# Or maybe not...it really doesn't make any sense to try to run the
+# renderer inside an LXC which, on most systems, will be running inside
+# a VM.
+# The entire point of this renderer is/will be to get something resembling
+# bare-metal performance out of java
 lxc.mount.entry = /dev/input/mice dev/input/mice none bind,create=file 0 0
 
-# Clone it, so we can set up a baseline to work with
+# Clone it, so we have something to install into
+# This extra step would work much better on btrfs.
+# Really, this was to ease the pain of re-downloading
+# the baseline container every time upstream changed.
+# It's a holdover from my first days using ansible,
+# when we didn't want the base containers to change unless
+# it was absolutely necessary.
+# You can probably skip this step with impunity
 lxc-clone -o baseline -n installable
 
 # Start it up in the background
 lxc-start -d -n installable
 # (I used to forget the -d a lot...when you make the same mistake,
-# I recommend just logging in as ubuntu/ubuntu and shutting it down)
+# I recommend just running 'shutdown -h now' since you'll be running as root)
 
 # Set up whichever user's going to be doing the installing
 lxc-attach -n installable -- useradd -m james
-# These next couple of lines seem like they should work,
+# These next few lines seem like they should work,
 # but they don't:
-#lxc-attach -n installable -- echo "abc123
-#abc123" | passwd james
+#lxc-attach -n installable -- echo "abc123\nabc123" | passwd james
+#lxc-attach -n installable -- echo "abc123\nabc123" | (passwd --stdin james)
+#lxc-attach -n installable -- echo "abc123:james" | chpasswd 
 # So just break down and accept some interactivity for now
 lxc-attach -n installable -- passwd james
 
-# TODO: Move this into another play
+# TODO: Move this into a local play
 
-# Install python
+# Really only need this if you're caching/cloning the baseline image. If you're
+# using something downloaded recently, this should be pointless.
 lxc-attach -n installable -- apt-get update
-lxc-attach -n installable -- apt-get install -y python
+# Install enough packages to allow ansible to run
+# You can use one of ansible's really low-level commands to
+# install python, but we have to get sshd installed to use ansible in the first
+# place, and this approach is easier/simpler
+lxc-attach -n installable -- apt-get install -y python openssh-server
 
 # Some pieces shouldn't happen while it's running
 lxc-stop -n installable
@@ -67,8 +89,8 @@ sudo chmod 0400 $INSTALLABLE_ROOT/etc/sudoers.d/master
 sudo chown 165536:165536 $INSTALLABLE_ROOT/etc/sudoers.d/master
 
 # Switch to another copy for doing the actual work.
-# These steps weren't horrible, but it's good to
-# automate as much as humanly possible.
+# These steps weren't horrible, but this is a good place to
+# switch to a different sandbox and possibly make a backup.
 lxc-clone -o installable -n frereth
 
 # And now let's do the install
