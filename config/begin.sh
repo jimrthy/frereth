@@ -93,12 +93,18 @@ sudo chown 165536:165536 $INSTALLABLE_ROOT/etc/sudoers.d/master
 # switch to a different sandbox and possibly make a backup.
 lxc-clone -o installable -n frereth
 
+# TODO: Start here
+
 # And now let's do the install
 lxc-start -d -n frereth
 # Get the IP address so you can update the hosts file
 # TODO: Really should find time to finish writing a util
 # to pick this up automatically.
 lxc-ls --fancy
+# Don't want to stop it:
+# Want it running for when we kick off the "real" install,
+# using setup
+#lxc-stop -n frereth
 
 # Now install and configure ansible (on the machine
 # the will be configuring the VMs that will do the actual work),

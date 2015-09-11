@@ -6,7 +6,7 @@ Key-Length: 2048
 Name-Real: Bogie Green
 Name-Comment: just for installing test software in a VM
 # TODO: Generate a new UUID each time
-Name-Email: jamesgatannah+78752647-fecc-4be3-b814-0fe40c1198b3@gmail.com
+Name-Email: thisisfake+d3091d85-e52f-4497-8f72-94ab347354ee@gmail.com
 # Let the key last for a week
 Expire-Date: 7
 %commit

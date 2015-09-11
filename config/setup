@@ -5,9 +5,12 @@
 UUID=`python -c 'import uuid; print str(uuid.uuid4())'`
 
 # This next part's slow...don't do it often
-gpg2 --batch --gen-key roles/frereth-hacker/files/gpg-rules
-#gpg2 --export-secret-key --armor jamesgatannah+77ca8b53-cc1a-4b39-8a6d-6b2f8b6b0804@gmail.com > roles/frereth-hacker/files/hacker-priv_key.asc
-gpg2 --export-secret-key --armor jamesgatannah+78752647-fecc-4be3-b814-0fe40c1198b3@gmail.com > roles/frereth-hacker/files/hacker-priv_key.asc
+# Especially on a VM
+# It's needed to sign packages built/deployed by maven
+# Since this is strictly a dev environment, you shouldn't need to be
+# too horribly paranoid about it
+#gpg2 --batch --gen-key roles/frereth-hacker/files/gpg-rules
+#gpg2 --export-secret-key --armor thisisfake+d3091d85-e52f-4497-8f72-94ab347354ee@gmail.com > roles/frereth-hacker/files/hacker-priv_key.asc
 
 # Set up some basic environment variables to make life easier
 
@@ -18,7 +21,7 @@ export ANSIBLE_HOSTS=`pwd`/hosts
 # TODO: Move this sort of thing into a pre-set-up script.
 lxc-attach -n frereth -- apt-get install -y python-apt
 
-# Note that this assumes the ansible hacking env-setup script has already
+# Note that this assumes the ansible hacking/env-setup script has already
 # been source'd to properly set up environment variables.
 # There are issues between '-c ssh' and '-c paramiko' that I haven't
 # had any chance to dig into
