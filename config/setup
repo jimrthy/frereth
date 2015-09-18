@@ -28,6 +28,13 @@ lxc-attach -n frereth -- apt-get install -y python-apt
 # TODO: This has issues if the hosts file has a non-privileged user pointing
 # at the same IP address.
 # Q: What's the problem?
+# If you specify the same host in multiple sections, the last one wins.
+
+# More importantly, when using unprivileged LXC (as I am), you can't sudo
+# inside the container.
+# All of these commands really have to be accomplished via lxc-attach, rather
+# than over ssh.
+# TODO: Research how (and if) ansible copes with this.
 ansible-playbook -i hosts -c ssh baseline.yml
 
 #ansible-playbook -i hosts -c ssh comms.yml
