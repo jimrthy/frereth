@@ -6,5 +6,5 @@
 
 # Important assumptions:
 # 1) That ssh key is valid and associated w/ the user on the associated hosts
-ansible all --private-key=~/.ssh/todds.key -m ping -u ubuntu -i hosts
+ansible all --private-key=~/.ssh/keys/frereth_root -m ping -u root -i hosts
 

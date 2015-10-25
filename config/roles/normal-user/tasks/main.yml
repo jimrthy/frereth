@@ -1,16 +1,12 @@
 ---
 - name: Set up developer group
-  sudo: True
   group: name=developers state=present
 
 - name: Set up non-root user
-  sudo: True
   user: name=jimrthy append=yes createhome=yes groups=frereth,developers state=present shell=/usr/bin/zsh
 
 - name: Let that new user log in
-  sudo: True
   authorized_key: user=jimrthy
                   state=present
-                  key="{{lookup('file', '/home/james/.ssh/todds.key.pub')}}"
+                  key="{{lookup('file', '/home/james/.ssh/keys/frereth_normal.pub')}}"
                   manage_dir=yes
-
