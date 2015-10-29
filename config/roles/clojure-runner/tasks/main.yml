@@ -3,7 +3,7 @@
 # Note that this really means installing leiningen
 - name: Get leiningen
   #sudo: True
-  # TODO: Move the lein_dir into the unprivileged user's PATH
+  # TODO: Move the lein_dir into the unprivileged user's HOME
   # There's no good reason to install this for everyone
   get_url: url=https://raw.github.com/technomancy/leiningen/stable/bin/lein dest={{ lein_dir }}
 
