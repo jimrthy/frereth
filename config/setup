@@ -33,14 +33,17 @@ export ANSIBLE_HOSTS=`pwd`/hosts
 # TODO: Research how (and if) ansible copes with this.
 ansible-playbook -i hosts -c ssh baseline.yml
 
-#ansible-playbook -i hosts -c ssh comms.yml
+# Still trying to get this working again
+# TODO: Start here
 ansible-playbook -i hosts -c ssh configure-repositories.yml
+
 
 # I really wanted to make this fairly generic so I could build
 # a bunch of pieces as one user, install them as a sudoer, then
 # move along.
 # But libzmq really depends on libsodium being installed, if
 # I want to actually use it (and I do).
+# Q: Is that still true?
 ansible-playbook -i hosts -c ssh build-sodium.yml
 ansible-playbook -i hosts -c ssh sodium-installer.yml
 ansible-playbook -i hosts -c ssh build-0mq.yml
@@ -48,4 +51,3 @@ ansible-playbook -i hosts -c ssh install-0mq.yml
 
 ansible-playbook -i hosts -c ssh install-java-repositories.yml
 ansible-playbook -i hosts -c ssh configure-web-server.yml
-
