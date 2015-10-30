@@ -72,11 +72,8 @@
 # public download options, for various reasons. It makes sense to branch
 # those here.
 - name: Clone repositories
-  # Ansible can't handle the ssh:// protocol when we're referencing
-  # an .ssh/config alias.
-  # No one on their core team believes me that this is a bug.
   git: force=no
-       repo=ssh://gh/jimrthy/"{{ item }}"
+       repo=git@github.com:jimrthy/{{ item }}
        dest=/home/jimrthy/projects/{{ item }}
        key_file=/home/jimrthy/.ssh/github_key
        recursive=yes

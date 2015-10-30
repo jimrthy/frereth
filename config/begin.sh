@@ -73,7 +73,7 @@ lxc-start -d -n installable
 # Actually, this really isn't a viable option.
 # Need to set up root login through SSH
 # TODO: Automate that
-# TODO: More importantly: disable it
+# TODO: More importantly: disable it when I'm finished
 #lxc-attach -n installable -- passwd root
 
 # TODO: Move this into a local play
