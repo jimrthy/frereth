@@ -1,7 +1,6 @@
 ---
 # Build the required java pieces
 - hosts: ubuntu-non-privileged
-  remote_user: jimrthy
   roles:
   - jzmq
   - lwjgl3

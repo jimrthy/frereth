@@ -71,6 +71,8 @@
 # Others are pieces on which I'm building that just don't have go
 # public download options, for various reasons. It makes sense to branch
 # those here.
+# Note that this has a non-trivial impact on the downstream playbooks that
+# actually use these repositories
 - name: Clone repositories
   git: force=no
        repo=git@github.com:jimrthy/{{ item }}

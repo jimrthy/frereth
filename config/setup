@@ -34,7 +34,6 @@ export ANSIBLE_HOSTS=`pwd`/hosts
 ansible-playbook -i hosts -c ssh baseline.yml
 
 # Still trying to get this working again
-# TODO: Start here
 ansible-playbook -i hosts -c ssh configure-repositories.yml
 
 
@@ -45,9 +44,10 @@ ansible-playbook -i hosts -c ssh configure-repositories.yml
 # I want to actually use it (and I do).
 # Q: Is that still true?
 ansible-playbook -i hosts -c ssh build-sodium.yml
-ansible-playbook -i hosts -c ssh sodium-installer.yml
+ansible-playbook -i hosts_root -c ssh sodium-installer.yml
 ansible-playbook -i hosts -c ssh build-0mq.yml
-ansible-playbook -i hosts -c ssh install-0mq.yml
+ansible-playbook -i hosts_root -c ssh install-0mq.yml
 
+# TODO: Start here
 ansible-playbook -i hosts -c ssh install-java-repositories.yml
-ansible-playbook -i hosts -c ssh configure-web-server.yml
+ansible-playbook -i hosts_root -c ssh configure-web-server.yml
