@@ -49,5 +49,6 @@ ansible-playbook -i hosts -c ssh build-0mq.yml
 ansible-playbook -i hosts_root -c ssh install-0mq.yml
 
 # TODO: Start here
-ansible-playbook -i hosts -c ssh install-java-repositories.yml
+ansible-playbook -i hosts -c ssh build-java-libraries.yml
+ansible-playbook -i hosts_root -c ssh jzmq-installer.yml
 ansible-playbook -i hosts_root -c ssh configure-web-server.yml
