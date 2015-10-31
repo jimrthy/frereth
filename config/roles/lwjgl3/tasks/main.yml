@@ -1,34 +1,16 @@
 - name: clean
-  sudo: yes
-  remote_user: jimrthy
   command: ant clean chdir=/home/jimrthy/projects/lwjgl3
 
 - name: build
-  sudo: yes
-  remote_user: jimrthy
   command: ant chdir=/home/jimrthy/projects/lwjgl
 
 - name: Compress
-  sudo: yes
-  remote_user: jimrthy
   command: jar cf /home/jimrthy/projects/lwjgl3/lwjgl.jar *
            chdir=/home/jimrthy/projects/lwjgl3/bin/Core
 
 - name: Index
-  sudo: yes
-  remote_user: jimrthy
   command: jar i lwjgl.jar chdir=/home/jimrthy/projects/lwjgl3
 
 - name: Install Maven Repo
-  sudo: yes
-  remote_user: jimrthy
   command: mvn install:install-file -Dfile=lwjgl.jar -DgroupId=com.frereth -DartifactId=lwjgl -Dversion={{ lwjgl_version }} -Dpackaging=jar
            chdir=/home/jimrthy/projects/lwjgl3
-
-# Q: Is there a real ansible task for this?
-# Note that this makes a lot of assumptions about arch, but I'm
-# not sure there's a reasonable way to avoid that
-- name: Install Native
-  sudo: yes
-  command: cp /home/jimrthy/projects/lwjgl3/bin/linux/x64/lwjgl.so /usr/local/lib
-# Q: Do I need to run ldconfig again?

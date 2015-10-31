@@ -7,7 +7,10 @@
 # Shouldn't need to do this at all
 - name: experimental branch
   #  command: git checkout curve chdir=/home/jimrthy/projects/jzmq
-  git: version=curve repo=git@github.com:jimrthy/jzmq dest=/home/jimrthy/projects/jzmq
+  git: version=curve
+       repo=git@github.com:jimrthy/jzmq
+       dest=/home/jimrthy/projects/jzmq
+       key_file=/home/jimrthy/.ssh/github_key
 
 - name: autogen
   command: ./autogen.sh chdir=/home/jimrthy/projects/jzmq
@@ -32,18 +35,3 @@
   # Note that a failure here won't bother ansible.
   command: make check chdir=/home/jimrthy/projects/jzmq
 
-# This will probably break the latest approach
-# Needs the same sort of lovin' as build-sodium/0mq vs install-sodium/0mq
-- name: globally install C wrapper
-  sudo: yes
-  command: make install chdir=/home/jimrthy/projects/jzmq
-
-- name: Ensure future steps can find that piece
-  sudo: yes
-  command: ldconfig
-
-# Note that this will probably fail from ansible: it needs manual
-# intervention to enter the GPG password
-- name: Install to local maven repository
-  remote_user: jimrthy
-  command: mvn package install chdir=/home/jimrthy/projects/jzmq

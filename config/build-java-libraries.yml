@@ -2,5 +2,5 @@
 # Build the required java pieces
 - hosts: ubuntu-non-privileged
   roles:
-  - jzmq
+  - build-jzmq
   - lwjgl3
