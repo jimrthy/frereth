@@ -4,14 +4,6 @@
 # Q: Aren't I already running this as jimrthy to begin with?
 # Shouldn't I be able to ditch that part of it?
 
-# Shouldn't need to do this at all
-- name: experimental branch
-  #  command: git checkout curve chdir=/home/jimrthy/projects/jzmq
-  git: version=curve
-       repo=git@github.com:jimrthy/jzmq
-       dest=/home/jimrthy/projects/jzmq
-       key_file=/home/jimrthy/.ssh/github_key
-
 - name: autogen
   command: ./autogen.sh chdir=/home/jimrthy/projects/jzmq
 

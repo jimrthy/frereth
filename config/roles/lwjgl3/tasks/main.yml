@@ -2,11 +2,18 @@
   command: ant clean chdir=/home/jimrthy/projects/lwjgl3
 
 - name: build
-  command: ant chdir=/home/jimrthy/projects/lwjgl
+  command: ant chdir=/home/jimrthy/projects/lwjgl3
 
 - name: Compress
-  command: jar cf /home/jimrthy/projects/lwjgl3/lwjgl.jar *
-           chdir=/home/jimrthy/projects/lwjgl3/bin/Core
+  shell: jar cf /home/jimrthy/projects/lwjgl3/lwjgl.jar *
+  args:
+    chdir: /home/jimrthy/projects/lwjgl3/bin/Core
+    # Note that this is really just for first-time setup.
+    # Future usage will replace this.
+    # This little detail is just an attempt to balance
+    # current dev-time debugging details against long-term
+    # usage
+    creates: /home/jimrthy/projects/lwjgl3/lwjgl.jar
 
 - name: Index
   command: jar i lwjgl.jar chdir=/home/jimrthy/projects/lwjgl3

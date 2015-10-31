@@ -2,5 +2,8 @@
 # Build the required java pieces
 - hosts: ubuntu-non-privileged
   roles:
-  - build-jzmq
+  # FIXME: Uncomment this one
+  # It's only commented out now to speed up debugging the next step
+  # Which I don't actually need at the moment. Annoying.
+  #  - build-jzmq
   - lwjgl3
