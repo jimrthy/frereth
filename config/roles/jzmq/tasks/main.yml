@@ -4,19 +4,16 @@
 # Q: Aren't I already running this as jimrthy to begin with?
 # Shouldn't I be able to ditch that part of it?
 
+# Shouldn't need to do this at all
 - name: experimental branch
-  command: git checkout curve chdir=/home/jimrthy/projects/jzmq
+  #  command: git checkout curve chdir=/home/jimrthy/projects/jzmq
+  git: version=curve repo=git@github.com:jimrthy/jzmq dest=/home/jimrthy/projects/jzmq
 
 - name: autogen
   command: ./autogen.sh chdir=/home/jimrthy/projects/jzmq
 
 - name: configure
   command: ./configure chdir=/home/jimrthy/projects/jzmq
-
-# Because this isn't getting created automatically by maven
-# Then again, mvn clean turns right back around and deletes it.
-#- name: place for java binary output
-#  file: name=/home/jimrthy/projects/jzmq/target/classes/ group=developers owner=jimrthy state=directory
 
 - name: Remove previous build attempts
   command: mvn clean chdir=/home/jimrthy/projects/jzmq
