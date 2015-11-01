@@ -21,6 +21,7 @@ repositories:
     # away elsewhere anyway.
     - cljeromq
     - cljzmq
+    - component-dsl
     - dareshi
     - frereth
     - frereth-client
@@ -33,16 +34,7 @@ repositories:
     # There's really no excuse for putting this in here. It will pretty
     # much never run well on a container.
     #- occultation
-    # It's more than a little silly to install this here, but there aren't
-    # a lot of alternatives. Since frereth-renderer is heavily dependent on
-    # it.
-    # It shouldn't be. That's a different story for another day.
-    # Much more importantly: there's a submodule (autodoc) that didn't
-    # really seem to get cloned correctly when I forked. So I get an error
-    # the first time I try to actually clone the repo.
-    # That's not a big enough stumbling point to be worth trying to track
-    # down and figure out what's going on, but it's pretty annoying.
-    # - penumbra
+
     # These are the system-level libraries that I really don't want to have
     # to ever think about.
     - jzmq
