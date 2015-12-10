@@ -27,8 +27,7 @@ exit -1
 # a very tiny 'nice to have' for what I'm trying to accomplish.
 
 # Get the bare configuration downloaded
-# Q: How much trouble to set up a vivid container template?
-lxc-create -t download -n baseline -- -d ubuntu -r trusty -a amd64
+lxc-create -t download -n baseline -- -d ubuntu -r wily -a amd64
 
 # This is needed for the way GLFW binds input devices.
 # TODO: Update baseline's config file with the following line:
