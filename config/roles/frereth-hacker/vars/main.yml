@@ -35,10 +35,19 @@ repositories:
     # much never run well on a container.
     #- occultation
 
+    # This is a very interesting possible alternative to jzmq which is most
+    # likely the core of future development
+    - zmq-jni
+
     # These are the system-level libraries that I really don't want to have
     # to ever think about.
     - jzmq
     - libsodium
+    # Core library, latest development version
+    # I've been neglecting it, because jzmq really wasn't keeping up
     - libzmq
+    # This is looking more than a little obsolete
     - zeromq4-x
+    # At the very latest, I really should start switching to this
+    - zeromq4-1
 
