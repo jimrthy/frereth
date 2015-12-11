@@ -2,13 +2,13 @@
 # This is an annoying time sink when I'm debugging, but it's
 # pretty vital when it comes to actual usage
 - name: Update/upgrade repo cache
-  sudo: True
+  # sudo: True
   # Keep the cache around for (* 60 60 24) == 1 day because it gets
   # really annoying sitting around waiting on it.
   apt: update_cache=yes upgrade=dist cache_valid_time=86400
 
 - name: Install absolute must-have packages
-  sudo: True
+  #sudo: True
   apt: name={{item}} state=latest
   # N.B. These names are really ubuntu-specific.
   # TODO: I should really be doing this on arch linux.
@@ -67,4 +67,3 @@
 # while the checksum is at
 # http://download.slimerjs.org/releases/0.9.6/slimerjs-0.9.6-linux-x86_64.tar.bz2.asc
 # Q: Is there a standard ansible play for this sort of thing?
-

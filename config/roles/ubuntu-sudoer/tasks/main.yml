@@ -1,12 +1,16 @@
 ---
 - name: Set up a sudoer
-  sudo: True
-  remote_user: james
+  # Note that this step is pointless in an environment where sudo does not work
+  # And most of its implementation is deprecated
+  # become: True
+  # become_user: james
   # The groups involved seem to be OS-specific. Which may make this step more complicated.
   # An important note: we probably do *not* want a system account. At least for
   # dev time. It actually probably makes a lot of sense for a release version.
   user: name=frereth createhome=yes shell=/usr/bin/zsh state=present system=no append=yes groups=adm,users,sudo
 
 - name: Let frereth user log in
+  # Yes, this part's deprecated.
+  # And, honestly, it doesn't work as-is anyway
   sudo: True
-  authorized_key: user=frereth key="{{ lookup('file', '/home/james/.ssh/todds.key.pub') }}" state=present
+  authorized_key: user=frereth key="{{ lookup('file', '/home/james/.ssh/keys/frereth_normal.pub') }}" state=present

@@ -11,8 +11,18 @@ bare metal or anything else that strikes your fancy) that's
 a base-line system that's ready to have the "real" frereth
 installed (for some value of "real").
 
-After that, try running the setup script. Currently, it's
-totally broken...that's why this is still in a branch instead
-of part of master.
+After that, try running the setup script. It probably won't
+work for you out of the box.
 
-Hopefully that will change in the very near future.
+If you aren't comfortable with things like python virtual
+environments and shell scripting, this really isn't in
+any sort of shape for you to tackle yet.
+
+You'd probably be better off just cloning the individual
+repos involved and getting them to run manually.
+
+The hard part, really, was jzmq the last time I did this.
+
+Feel free to contact me with any issues, but I can't promise
+to check for those very often.
+

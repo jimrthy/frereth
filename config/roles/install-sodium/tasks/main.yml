@@ -1,9 +1,7 @@
 ---
 - name: Install Libsodium
-  sudo: True
   command: make install chdir=/home/jimrthy/projects/libsodium
 
 - name: Fix up library details
   # (so 0mq can find it later)
-  sudo: True
   command: ldconfig

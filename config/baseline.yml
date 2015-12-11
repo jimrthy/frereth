@@ -1,4 +1,11 @@
 ---
-- include: frereth-sudoer.yml
+# This is something that should really be done in most
+# systems.
+# It isn't quite as important when we're running an
+# unprivileged LXC
+# Mostly, it doesn't matter on a dev environment
+# Something like this becomes absolutely vital before it
+# gets handed off to consumers.
+#- include: frereth-sudoer.yml
 - include: ubuntu-os-init.yml
 

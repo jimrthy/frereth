@@ -27,17 +27,20 @@ exit -1
 # a very tiny 'nice to have' for what I'm trying to accomplish.
 
 # Get the bare configuration downloaded
-# Q: How much trouble to set up a vivid container template?
-lxc-create -t download -n baseline -- -d ubuntu -r trusty -a amd64
+lxc-create -t download -n baseline -- -d ubuntu -r wily -a amd64
 
 # This is needed for the way GLFW binds input devices.
 # TODO: Update baseline's config file with the following line:
 # Or maybe not...it really doesn't make any sense to try to run the
 # renderer inside an LXC which, on most systems, will be running inside
 # a VM.
-# The entire point of this renderer is/will be to get something resembling
-# bare-metal performance out of java
-lxc.mount.entry = /dev/input/mice dev/input/mice none bind,create=file 0 0
+# The entire point of the renderer is to push the performance envelope
+# while running on something completely ridiculous, like a web browser
+# or the JVM.
+# Graphics acceleration should be available in both those scenarios.
+# It isn't in this one.
+# So, really, this is a Bad Idea(TM)
+#lxc.mount.entry = /dev/input/mice dev/input/mice none bind,create=file 0 0
 
 # Clone it, so we have something to install into
 # This extra step would work much better on btrfs.
@@ -55,14 +58,22 @@ lxc-start -d -n installable
 # I recommend just running 'shutdown -h now' since you'll be running as root)
 
 # Set up whichever user's going to be doing the installing
-lxc-attach -n installable -- useradd -m james
-# These next few lines seem like they should work,
-# but they don't:
-#lxc-attach -n installable -- echo "abc123\nabc123" | passwd james
-#lxc-attach -n installable -- echo "abc123\nabc123" | (passwd --stdin james)
-#lxc-attach -n installable -- echo "abc123:james" | chpasswd 
+# This might still make sense if you're using privileged LXC's.
+# Those seem like such a horrible idea that it's tough to imagine why
+# anyone would.
+# I haven't been able to figure out how to get sudo going inside an
+# unprivileged LXC at all, though.
+# So skip adding this user.
+#lxc-attach -n installable -- useradd -m james
+
+# Setting/changing the password programatically is problematic
+# and seems to get broken regularly with new releases.
 # So just break down and accept some interactivity for now
-lxc-attach -n installable -- passwd james
+# Actually, this really isn't a viable option.
+# Need to set up root login through SSH
+# TODO: Automate that
+# TODO: More importantly: disable it when I'm finished
+#lxc-attach -n installable -- passwd root
 
 # TODO: Move this into a local play
 
@@ -73,27 +84,15 @@ lxc-attach -n installable -- apt-get update
 # You can use one of ansible's really low-level commands to
 # install python, but we have to get sshd installed to use ansible in the first
 # place, and this approach is easier/simpler
-lxc-attach -n installable -- apt-get install -y python openssh-server
+lxc-attach -n installable -- apt-get install -y python python-apt openssh-server
 
 # Some pieces shouldn't happen while it's running
 lxc-stop -n installable
-
-# Make james a password-less sudoer:
-INSTALLABLE_ROOT=$HOME/.local/share/lxc/installable/rootfs
-sudo cp resources/master $INSTALLABLE_ROOT/etc/sudoers.d/
-sudo chmod 0400 $INSTALLABLE_ROOT/etc/sudoers.d/master
-# Ownership of that file is problematic, because of
-# the way user/group ids get mapped
-# This happened to be the numbers on the system I
-# developed this on
-sudo chown 165536:165536 $INSTALLABLE_ROOT/etc/sudoers.d/master
 
 # Switch to another copy for doing the actual work.
 # These steps weren't horrible, but this is a good place to
 # switch to a different sandbox and possibly make a backup.
 lxc-clone -o installable -n frereth
-
-# TODO: Start here
 
 # And now let's do the install
 lxc-start -d -n frereth

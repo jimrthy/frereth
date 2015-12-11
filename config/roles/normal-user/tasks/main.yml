@@ -1,16 +1,18 @@
 ---
 - name: Set up developer group
-  sudo: True
   group: name=developers state=present
 
 - name: Set up non-root user
-  sudo: True
   user: name=jimrthy append=yes createhome=yes groups=frereth,developers state=present shell=/usr/bin/zsh
 
+# This hasn't been tested...but it's taken straight from the ansible docs
+- name: Set up that user's password
+  expect: command: passwd jimrthy
+  	  responses:
+	      (?i)password: "abc123"
+
 - name: Let that new user log in
-  sudo: True
   authorized_key: user=jimrthy
                   state=present
-                  key="{{lookup('file', '/home/james/.ssh/todds.key.pub')}}"
+                  key="{{lookup('file', '/home/james/.ssh/keys/frereth_normal.pub')}}"
                   manage_dir=yes
-

@@ -1,0 +1,18 @@
+- name: globally install C wrapper
+  command: make install chdir=/home/jimrthy/projects/jzmq
+
+- name: Ensure future steps can find that piece
+  command: ldconfig
+
+# Note that this will probably fail from ansible: it needs manual
+# intervention to enter the GPG password
+- name: Install to local maven repository
+  become_user: jimrthy
+  command: mvn package install chdir=/home/jimrthy/projects/jzmq
+
+# Q: Is there a real ansible task for this?
+# Note that this makes a lot of assumptions about arch, but I'm
+# not sure there's a reasonable way to avoid that
+- name: Install Native
+  command: cp /home/jimrthy/projects/lwjgl3/bin/linux/x64/lwjgl.so /usr/local/lib
+# Q: Do I need to run ldconfig again?

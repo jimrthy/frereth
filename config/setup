@@ -17,10 +17,6 @@ UUID=`python -c 'import uuid; print str(uuid.uuid4())'`
 export ANSIBLE_HOST_KEY_CHECKING=False
 export ANSIBLE_HOSTS=`pwd`/hosts
 
-# This is the sort of specific detail that I don't want to involve here.
-# TODO: Move this sort of thing into a pre-set-up script.
-lxc-attach -n frereth -- apt-get install -y python-apt
-
 # Note that this assumes the ansible hacking/env-setup script has already
 # been source'd to properly set up environment variables.
 # There are issues between '-c ssh' and '-c paramiko' that I haven't
@@ -28,21 +24,31 @@ lxc-attach -n frereth -- apt-get install -y python-apt
 # TODO: This has issues if the hosts file has a non-privileged user pointing
 # at the same IP address.
 # Q: What's the problem?
+# If you specify the same host in multiple sections, the last one wins.
+
+# More importantly, when using unprivileged LXC (as I am), you can't sudo
+# inside the container.
+# All of these commands really have to be accomplished via lxc-attach, rather
+# than over ssh.
+# TODO: Research how (and if) ansible copes with this.
 ansible-playbook -i hosts -c ssh baseline.yml
 
-#ansible-playbook -i hosts -c ssh comms.yml
+# Still trying to get this working again
 ansible-playbook -i hosts -c ssh configure-repositories.yml
+
 
 # I really wanted to make this fairly generic so I could build
 # a bunch of pieces as one user, install them as a sudoer, then
 # move along.
 # But libzmq really depends on libsodium being installed, if
 # I want to actually use it (and I do).
+# Q: Is that still true?
 ansible-playbook -i hosts -c ssh build-sodium.yml
-ansible-playbook -i hosts -c ssh sodium-installer.yml
+ansible-playbook -i hosts_root -c ssh sodium-installer.yml
 ansible-playbook -i hosts -c ssh build-0mq.yml
-ansible-playbook -i hosts -c ssh install-0mq.yml
+ansible-playbook -i hosts_root -c ssh install-0mq.yml
 
-ansible-playbook -i hosts -c ssh install-java-repositories.yml
-ansible-playbook -i hosts -c ssh configure-web-server.yml
-
+ansible-playbook -i hosts -c ssh build-jzmq.yml
+# TODO: Start here
+ansible-playbook -i hosts_root -c ssh install-jzmq.yml
+ansible-playbook -i hosts_root -c ssh configure-web-server.yml
