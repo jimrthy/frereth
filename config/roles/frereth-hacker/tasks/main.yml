@@ -61,7 +61,6 @@
   copy: dest=/home/{{ item }}/.ssh/github_key backup=yes src=resources/insecure.rsa mode=0600 owner={{ item }} group={{ item }}
   with_items:
     - jimrthy
-    #- james
 
 - name: Use that key
   copy: dest=/home/jimrthy/.ssh/config backup=yes src=ssh.config owner=jimrthy group=jimrthy
