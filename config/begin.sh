@@ -28,6 +28,10 @@ exit -1
 
 # Get the bare configuration downloaded
 lxc-create -t download -n baseline -- -d ubuntu -r wily -a amd64
+# This is the way that should be done. But I need a btrfs on the
+# host. It isn't worth digging into at the moment, but it should make
+# this much more generally useful
+# lxc-create -t download -n baseline -B btrfs -- -d ubuntu -r wily -a amd64
 
 # This is needed for the way GLFW binds input devices.
 # TODO: Update baseline's config file with the following line:
@@ -72,6 +76,7 @@ lxc-start -d -n installable
 # Actually, this really isn't a viable option.
 # Need to set up root login through SSH
 # TODO: Automate that
+# This is supposed to be trivial, using an expect script
 # TODO: More importantly: disable it when I'm finished
 #lxc-attach -n installable -- passwd root
 

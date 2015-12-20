@@ -31,6 +31,11 @@ export ANSIBLE_HOSTS=`pwd`/hosts
 # All of these commands really have to be accomplished via lxc-attach, rather
 # than over ssh.
 # TODO: Research how (and if) ansible copes with this.
+
+# This command is failing because python is missing the datetime
+# module. Which doesn't seem to make any sense.
+
+# Q: What's going on?
 ansible-playbook -i hosts -c ssh baseline.yml
 
 # Still trying to get this working again
