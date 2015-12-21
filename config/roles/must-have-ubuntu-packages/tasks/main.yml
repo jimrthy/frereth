@@ -44,10 +44,14 @@
     # Q: How useful is it to have man pages available
     # in the container?
     # A: Useful enough.
+    # TODO: Start here.
+    # This is failing due to errors in policykit and colord.
+    # Which looks very similar to the errors I'm running into
+    # trying to install the JDK.
+    # I may just have a broken install that needs to restart.
     - man-db
     # Note that this is more recent than maven2
     # (it's actually maven3)
-    # TODO: Start here.
     # I really need the OpenJDK for maven (which expects 7),
     # but that's failing
     - maven
