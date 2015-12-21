@@ -15,7 +15,7 @@ UUID=`python -c 'import uuid; print str(uuid.uuid4())'`
 # Set up some basic environment variables to make life easier
 
 export ANSIBLE_HOST_KEY_CHECKING=False
-export ANSIBLE_HOSTS=`pwd`/hosts
+export ANSIBLE_INVENTORY=`pwd`/hosts
 
 # Note that this assumes the ansible hacking/env-setup script has already
 # been source'd to properly set up environment variables.

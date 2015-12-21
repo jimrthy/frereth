@@ -14,7 +14,7 @@ exit -1
 # https://www.stgraber.org/2014/01/17/lxc-1-0-unprivileged-containers/
 # was my template for this.
 
-# Although, really, all I had to do was make my home directory 
+# Although, really, all I had to do was make my home directory
 # world-executable (so it might be an excellent idea to set up a
 # user account with no purpose in life except to run containers...
 # although that really sounds like a basic "best practice" anyway),
@@ -89,7 +89,7 @@ lxc-attach -n installable -- apt-get update
 # You can use one of ansible's really low-level commands to
 # install python, but we have to get sshd installed to use ansible in the first
 # place, and this approach is easier/simpler
-lxc-attach -n installable -- apt-get install -y python python-apt openssh-server
+lxc-attach -n installable -- apt-get install -y python python-apt python-pexpect openssh-server
 
 # Some pieces shouldn't happen while it's running
 lxc-stop -n installable
@@ -123,4 +123,3 @@ mkvirtualenv ansible
 pip install -r requirements.pip
 # Note to self: really should make the virtualenv set up
 # the ansible environment automatically, during activate
-

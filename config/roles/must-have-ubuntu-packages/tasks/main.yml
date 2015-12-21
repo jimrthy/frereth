@@ -16,37 +16,58 @@
   # TODO: Move these into ../vars/main.yml
   with_items:
     - autoconf
-    - emacs
+    # Q: What's the real difference between this and
+    # emacs24-nox?
+    # (This pulls in that)
+    - emacs-nox
     - g++
     - gettext
     - git
     - gnupg2
-    - libasound2
+    # Don't want this in a container
+    #- libasound2
     - libc6
     - libgcc1
-    - libgl1-mesa-dev
-    - libgtk2.0-0
+    # Also pointless in a container
+    #- libgl1-mesa-dev
+    # Q: What could this possibly be for in a headless
+    # scenario?
+    #- libgtk2.0-0
     - libstdc++6
     - libtool
-    - libxcursor-dev
-    - libxi-dev
-    - libxinerama-dev
-    - libxrandr-dev
-    - libxrender1
+    # More pieces that really are for native renderer
+    #- libxcursor-dev
+    #- libxi-dev
+    #- libxinerama-dev
+    #- libxrandr-dev
+    #- libxrender1
+    # Q: How useful is it to have man pages available
+    # in the container?
+    # A: Useful enough.
     - man-db
-    - maven2
-    - mesa-utils
+    # Note that this is more recent than maven2
+    # (it's actually maven3)
+    # TODO: Start here.
+    # I really need the OpenJDK for maven (which expects 7),
+    # but that's failing
+    - maven
+    # Another one for the native renderer
+    #- mesa-utils
     # FIXME: Need to set up the cofiguration
+    # Q: Isn't that already done in a later role?
     - nginx
     # TODO: Figure out a good way to keep this updated
-    - nvidia-331-uvm
-    # Would be using this if I were building a server.
-    # Which, mostly, I am.
-    # TODO: Split this up to build multiple machines
-    # for differences in details like this.
-    # Very specifically, the renderer isn't headless.
-    # Then again...that should probably run natively
-    - openjdk-7-jdk
+    # That's pretty pointless, since it's another one that's
+    # very specifically for the native renderer
+    #- nvidia-331-uvm
+    # Sadly, there's no headless version of the jdk.
+    # But, in production, we only need the JRE
+    # Note that this doesn't actually install in unprivileged
+    # containers.
+    # It depends on FUSE, which requires mknod privileges.
+    # The best work-around I've found so far is at
+    # https://gist.github.com/henrik-muehe/6155333
+    - openjdk-8-jdk
     - pkg-config
     - python-dev
     - python-pip
@@ -55,10 +76,10 @@
     - tmux
     - vim
     # Q: Do I really have a use for this?
-    - virtualenvwrapper
-    - xvfb
-    - xserver-xorg-input-kbd
-    - xserver-xorg-input-mouse
+    #- virtualenvwrapper
+    #- xvfb
+    #- xserver-xorg-input-kbd
+    #- xserver-xorg-input-mouse
     - zsh
 
 # TODO: How do I download/extract the slimerjs .zip?

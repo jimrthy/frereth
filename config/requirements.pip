@@ -1,5 +1,9 @@
-paramiko == 1.14.0
+paramiko == 1.16.0
 PyYAML == 3.11
-Jinja2 == 2.7.3
-ansible == 1.7
-six == 1.9.0
+Jinja2 == 2.8
+# Q: Is this a legal version tag?
+# I'm just running this from source, so
+# it doesn't really make any since to install
+# it anyway. Assuming pypi has any RC
+#ansible == 2.0.0-0.7.rc2
+six == 1.10.0
