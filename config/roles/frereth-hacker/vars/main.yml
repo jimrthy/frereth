@@ -51,3 +51,7 @@ repositories:
     # At the very latest, I really should start switching to this
     - zeromq4-1
 
+# For repos that are 3rd-party enough that I desperately do not
+# want to fork them
+third_repositories:
+  - { owner: 'creationix', repo: 'nvm' }

@@ -17,4 +17,4 @@
 # happen here.
 - name: Check 0mq (keep an eye on this!)
   command: make check chdir=/home/jimrthy/projects/zeromq4-1
-  ignore_errors: True
+  ignore_errors: False

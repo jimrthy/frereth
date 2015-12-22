@@ -1,6 +1,6 @@
 [ubuntu-privileged]
 # 10.0.3.218 ansible_ssh_user=james ansible_ssh_pass=abc123 ansible_sudo_pass=abc123
-10.0.3.218 ansible_user=root ansible_private_key_file=/home/james/.ssh/keys/frereth_root
+10.0.3.12 ansible_user=root ansible_private_key_file=/home/james/.ssh/keys/frereth_root
 
 [ubuntu-non-privileged]
 # If I have this line listed, the playbook that tries to work with that other

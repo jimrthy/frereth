@@ -16,4 +16,3 @@
   roles:
   - normal-user
   - must-have-ubuntu-packages
-  - clojure-runner

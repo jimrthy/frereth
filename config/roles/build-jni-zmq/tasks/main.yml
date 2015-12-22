@@ -1,0 +1,9 @@
+--
+- name: Prep zmq-jni
+  command: cmake . chdir=/home/jimrthy/projects/jzmq
+
+- name: Build zmq-jni
+  command: mvn compile chdir=/home/jimrthy/projects/jzmq
+
+- name: Install [unsigned] zmq-jni
+  command: mvn install -Dgpg.skip=true chdir=/home/jimrthy/projects/jzmq

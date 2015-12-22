@@ -40,7 +40,7 @@
 #  command: /usr/local/bin/lein
 
 - name: Set up directory for local repos
-  file: path=/home/jimrthy/projects state=directory owner=jimrthy group=jimrthy
+  file: path=/home/jimrthy/projects/3rd state=directory owner=jimrthy group=jimrthy
 
 # There have been issues in the past with getting git working over ssh.
 # Particularly with freezing at "Accept new known_host?" in the background
@@ -72,7 +72,7 @@
 # those here.
 # Note that this has a non-trivial impact on the downstream playbooks that
 # actually use these repositories
-- name: Clone repositories
+- name: Clone my repositories
   git: force=no
        repo=git@github.com:jimrthy/{{ item }}
        dest=/home/jimrthy/projects/{{ item }}
@@ -81,3 +81,13 @@
        update=yes
        accept_hostkey=yes
   with_items: repositories
+
+- name: Clone 3rd Party Repositories
+  git: force=no
+      repo=git@github.com:{{ item.owner }}/{{ item.repo }}
+      dest=/home/jimrthy/projects/3rd/{{ item.repo }}
+       key_file=/home/jimrthy/.ssh/github_key
+       recursive=yes
+       update=yes
+       accept_hostkey=yes
+  with_items: third_repositories

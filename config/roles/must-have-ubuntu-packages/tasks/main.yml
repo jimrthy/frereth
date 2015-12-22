@@ -44,11 +44,6 @@
     # Q: How useful is it to have man pages available
     # in the container?
     # A: Useful enough.
-    # TODO: Start here.
-    # This is failing due to errors in policykit and colord.
-    # Which looks very similar to the errors I'm running into
-    # trying to install the JDK.
-    # I may just have a broken install that needs to restart.
     - man-db
     # Note that this is more recent than maven2
     # (it's actually maven3)
@@ -80,13 +75,15 @@
     - tmux
     - vim
     # Q: Do I really have a use for this?
+    # A: Honestly, even if I do, it's better to install it via pip
     #- virtualenvwrapper
     #- xvfb
     #- xserver-xorg-input-kbd
     #- xserver-xorg-input-mouse
     - zsh
 
-# TODO: How do I download/extract the slimerjs .zip?
+# Q: How do I download/extract the slimerjs .zip?
+# A: Best option is probably via npm
 # The binary is available at
 # http://download.slimerjs.org/releases/0.9.6/slimerjs-0.9.6-linux-x86_64.tar.bz2
 # while the checksum is at

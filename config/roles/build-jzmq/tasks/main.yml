@@ -1,9 +1,6 @@
 ---
 # Install java pieces that are dependent on C libraries created in previous steps
 
-# Q: Aren't I already running this as jimrthy to begin with?
-# Shouldn't I be able to ditch that part of it?
-
 - name: autogen
   command: ./autogen.sh chdir=/home/jimrthy/projects/jzmq
 
@@ -26,12 +23,3 @@
 - name: check
   # Note that a failure here won't bother ansible.
   command: make check chdir=/home/jimrthy/projects/jzmq
-
-- name: Prep zmq-jni
-  command: cmake . chdir=/home/jimrthy/projects/jzmq
-
-- name: Build zmq-jni
-  command: mvn compile chdir=/home/jimrthy/projects/jzmq
-
-- name: Install zmq-jni
-  command: mvn install chdir=/home/jimrthy/projects/jzmq
