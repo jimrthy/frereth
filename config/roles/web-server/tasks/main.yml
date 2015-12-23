@@ -1,6 +1,10 @@
 ---
 - name: nginx Configuration files
-  copy: src=frereth.nginx.conf dst=/etc/nginx/sites-available/frereth owner=root group=root
+  copy: src=frereth.nginx.conf
+      dst=/etc/nginx/sites-available/frereth
+      owner=root
+      group=root
+      mode=0644
   sudo: True
 
 - name: Enable Frereth nginx Configuration
@@ -11,4 +15,3 @@
 
 - name: Update nginx Configuration
   service: name=nginx state=reloaded
-

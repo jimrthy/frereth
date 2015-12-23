@@ -50,7 +50,10 @@ ansible-playbook -i hosts build-0mq.yml
 ansible-playbook -i hosts_root install-0mq.yml
 
 # I don't think I want/need this step
+# Especially since it doesn't exist
 #ansible-playbook -i hosts build-jzmq.yml
+# I think that should have been
+#ansible-playbook -i hosts build-java-libraries.yml
 #ansible-playbook -i hosts_root install-jzmq.yml
 # Start Here
 # Plan on replacing those with this

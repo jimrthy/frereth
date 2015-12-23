@@ -16,6 +16,7 @@
   # TODO: Move these into ../vars/main.yml
   with_items:
     - autoconf
+    - cmake
     # Q: What's the real difference between this and
     # emacs24-nox?
     # (This pulls in that)
@@ -52,8 +53,6 @@
     - maven
     # Another one for the native renderer
     #- mesa-utils
-    # FIXME: Need to set up the cofiguration
-    # Q: Isn't that already done in a later role?
     - nginx
     # TODO: Figure out a good way to keep this updated
     # That's pretty pointless, since it's another one that's

@@ -1,7 +1,5 @@
 ---
-# Build the required java pieces
+# Build the low-level jni to 0mq
 - hosts: ubuntu-non-privileged
   roles:
-  - build-jzmq
   - build-jni-zmq
-  - lwjgl3

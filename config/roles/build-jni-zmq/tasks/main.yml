@@ -1,9 +1,29 @@
---
 - name: Prep zmq-jni
-  command: cmake . chdir=/home/jimrthy/projects/jzmq
+  # This step depends on JAVA_HOME being set
+  # On my current system, that should really be
+  # /usr/lib/jvm/java8-openjdk-amd64
+  # According to ansible's FAQ, this should
+  # work (even though I don't want to set it automatically)
+  # Q: is this really my problem?
+  # A: That seems to be it
+  environment:
+    JAVA_HOME: "/usr/lib/jvm/java-1.8.0-openjdk-amd64"
+  command: cmake . chdir=/home/jimrthy/projects/zmq-jni
 
 - name: Build zmq-jni
-  command: mvn compile chdir=/home/jimrthy/projects/jzmq
+  # This was/is failing with an error about ArtifactNotFoundException,
+  # centering around org.sonatype:oss-parent:pom:7
+  # In my local .m2 repo, where it's trying to download that,
+  # there's an oss-parent-7.pom.lastUpdated file with contents
+  # that boil down to:
+  # java.security.InvalidAlgorithmParameterException: the trustAnchors
+  # parameter must not be empty
+  # StackOverflow indicates that this comes from an empty
+  # trust store.
+  # Which is supposed to live around $JAVA_HOME/jre/lib/security/cacerts
+  # Tried running update-ca-certificates -f,
+  # which seems to have fixed the glitch
+  command: mvn compile chdir=/home/jimrthy/projects/zmq-jni
 
 - name: Install [unsigned] zmq-jni
-  command: mvn install -Dgpg.skip=true chdir=/home/jimrthy/projects/jzmq
+  command: mvn install -Dgpg.skip=true chdir=/home/jimrthy/projects/zmq-jni
