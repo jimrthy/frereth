@@ -65,6 +65,8 @@
     # It depends on FUSE, which requires mknod privileges.
     # The best work-around I've found so far is at
     # https://gist.github.com/henrik-muehe/6155333
+    # Actually, on xenial this seemed to "just work"
+    # Which makes like drastically easier
     - openjdk-8-jdk
     - pkg-config
     - python-dev
@@ -88,3 +90,9 @@
 # while the checksum is at
 # http://download.slimerjs.org/releases/0.9.6/slimerjs-0.9.6-linux-x86_64.tar.bz2.asc
 # Q: Is there a standard ansible play for this sort of thing?
+
+# Bigger Q: Do I care?
+# slimerjs seems to be the firefox equivalent to
+# phantomjs, based on chrome.
+# Both are definitely worth testing, but loading either
+# onto here feels wrong

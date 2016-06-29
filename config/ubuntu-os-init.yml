@@ -13,6 +13,8 @@
 
   #remote_user: frereth
 
+  # Assume that we need to actually install zsh
+  # before assigning it as the dev user's shell
   roles:
-  - normal-user
   - must-have-ubuntu-packages
+  - normal-user

@@ -21,10 +21,12 @@ exit -1
 # set up the ~/.config/lxc/default.conf (which might possibly be
 # optional, but I doubt it), and add myself to /etc/lxc/lxc-usernet
 
-# Note: this didn't actually work. sudo is broken in my unprivileged
-# containers on my laptop. I'm torn between frustration that it works
-# like a charm on my desktop and not caring. After all, that's just
-# a very tiny 'nice to have' for what I'm trying to accomplish.
+# Note: this doesn't actually work. Can no longer sudo in an
+# unprivileged container (assuming you ever could and I didn't
+# just imagine that capability).
+
+# TODO: Need to update these scripts to deal with that
+# For that matter, I need to update them to work with Ansible 2.0 
 
 # Get the bare configuration downloaded
 lxc-create -t download -n baseline -- -d ubuntu -r wily -a amd64
