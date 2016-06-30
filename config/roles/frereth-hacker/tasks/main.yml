@@ -32,8 +32,9 @@
   # debugging (and you can't import the same key twice)
   ignore_errors: True
 
-# TODO: Uncomment this when I'm finished debugging
-# Q: Does it make any real difference?
+# TODO: Uncomment this when I'm done debugging
+# Q: Does this make any real difference?
+# A: Absolutely
 #- name: Pre-install Leiningen
 #  sudo_user: jimrthy
 #  sudo: True
@@ -58,7 +59,7 @@
 # N.B.: Use your own. Make sure it doesn't become publicly available.
 - name: Copy github private key over
   remote_user: jimrthy
-  copy: dest=/home/{{ item }}/.ssh/github_key backup=yes src=resources/insecure.rsa mode=0600 owner={{ item }} group={{ item }}
+  copy: dest=/home/{{ item }}/.ssh/keys/github_key backup=yes src=resources/insecure.rsa mode=0600 owner={{ item }} group={{ item }}
   with_items:
     - jimrthy
 
@@ -67,7 +68,7 @@
 
 # TODO: There are really 2 groups of repos, at least.
 # Some are directly related to things I'm trying to work on right now.
-# Others are pieces on which I'm building that just don't have go
+# Others are pieces on which I'm building that just don't have good
 # public download options, for various reasons. It makes sense to branch
 # those here.
 # Note that this has a non-trivial impact on the downstream playbooks that
@@ -76,7 +77,7 @@
   git: force=no
        repo=git@github.com:jimrthy/{{ item }}
        dest=/home/jimrthy/projects/{{ item }}
-       key_file=/home/jimrthy/.ssh/github_key
+       key_file=/home/jimrthy/.ssh/keys/github_key
        recursive=yes
        update=yes
        accept_hostkey=yes
