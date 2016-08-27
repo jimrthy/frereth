@@ -56,4 +56,7 @@ repositories:
 # For repos that are 3rd-party enough that I desperately do not
 # want to fork them
 third_repositories:
-  - { owner: 'creationix', repo: 'nvm' }
+  # Nice zsh plugin for managing NVM
+  # Definitely more focused on my dev environment than actual functionality
+  # Still needs manual installation as a plugin
+  - { owner: 'lukeschild', repo: 'zsh-nvm' }
