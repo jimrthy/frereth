@@ -25,6 +25,7 @@
     - gettext
     - git
     - gnupg2
+    - iftop
     # Don't want this in a container
     #- libasound2
     - libc6
