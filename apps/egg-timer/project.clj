@@ -6,11 +6,19 @@
 
   :min-lein-version "2.7.1"
 
-  :dependencies [[devcards "0.2.2"]
+  :dependencies [[cljsjs/react "15.2.1-1"]
+                 [cljsjs/react-dom "15.2.1-1"]
+                 ;; This seems like it should really just be a dev-time dependency.
+                 ;; Q: How do I make that work?
+                 ;; I really just want its functionality called from cards.html,
+                 ;; which seems like it should mean a separate compiled output.
+                 ;; Which is definitely being created.
+                 [devcards "0.2.2"]
                  [org.clojure/clojure "1.9.0-alpha12"]
                  [org.clojure/clojurescript "1.9.229"]
                  [org.clojure/core.async "0.2.391"
-                  :exclusions [org.clojure/tools.reader]]]
+                  :exclusions [org.clojure/tools.reader]]
+                 [sablono "0.7.4"]]
 
   :plugins [[lein-figwheel "0.5.8"]
             [lein-cljsbuild "1.1.4" :exclusions [[org.clojure/clojure]]]]
@@ -112,8 +120,8 @@
 
 
   :profiles {:dev {:dependencies [[binaryage/devtools "0.8.2"]
-                                  [figwheel-sidecar "0.5.8"]
-                                  [com.cemerick/piggieback "0.2.1"]]
+                                  [com.cemerick/piggieback "0.2.1"]
+                                  [figwheel-sidecar "0.5.8"]]
                    ;; need to add dev source path here to get user.clj loaded
                    :source-paths ["src/renderer" "dev"]
                    ;; for CIDER
