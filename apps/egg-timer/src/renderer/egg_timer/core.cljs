@@ -1,9 +1,8 @@
-(ns egg-timer.core
-  (:require ))
+(ns egg-timer.core)
 
 (enable-console-print!)
 
-(println "This text is printed from src/egg-timer/core.cljs. Go ahead and edit it and see reloading in action.")
+(println "This text is printed from src/egg-timer/core.cljs. We are picking up changes automatically")
 
 ;; define your app data so that it doesn't get over-written on reload
 

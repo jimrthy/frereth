@@ -4,23 +4,39 @@
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
 
-  :min-lein-version "2.6.1"
+  :min-lein-version "2.7.1"
 
-  :dependencies [[org.clojure/clojure "1.8.0"]
-                 [org.clojure/clojurescript "1.9.89"]
-                 [org.clojure/core.async "0.2.385"
+  :dependencies [[devcards "0.2.2"]
+                 [org.clojure/clojure "1.9.0-alpha12"]
+                 [org.clojure/clojurescript "1.9.229"]
+                 [org.clojure/core.async "0.2.391"
                   :exclusions [org.clojure/tools.reader]]]
 
-  :plugins [[lein-figwheel "0.5.4-7"]
-            [lein-cljsbuild "1.1.3" :exclusions [[org.clojure/clojure]]]]
+  :plugins [[lein-figwheel "0.5.8"]
+            [lein-cljsbuild "1.1.4" :exclusions [[org.clojure/clojure]]]]
 
-  :source-paths ["src"]
+  :source-paths ["src/client" "src/server"]
 
   :clean-targets ^{:protect false} ["resources/public/js/compiled" "target"]
 
   :cljsbuild {:builds
-              [{:id "dev"
-                :source-paths ["src"]
+              [{:id "devcards"
+                :source-paths ["src/renderer"]
+                :figwheel {:devcards true  ;; <- note this
+                           :websocket-host "10.0.3.152"
+                           ;; :open-urls will pop open your application
+                           ;; in the default browser once Figwheel has
+                           ;; started and complied your application.
+                           ;; Comment this out once it no longer serves you.
+                           ;; :open-urls ["http://localhost:3449/cards.html"]
+                           }
+                :compiler {:main       "egg-timer.core"
+                           :asset-path "js/compiled/devcards_out"
+                           :output-to  "resources/public/js/compiled/egg_timer_devcards.js"
+                           :output-dir "resources/public/js/compiled/devcards_out"
+                           :source-map-timestamp true }}
+               {:id "dev"
+                :source-paths ["src/renderer"]
 
                 ;; the presence of a :figwheel configuration here
                 ;; will cause figwheel to inject the figwheel client
@@ -30,7 +46,9 @@
                            ;; in the default browser once Figwheel has
                            ;; started and complied your application.
                            ;; Comment this out once it no longer serves you.
-                           :open-urls ["http://localhost:3449/index.html"]}
+                           ;;:open-urls ["http://localhost:3449/index.html"]
+                           :websocket-host #_:js-client-host "10.0.3.152"
+                           }
 
                 :compiler {:main egg-timer.core
                            :asset-path "js/compiled/out"
@@ -52,7 +70,8 @@
 
   :figwheel {;; :http-server-root "public" ;; default and assumes "resources"
              ;; :server-port 3449 ;; default
-             ;; :server-ip "127.0.0.1"
+             ;; TODO: Get local IP address instead of hard-coding
+             :server-ip "10.0.3.152" #_ "localhost"
 
              :css-dirs ["resources/public/css"] ;; watch and update CSS
 
@@ -77,7 +96,7 @@
              ;; :open-file-command "myfile-opener"
 
              ;; if you are using emacsclient you can just use
-             ;; :open-file-command "emacsclient"
+             :open-file-command "emacsclient"
 
              ;; if you want to disable the REPL
              ;; :repl false
@@ -92,15 +111,15 @@
   ;; https://github.com/bhauman/lein-figwheel/wiki/Using-the-Figwheel-REPL-within-NRepl
 
 
-  :profiles {:dev {:dependencies [[binaryage/devtools "0.7.2"]
-                                  [figwheel-sidecar "0.5.4-7"]
+  :profiles {:dev {:dependencies [[binaryage/devtools "0.8.2"]
+                                  [figwheel-sidecar "0.5.8"]
                                   [com.cemerick/piggieback "0.2.1"]]
                    ;; need to add dev source path here to get user.clj loaded
-                   :source-paths ["src" "dev"]
+                   :source-paths ["src/renderer" "dev"]
                    ;; for CIDER
                    ;; :plugins [[cider/cider-nrepl "0.12.0"]]
-                   :repl-options {; for nREPL dev you really need to limit output
-                                  :init (set! *print-length* 50)
+                   :repl-options {;; for nREPL dev you really need to limit output
+                                  ;; :init (set! *print-length* 50)
                                   :nrepl-middleware [cemerick.piggieback/wrap-cljs-repl]}}}
 
 )
