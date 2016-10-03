@@ -1,5 +1,6 @@
 (ns egg-timer.core
-  (:require [cljs.test :refer (testing is)]
+  (:require [cljs.reader]
+            [cljs.test :refer (testing is)]
             [sablono.core :as sab :refer-macros [html]])
   (:require-macros [devcards.core :refer (defcard deftest dom-node)]))
 
@@ -10,13 +11,40 @@
 ;; define your app data so that it doesn't get over-written on reload
 
 (defonce app-state (atom {:text "Hello world!"
+                          :work-done nil
                           :counter 0}))
 
 (defn on-js-reload []
   ;; optionally touch your app-state to force rerendering depending on
   ;; your application
   (swap! app-state update-in [:__figwheel_counter] inc)
-)
+  )
+
+(defcard web-worker-wrapper*
+  "How difficult is it to spawn/use a web worker?"
+  (fn [data-atom owner]
+    (if (type js/Worker)
+      ;; Not showing up as markdown. Weird!
+      (let [worker (js/Worker. "js/compiled/egg_worker.js")]
+        ;; Q: Is there a google closure function to make this better?
+        (.addEventListener worker
+                           "message"  ; Q: Can I name this whatever strikes my fancy?
+                           (fn [e]
+                             ;; TODO: Switch to transit
+                             ;; TODO: Yield control over the data block
+                             (let [raw-data (-> e .-data)
+                                   _ (.log js/console raw-data)
+                                   rsp (cljs.reader/read-string raw-data)]
+                               (.log js/console "Have a worker response:" rsp)
+                               (swap! app-state #(update-in % [:work-done] (constantly rsp)))))
+                           false)
+        (.postMessage worker "start"))
+      (throw (ex-info "## No web workers available :-(" {})))
+    (sab/html
+     (if-let [data (-> data-atom deref :work-done)]
+       data
+       [:p "Waiting for worker"])))
+  app-state)
 
 (defcard state-watcher
   "Monitor program state"

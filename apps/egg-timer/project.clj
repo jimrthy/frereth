@@ -43,6 +43,13 @@
                            :output-to  "resources/public/js/compiled/egg_timer_devcards.js"
                            :output-dir "resources/public/js/compiled/devcards_out"
                            :source-map-timestamp true }}
+               {:id "worker"
+                :source-paths ["src/worker"]
+                :compiler {:main egg-worker.core
+                           :asset-path "js/compiled/out"
+                           :optimizations :simple
+                           :output-to "resources/public/js/compiled/egg_worker.js"
+                           :source-map-timestamp true}}
                {:id "dev"
                 :source-paths ["src/renderer"]
 
@@ -70,9 +77,15 @@
                ;; production. You can build this with:
                ;; lein cljsbuild once min
                {:id "min"
-                :source-paths ["src"]
+                :source-paths ["src/renderer"]
                 :compiler {:output-to "resources/public/js/compiled/egg_timer.js"
                            :main egg-timer.core
+                           :optimizations :advanced
+                           :pretty-print false}}
+               {:id "min-worker"
+                :source-paths ["src/worker"]
+                :compiler {:output-to "resources/public/js/compiled/egg_worker.js"
+                           :main egg-worker.core
                            :optimizations :advanced
                            :pretty-print false}}]}
 
