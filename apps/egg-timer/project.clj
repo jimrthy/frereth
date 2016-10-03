@@ -47,7 +47,8 @@
                 :source-paths ["src/worker"]
                 :compiler {:main egg-worker.core
                            :asset-path "js/compiled/out"
-                           :optimizations :simple
+                           ;; Need to be sure to credit laforge49 and aatree/aademos
+                           :optimizations :simple  ;   <--- This is magical, non-obvious, secret sauce
                            :output-to "resources/public/js/compiled/egg_worker.js"
                            :source-map-timestamp true}}
                {:id "dev"

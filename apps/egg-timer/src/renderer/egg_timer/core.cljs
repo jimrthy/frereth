@@ -23,28 +23,28 @@
 (defcard web-worker-wrapper*
   "How difficult is it to spawn/use a web worker?"
   (fn [data-atom owner]
-    (if (type js/Worker)
-      ;; Not showing up as markdown. Weird!
-      (let [worker (js/Worker. "js/compiled/egg_worker.js")]
-        ;; Q: Is there a google closure function to make this better?
-        (.addEventListener worker
-                           "message"  ; Q: Can I name this whatever strikes my fancy?
-                           (fn [e]
-                             ;; TODO: Switch to transit
-                             ;; TODO: Yield control over the data block
-                             (let [raw-data (-> e .-data)
-                                   _ (.log js/console raw-data)
-                                   rsp (cljs.reader/read-string raw-data)]
-                               (.log js/console "Have a worker response:" rsp)
-                               (swap! app-state #(update-in % [:work-done] (constantly rsp)))))
-                           false)
-        (.postMessage worker "start"))
-      (throw (ex-info "## No web workers available :-(" {})))
     (sab/html
      (if-let [data (-> data-atom deref :work-done)]
        data
        [:p "Waiting for worker"])))
   app-state)
+
+(if (type js/Worker)
+  (let [worker (js/Worker. "js/compiled/egg_worker.js")]
+    ;; Q: Is there a google closure function to make this better?
+    (.addEventListener worker
+                       "message"  ; Q: Can I name this whatever strikes my fancy?
+                       (fn [e]
+                         ;; TODO: Switch to transit
+                         ;; TODO: Yield control over the data block
+                         (let [raw-data (-> e .-data)
+                               _ (.log js/console (clj->js raw-data))
+                               rsp (cljs.reader/read-string raw-data)]
+                           (.log js/console "Have a worker response:" rsp)
+                           (swap! app-state #(update-in % [:work-done] (constantly rsp)))))
+                       false)
+    (.postMessage worker "start"))
+  (throw (ex-info "## No web workers available :-(" {})))
 
 (defcard state-watcher
   "Monitor program state"
