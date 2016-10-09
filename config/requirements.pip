@@ -1,3 +1,7 @@
+# These versions are at least a year out of date.
+# But they worked with the last version of ansible that I've
+# had time to touch.
+# TODO: Get it and these updated
 paramiko == 1.16.0
 PyYAML == 3.11
 Jinja2 == 2.8
