@@ -35,6 +35,8 @@
     # Q: What could this possibly be for in a headless
     # scenario?
     #- libgtk2.0-0
+    # Q: How many of the rest of these is actually
+    # useful?
     - libstdc++6
     - libtool
     # More pieces that really are for native renderer
@@ -59,16 +61,10 @@
     # That's pretty pointless, since it's another one that's
     # very specifically for the native renderer
     #- nvidia-331-uvm
-    # Sadly, there's no headless version of the jdk.
-    # But, in production, we only need the JRE
-    # Note that this doesn't actually install in unprivileged
-    # containers.
-    # It depends on FUSE, which requires mknod privileges.
-    # The best work-around I've found so far is at
-    # https://gist.github.com/henrik-muehe/6155333
-    # Actually, on xenial this seemed to "just work"
-    # Which makes like drastically easier
-    - openjdk-8-jdk
+    # TODO: Experiment with
+    # openjdk-9-jdk-headless
+    # instead
+    - openjdk-8-jdk-headless
     - pkg-config
     - python-dev
     - python-pip

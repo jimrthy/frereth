@@ -25,11 +25,27 @@ export ANSIBLE_INVENTORY=`pwd`/hosts
 # at the same IP address.
 # Q: What's the problem?
 # If you specify the same host in multiple sections, the last one wins.
+# This seems perfectly good/reasonable for something that's designed for
+# deploying servers to production.
+# It doesn't work so well for building dev environments.
 
-# More importantly, when using unprivileged LXC (as I am), you can't sudo
-# inside the container.
-# All of these commands really have to be accomplished via lxc-attach, rather
-# than over ssh.
+# Most of this approach has been blocked by issues I've had trying to
+# run sudo from within a container.
+# Those issues seem to have gone away with btrfs, but that's due
+# to my lack of knowledge/understanding.
+
+# If I run `lxc-ls -P $btrfs-mount-point`, it looks like nothing's there.
+# However, if I run `sudo lxc-ls -P $btrfs-mount-point`, it shows that
+# container, stopped.
+
+# This seems odd.
+
+# Assuming that unprivileged containers can't sudo,
+# all of these commands will really have to be accomplished via lxc-attach,
+# rather than over ssh.
+
+# There are ansible modules to cope with this sort of detail.
+# It really isn't a common problem.
 # TODO: Research how (and if) ansible copes with this.
 
 ansible-playbook -i hosts baseline.yml
