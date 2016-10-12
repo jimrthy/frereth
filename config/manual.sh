@@ -98,8 +98,8 @@ EOF
 ssh gh < yes
 
 # Now I can get on with my personal configuration stuff
-mkdir ~/personal
-cd ~/personal
+mkdir -p  ~/projects/personal
+cd ~/projects/personal
 git clone ssh://gh/jimrthy/config
 
 cd config
@@ -121,4 +121,42 @@ cd ~
 git clone ssh://gh/jimrthy/oh-my-zsh .oh-my-zsh
 chsh -s /usr/bin/zsh
 
-# TODO: Next steps!
+# TODO: Copy over gpg signing keys.
+# Don't want to generate them on a VM, because entropy generation
+# is so slow (at least, I assume that's the difference...it could
+# just be that my laptop is so slow)
+
+# TODO: Clone repositories
+mkdir -p ~/projects/libraries
+cd ~/projects/libraries
+
+# My repos that aren't directly related
+for repo in cljeromq cljzmq component-dsl dareshi substratum zmq-jni
+do
+    git clone ssh://gh/jimrthy/$repo
+done
+cd ..
+
+# Main point
+mkdir snowcrash
+cd snowcrash
+for repo in frereth frereth-app frereth-client frereth-common \
+                    frereth-server frereth-terminal frereth-web
+do
+    git clone ssh://gh/jimrthy/$repo
+done
+cd ..
+
+# Repos that I've forked because I may try to be involved someday
+mkdir 3rd
+cd 3rd
+for repo in jzmq libsodium libzmq zeromq4-1
+do
+    git clone ssh://gh/jimrthy/$repo
+done
+cd ~
+
+# And the repos that I don't want to ever touch
+git clone ssh://gh/lukechilds/zsh-nvm ~/.oh-my-zsh/custom/plugins/zsh-nvm
+
+# Now the fun/time-consuming part: build everything

@@ -27,7 +27,9 @@ repositories:
     - frereth-app
     - frereth-client
     - frereth-common
-    - frereth-renderer
+    # Without occultation, there isn't a lot of point to this next one.
+    # It doesn't make much sense on a container.
+    #- frereth-renderer
     - frereth-server
     - frereth-terminal
     - frereth-web
@@ -36,6 +38,7 @@ repositories:
     # much never run well on a container.
     # (like lwjgl3 will?)
     #- occultation
+    - substratum
 
     # This is a very interesting possible alternative to jzmq which is most
     # likely the core of future development
@@ -48,9 +51,6 @@ repositories:
     # Core library, latest development version
     # I've been neglecting it, because jzmq really wasn't keeping up
     - libzmq
-    # This is looking more than a little obsolete
-    - zeromq4-x
-    # At the very latest, I really should start switching to this
     - zeromq4-1
 
 # For repos that are 3rd-party enough that I desperately do not
@@ -59,4 +59,7 @@ third_repositories:
   # Nice zsh plugin for managing NVM
   # Definitely more focused on my dev environment than actual functionality
   # Still needs manual installation as a plugin
-  - { owner: 'lukeschild', repo: 'zsh-nvm' }
+  # Actually, it just needs to be installed into ~/.oh-my-zsh/custom/plugins
+  # Or maybe I should just move it manually after it's installed.
+  # For now, specifying these here is really overkill.
+  - { owner: 'lukechilds', repo: 'zsh-nvm' }
