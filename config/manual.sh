@@ -126,15 +126,17 @@ chsh -s /usr/bin/zsh
 # is so slow (at least, I assume that's the difference...it could
 # just be that my laptop is so slow)
 
-# TODO: Clone repositories
 mkdir -p ~/projects/libraries
 cd ~/projects/libraries
 
 # My repos that aren't directly related
-for repo in cljeromq cljzmq component-dsl dareshi substratum zmq-jni
+for repo in cljeromq cljzmq component-dsl dareshi substratum zmq-jni \
+                     jzmq libsodium libzmq zeromq4-1
 do
     git clone ssh://gh/jimrthy/$repo
 done
+# TODO: For those last 4, at least, update from upstream.
+# I mess with them rarely enough that this is pretty important
 cd ..
 
 # Main point
@@ -160,3 +162,28 @@ cd ~
 git clone ssh://gh/lukechilds/zsh-nvm ~/.oh-my-zsh/custom/plugins/zsh-nvm
 
 # Now the fun/time-consuming part: build everything
+# TODO: Start by setting the upstream for my forks and updating them
+cd ~/projects/libraries/libsodium
+git remote add upstream ssh://gh/jedisct1/libsodium
+
+for PROJECT in cljzmq jzmq libzmq zeromq4-1 zmq-jni
+do
+    cd ../$PROJECT
+    git remote set upstream ssh://gh/zeromq/$PROJECT
+done
+
+# Note that project order is really important
+# And somehow this wound up configured to use tweetnacl
+# anyway.
+# TODO: Figure out what's up
+# Then again, it's not like this approach is worth any serious time/effort
+for PROJECT in libsodium zeromq4-1
+do
+    cd ../$PROJECT
+    ./autogen.sh
+    ./configure
+    make
+    make check
+    sudo make install
+    sudo ldconfig
+done
