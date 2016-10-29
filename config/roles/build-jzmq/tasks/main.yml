@@ -2,24 +2,24 @@
 # Install java pieces that are dependent on C libraries created in previous steps
 
 - name: autogen
-  command: ./autogen.sh chdir=/home/jimrthy/projects/jzmq
+  command: ./autogen.sh chdir=/home/jimrthy/projects/jzmq/jzmq-jni
 
 - name: configure
-  command: ./configure chdir=/home/jimrthy/projects/jzmq
+  command: ./configure chdir=/home/jimrthy/projects/jzmq/jzmq-jni
 
 - name: Remove previous build attempts
-  command: mvn clean chdir=/home/jimrthy/projects/jzmq
+  command: mvn clean chdir=/home/jimrthy/projects/jzmq/jzmq-jni
   ignore_errors: True
 
 - name: Build the base .class
   # Must be done before we can actually build the c++ pieces.
   # It seems wrong, but who am I to complain?
   # TODO: Verify that this really does build that required file
-  command: mvn compile chdir=/home/jimrthy/projects/jzmq
+  command: mvn compile chdir=/home/jimrthy/projects/jzmq/jzmq-jni
 
 - name: make
-  command: make chdir=/home/jimrthy/projects/jzmq
+  command: make chdir=/home/jimrthy/projects/jzmq/jzmq-jni
 
 - name: check
   # Note that a failure here won't bother ansible.
-  command: make check chdir=/home/jimrthy/projects/jzmq
+  command: make check chdir=/home/jimrthy/projects/jzmq/jzmq-jni

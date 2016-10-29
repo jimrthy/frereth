@@ -8,7 +8,7 @@ export GUEST=10.0.3.160
 
 # This is really what the
 # must-have-ubuntu-packages role does
-for pkg in autoconf cmake emacs-nox g++ gettext \
+for pkg in autoconf cmake curl emacs-nox g++ gettext \
                     git gnupg2 iftop libc6 \
                     libgcc1 libstdc++6 libtool \
                     man-db maven nginx \
@@ -130,7 +130,7 @@ mkdir -p ~/projects/libraries
 cd ~/projects/libraries
 
 # My repos that aren't directly related
-for repo in cljeromq cljzmq component-dsl dareshi substratum zmq-jni \
+for repo in cljzmq component-dsl dareshi substratum zmq-jni \
                      jzmq libsodium libzmq zeromq4-1
 do
     git clone ssh://gh/jimrthy/$repo
@@ -142,7 +142,7 @@ cd ..
 # Main point
 mkdir snowcrash
 cd snowcrash
-for repo in frereth frereth-app frereth-client frereth-common \
+for repo in  cljeromq frereth frereth-app frereth-client frereth-common \
                     frereth-server frereth-terminal frereth-web
 do
     git clone ssh://gh/jimrthy/$repo
@@ -177,13 +177,26 @@ done
 # anyway.
 # TODO: Figure out what's up
 # Then again, it's not like this approach is worth any serious time/effort
-for PROJECT in libsodium zeromq4-1
+for PROJECT in libsodium zeromq4-1 jzmq/jzmq-jni
 do
     cd ../$PROJECT
     ./autogen.sh
     ./configure
     make
+    # Doesn't seem to apply to jzmq, according to the README
+    # But it doesn't hurt
     make check
     sudo make install
+    # Really only need this step for libsodium
+    # ...with the fun caveat that it seems to have changed
     sudo ldconfig
 done
+# Still in jzmq/jzmq-jni folder
+cd ..
+# These are listed as 2 separate steps in the README
+mvn package install -Dgpg.skip=true
+
+# TODO: What about datomic?
+
+# TODO: Really should install all the frereth components and their dependencies.
+# If only to get them all downloaded

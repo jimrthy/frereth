@@ -3,5 +3,7 @@
 - hosts: ubuntu-non-privileged
   roles:
   - build-jzmq
+  # This next piece is purely experimental, and dubious
   - build-jni-zmq
+  # Almost definitely do not want this
   - lwjgl3

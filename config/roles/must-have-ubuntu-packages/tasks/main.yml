@@ -17,6 +17,7 @@
   with_items:
     - autoconf
     - cmake
+    - curl
     # Q: What's the real difference between this and
     # emacs24-nox?
     # (This pulls in that)
