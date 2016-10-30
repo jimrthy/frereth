@@ -21,11 +21,12 @@
                                completed [:instant #{"When was this goal marked done?"}]
                                creation [:instant #{"When was this goal created?"}]
                                depends-on [:ref #{"Other goals that must be accomplished first"}]
-                               description [:string #{}]
+                               description [:string #{"What is this goal really all about?"}]
                                related [:ref #{}]
                                ;; Note that this really needs to be a list
-                               tags [:string #{"For "}]
-                               title [:string #{"Short identifier"}]}
+                               tags [:string #{"For searching"}]
+                               title [:string #{"Short identifier"}]
+                               work [:ref #{"To work-time instances. This is why I need to implement typed refs"}]}
                          work-time {start [:instant]
                                     stop [:instant]
                                     goal [:ref]}]
@@ -38,11 +39,16 @@
         ;; for everything else to work: :dt/dt and :dt.any
         ;; These are for the bulk of the associated attributes, like the
         ;; actual :dt/dt or instance
-        attributes [{:db/id :com.frereth.app.goal-tender.datatype/entity
+        attributes [{:db/id :com.frereth.app.goal-tender.datatype/work
+                     :dt/dt :dt/dt
+                     :dt/app-id "Same UUID as the goal. Don't want to specify this here."
+                     :dt/namespace "goal-tender"
+                     :dt/name "work"}
+                    {:db/id :com.frereth.app.goal-tender.datatype/goal
                      :dt/dt :dt/dt
                      :dt/app-id "This should probably be a UUID generated at install-time"
                      :dt/namespace "goal-tender"
-                     :dt/name "item"
+                     :dt/name "goal"
                      ;; These are more attributes.
                      ;; Every installation needs to insert a UUID to keep them from
                      ;; conflicting with attributes with similar names/ideas from other
@@ -53,6 +59,7 @@
                      ;; has to work with that.
                      ;; So the actual attribute creation code needs to inject a UUID
                      ;; on the fly.
+                     ;; Note that this is really missing a list of work-time instances
                      :dt/fields [:dt/dt
                                  :goal/children
                                  :goal/completed
