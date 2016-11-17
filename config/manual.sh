@@ -15,7 +15,9 @@ for pkg in autoconf cmake curl emacs-nox g++ gettext \
                     # Note that there are lots of
                     # caveats around this
                     openjdk-9-jdk-headless \
-                    pgk-config python-den \
+                    pkg-config \
+                    # Q: What is/was this for?
+                    #python-den \
                     python-pip rlwrap ssh tmux \
                     vim zsh
 do
@@ -63,6 +65,15 @@ mkdir ~/bin
 cd ~/bin
 wget https://raw.github.com/technomancy/leiningen/stable/bin/lein
 chmod u+x lein
+wget https://github.com/boot-clj/boot-bin/releases/download/latest/boot.sh
+mv boot.sh boot
+chmod u+x boot
+# Note that, at this point, boot isn't really runnable
+# Q: Why not?
+# (the error message is
+# Exception in thread "main" java.lang.ClassCastException: 
+# jdk.internal.loader.ClassLoader$AppClassLoader (in module
+# java.base) cannot be cast to java.net.URLClassLoader (in module: java.base)
 cd --
 
 # That gets to the end of the clojure-runner role
@@ -130,8 +141,7 @@ mkdir -p ~/projects/libraries
 cd ~/projects/libraries
 
 # My repos that aren't directly related
-for repo in cljzmq component-dsl dareshi substratum zmq-jni \
-                     jzmq libsodium libzmq zeromq4-1
+for repo in cljzmq component-dsl dareshi substratum zmq-jni
 do
     git clone ssh://gh/jimrthy/$repo
 done
@@ -163,13 +173,13 @@ git clone ssh://gh/lukechilds/zsh-nvm ~/.oh-my-zsh/custom/plugins/zsh-nvm
 
 # Now the fun/time-consuming part: build everything
 # TODO: Start by setting the upstream for my forks and updating them
-cd ~/projects/libraries/libsodium
+cd ~/projects/3rd/libsodium
 git remote add upstream ssh://gh/jedisct1/libsodium
 
 for PROJECT in cljzmq jzmq libzmq zeromq4-1 zmq-jni
 do
     cd ../$PROJECT
-    git remote set upstream ssh://gh/zeromq/$PROJECT
+    git remote add upstream ssh://gh/zeromq/$PROJECT
 done
 
 # Note that project order is really important
