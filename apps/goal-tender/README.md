@@ -11,13 +11,26 @@ So I'm trying to play both ends against the middle.
 
 ## Installation
 
-Download from http://example.com/FIXME.
+Clone from https://github.com/jimrthy/frereth.
+
+(You really don't want to touch this yet).
+
+TODO: Make this more like
+
+    $ frereth run goal-tender-0.1.0-standalone.jar
+
 
 ## Usage
 
-FIXME: explanation
+TODO: Sort this out
+
+It should be something along the lines of
 
     $ java -jar goal-tender-0.1.0-standalone.jar [args]
+
+Actually, it should be more along the lines of
+
+    $ frereth run goal-tender-0.1.0-standalone.jar
 
 ## Options
 
