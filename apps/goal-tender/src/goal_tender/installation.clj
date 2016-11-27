@@ -7,6 +7,10 @@
 (defn do
   [uri-description]
   (let [part-name "goal-tender"
+        ;; These really are/should be namespaced.
+        ;; The first map are all goal/foo, while the second map are work/bar
+        ;; It looks like these actually should be keywords, so maybe that will work.
+        ;; TODO: Look into this once merge conflicts are resolved
         attribute-types '[{children [:ref #{"sub-goals for breaking things into smaller steps"}]
                            ;; TODO: add an entity for comments
                            ;; But that really means adding users, which opens another
@@ -27,14 +31,15 @@
                            ;; Now B and D really need to change their start-after to point to
                            ;; C.
                            depends-on [:ref #{"Other goals that must be accomplished first"}]
-                           description [:string #{}]
+                           description [:string #{"What is this goal really all about?"}]
                            ;; This is really a variant on the depends-on Edges
                            related [:ref #{}]
                            start-after [:ref #{"Don't bother showing this as an option until its prerequisite is complete"}]
                            ;; Note that this really needs to be a list/set.
                            ;; (i.e. where do I set the cardinality?)
                            tags [:string #{"To make search/organization easier"}]
-                           title [:string #{"Short identifier"}]}
+                           title [:string #{"Short identifier"}]
+                           work [:ref #{"To work-time instances. This is why I need to implement typed refs"}]}
                           {start [:instant #{}]
                            stop [:instant #{}]
                            goal [:ref #{}]}]
@@ -47,40 +52,31 @@
         ;; for everything else to work: :dt/dt and :dt.any
         ;; These are for the bulk of the associated attributes, like the
         ;; actual :dt/dt or instance
-        attributes [;; This was my original brain-storming about the App Entity.
-                    ;; It doesn't belong in here. It's really part of the App
-                    ;; framework.
-                    ;; Installing this *does* need to install an Entity that
-                    ;; matches this basic Type so the framework can find those
-                    ;; pieces.
-                    #_{:db/id :com.frereth.app.goal-tender.datatype/entity
-                       :dt/dt :dt/dt
-                       :dt/app-id "This should probably be a UUID generated at install-time"
-                       :dt/namespace "goal-tender"
-                       :dt/name "item"
-                       ;; These are more attributes.
-                       ;; Every installation needs to insert a UUID to keep them from
-                       ;; conflicting with attributes with similar names/ideas from other
-                       ;; apps.
-                       ;; This is where the idea of having totally separate databases
-                       ;; becomes very appealing.
-                       ;; It also doesn't fly with datomic-free, and this pretty much
-                       ;; has to work with that.
-                       ;; So the actual attribute creation code needs to inject a UUID
-                       ;; on the fly.
-                       :dt/fields [:dt/dt
-                                   :goal/children
-                                   :goal/completed
-                                   :goal/creation
-                                   :goal/depends-on
-                                   :goal/description
-                                   :goal/related
-                                   :goal/tags
-                                   :goal/title]}
-                    {:db/id #db/id [:db.part/user]
-                     :dt/dt :com.frereth.app.goal-tender/goal
+        attributes [{:db/id :com.frereth.app.goal-tender.datatype/work
+                     :dt/dt :dt/dt
+                     :dt/app-id "Same UUID as the goal. Don't want to specify this here."
                      :dt/namespace "goal-tender"
-                     :dt/name "Goal"
+                     :dt/name "work"
+                     :dt/fields [:work-time/start
+                                 :work-time/stop
+                                 :work-time/goal]}
+                    {:db/id :com.frereth.app.goal-tender.datatype/goal
+                     :dt/dt :dt/dt
+                     :dt/app-id "This should probably be a UUID generated at install-time"
+                     :dt/namespace "goal-tender"
+                     :dt/name "goal"
+                     ;; These are more attributes.
+                     ;; Every installation needs to insert a UUID to keep them from
+                     ;; conflicting with attributes with similar names/ideas from other
+                     ;; apps.
+                     ;; This is where the idea of having totally separate databases
+                     ;; becomes very appealing.
+                     ;; It also doesn't fly with datomic-free, and this pretty much
+                     ;; has to work with that.
+                     ;; So the actual attribute creation code needs to inject a UUID
+                     ;; on the fly.
+                     ;; Note that this is really missing a list of work-time instances
+
                      ;; These field names really need more
                      ;; namespacing to avoid collisions.
                      ;; That responsibility really belongs
@@ -91,7 +87,8 @@
                      ;; to interop with other Apps.
                      ;; That's a bigger question than I want
                      ;; to tackle for a while.
-                     :dt/fields [:goal/children
+                     :dt/fields [:dt/dt
+                                 :goal/children
                                  :goal/completed
                                  :goal/creation
                                  :goal/depends-on
@@ -99,14 +96,7 @@
                                  :goal/related
                                  :goal/start-after
                                  :goal/tags
-                                 :goal/title]}
-                    {:db/id #db/id [:db.part/user]
-                     :dt/dt :com.frereth.app.goal-tender/work-time
-                     :dt/namespace "goal-tender"
-                     :dt/name "Work"
-                     :dt/fields [:work-time/start
-                                 :work-time/stop
-                                 :work-time/goal]}]
+                                 :goal/title]}]
 
         txns {:com.jimrthy.substratum.installer/attribute-types attribute-types
               :com.jimrthy.substratum.installer/attributes attributes}]
