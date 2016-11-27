@@ -4,7 +4,7 @@
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[com.jimrthy.substratum "0.1.0-SNAPSHOT"]
-                 [org.clojure/clojure "1.9.0-alpha13"]]
+                 [org.clojure/clojure "1.9.0-alpha14"]]
   :main ^:skip-aot goal-tender.core
   :target-path "target/%s"
   :profiles {:uberjar {:aot :all}})
