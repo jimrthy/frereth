@@ -1,4 +1,5 @@
 (ns goal-tender2.core
+  "TODO: Everything in here needs to move"
   (:require [datomic.api :as d]))
 
 (defn schema
