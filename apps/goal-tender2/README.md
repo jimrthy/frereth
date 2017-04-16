@@ -42,9 +42,13 @@ FIXME: listing of options this app accepts.
 ### That You Think
 ### Might be Useful
 
+## Road Map
+
+Ability to coordinate "today's tasks" with a mobile app 
+
 ## License
 
-Copyright © 2017 FIXME
+Copyright © 2017 James Gatannah
 
 Distributed under the Eclipse Public License either version 1.0 or (at
 your option) any later version.
