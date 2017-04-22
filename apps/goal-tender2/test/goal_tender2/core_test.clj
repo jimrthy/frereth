@@ -5,7 +5,7 @@
 
 (deftest a-test
   (testing "Basic schema installation succeeds"
-    (let [db-name "something-random"
+    (let [db-name (str (java.util.UUID/randomUUID))
           cxn (do-installation db-name)]
       (try
         (is true "Yes, we got here")
