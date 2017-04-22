@@ -18,7 +18,7 @@
   [database-name]
   (str "datomic:free://localhost:4334/" database-name))
 
-(defn do-installation
+(defn do-schema-installation
   [database-name]
   (let [url (build-url database-name)
         connection (connect url)]

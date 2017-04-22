@@ -18,7 +18,13 @@ the way it should be."
         txn {:todo/summary summary
              :todo/just-a-dream true
              :todo/done false}]
-    @(d/transact cxn txn)))
+    @(d/transact cxn [txn])))
+
 (defn list-dreams
   [url]
-  (throw (RuntimeException. "not implemented")))
+  (let [sql '[:find (pull ?e [:todo/summary :todo/done])
+              :where [?e :todo/just-a-dream true
+                      ;; This next clause drops my results
+                      #_[?e :todo/done false]]]
+        db (-> url d/connect d/db)]
+    (d/q sql db)))
