@@ -22,9 +22,17 @@ the way it should be."
 
 (defn list-dreams
   [url]
-  (let [sql '[:find (pull ?e [:todo/summary :todo/done])
-              :where [?e :todo/just-a-dream true
-                      ;; This next clause drops my results
-                      #_[?e :todo/done false]]]
+  ;; This is supposed to be a happier/easier
+  ;; syntax to set up multiple WHERE clauses.
+  ;; I still think it's wrong.
+  (let [sql '[:find (pull ?e [:db/id :todo/summary :todo/done])
+              :where
+              [?e :todo/just-a-dream true]
+              [?e :todo/done false]]
         db (-> url d/connect d/db)]
     (d/q sql db)))
+
+(defn choose-dreams-fate
+  "Do, Dump, or Deliberate"
+  [db-url dream-id fate]
+  (throw (RuntimeException. "Not Implemented")))
