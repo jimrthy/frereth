@@ -17,8 +17,13 @@
     :db/index true
     :db/fulltext true
     :db/doc "Get the basic idea at a glance"}
-   {:db/ident :todo/done
-    :db/valueType :db.type/boolean
+   {:db/ident :todo.state/dreaming}
+   {:db/ident :todo.state/todo}
+   {:db/ident :todo.state/dumped}
+   {:db/ident :todo.state/deferred}
+   {:db/ident :todo.state/done}
+   {:db/ident :todo/state
+    :db/valueType :db.type/ref
     :db/cardinality :db.cardinality/one
     :db/index true
     :db/doc "Has user finished this line item yet?"}
@@ -27,6 +32,8 @@
     :db/cardinality :db.cardinality/one
     :db/index true
     :db/doc "When do you want to think about this again?"}
+   ;; This next item seems like something we could profitably
+   ;; cover in the State enum
    {:db/ident :todo/just-a-dream
     :db/valueType :db.type/boolean
     :db/cardinality :db.cardinality/one
