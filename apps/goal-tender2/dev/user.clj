@@ -8,6 +8,7 @@ tools.namespace for refresh is pretty much mandatory"
             [clojure.repl :refer :all]  ; dir is very useful
             [clojure.tools.namespace.repl :refer (refresh refresh-all)]
             [datomic.api :as d]
+            [goal-tender2.catch :as catch]
             [goal-tender2.core :as gt]))
 
 ;; Need to start somewhere, and I'm not digging up a system library tonight
@@ -15,7 +16,13 @@ tools.namespace for refresh is pretty much mandatory"
 
 (comment
   (def dbg-cxn (gt/do-schema-installation "sandcastle"))
-  dbg-cxnq)
+  dbg-cxnq
+
+  (catch/add-dream (gt/build-url "sandcastle")
+                   "What I want to do this summer")
+  (catch/list-dreams (gt/build-url "sandcastle"))
+  )
+
 (defn start
   []
   (alter-var-root cxn

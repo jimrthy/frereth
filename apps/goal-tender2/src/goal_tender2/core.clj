@@ -1,5 +1,8 @@
 (ns goal-tender2.core
-  "TODO: Everything in here needs to move"
+  "TODO: Everything in here needs to move
+
+Q: Where?
+A: The framework that creates this App"
   (:require [datomic.api :as d]
             [goal-tender2.persist.schema :as schema]))
 

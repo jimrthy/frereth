@@ -6,14 +6,19 @@ here.
 
 Honestly, avoiding that was the main reason I wrote substratum."
   (:require [datomic.api :as d]
-            [clojure.spec :as s]))
+            [clojure.spec.alpha :as s]))
 
 (defn add-dream
   "For jotting down a basic ideas
 
 The top trouble with just using a URL like this
 is that doing `with` exploration isn't transparent,
-the way it should be."
+the way it should be.
+
+Problem 2: I'm already storing the connection in dev/user.clj,
+instead of the arbitrary url
+
+So I'm covering my bases twice"
   [url summary]
   (let [cxn (d/connect url)
         txn {:todo/summary summary
@@ -22,9 +27,9 @@ the way it should be."
 
 (defn list-dreams
   [url]
-  ;; PULL is supposed to be a happier/easier
-  ;; syntax to set up multiple WHERE clauses.
-  ;; I still think it's wrong.
+  ;; Q: What's the :todo/done clause doing here?
+  ;; (I *know* it's part of the PULL syntax. I just
+  ;; don't remember what it means
   (let [sql '[:find (pull ?e [:db/id :todo/summary :todo/done])
               :where
               [?e :todo/state :todo.state/dreaming]]
