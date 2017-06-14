@@ -18,37 +18,55 @@
     - autoconf
     # Used by zmq-jni
     - cmake
-    - emacs
+    - curl
+    # Q: What's the real difference between this and
+    # emacs24-nox?
+    # (This pulls in that)
+    - emacs-nox
     - g++
     - gettext
     - git
     - gnupg2
-    - libasound2
+    - iftop
+    # Don't want this in a container
+    #- libasound2
     - libc6
     - libgcc1
-    - libgl1-mesa-dev
-    - libgtk2.0-0
+    # Also pointless in a container
+    #- libgl1-mesa-dev
+    # Q: What could this possibly be for in a headless
+    # scenario?
+    #- libgtk2.0-0
+    # Q: How many of the rest of these is actually
+    # useful?
     - libstdc++6
     - libtool
-    - libxcursor-dev
-    - libxi-dev
-    - libxinerama-dev
-    - libxrandr-dev
-    - libxrender1
+    # More pieces that really are for native renderer
+    #- libxcursor-dev
+    #- libxi-dev
+    #- libxinerama-dev
+    #- libxrandr-dev
+    #- libxrender1
+    # Q: How useful is it to have man pages available
+    # in the container?
+    # A: Useful enough.
     - man-db
-    - maven2
-    - mesa-utils
-    # FIXME: Need to set up the cofiguration
+    # Note that this is more recent than maven2
+    # (it's actually maven3)
+    # I really need the OpenJDK for maven (which expects 7),
+    # but that's failing
+    - maven
+    # Another one for the native renderer
+    #- mesa-utils
     - nginx
     # TODO: Figure out a good way to keep this updated
-    - nvidia-331-uvm
-    # Would be using this if I were building a server.
-    # Which, mostly, I am.
-    # TODO: Split this up to build multiple machines
-    # for differences in details like this.
-    # Very specifically, the renderer isn't headless.
-    # Then again...that should probably run natively
-    - openjdk-7-jdk
+    # That's pretty pointless, since it's another one that's
+    # very specifically for the native renderer
+    #- nvidia-331-uvm
+    # TODO: Experiment with
+    # openjdk-9-jdk-headless
+    # instead
+    - openjdk-8-jdk-headless
     - pkg-config
     - python-dev
     - python-pip
@@ -57,15 +75,23 @@
     - tmux
     - vim
     # Q: Do I really have a use for this?
-    - virtualenvwrapper
-    - xvfb
-    - xserver-xorg-input-kbd
-    - xserver-xorg-input-mouse
+    # A: Honestly, even if I do, it's better to install it via pip
+    #- virtualenvwrapper
+    #- xvfb
+    #- xserver-xorg-input-kbd
+    #- xserver-xorg-input-mouse
     - zsh
 
-# TODO: How do I download/extract the slimerjs .zip?
+# Q: How do I download/extract the slimerjs .zip?
+# A: Best option is probably via npm
 # The binary is available at
 # http://download.slimerjs.org/releases/0.9.6/slimerjs-0.9.6-linux-x86_64.tar.bz2
 # while the checksum is at
 # http://download.slimerjs.org/releases/0.9.6/slimerjs-0.9.6-linux-x86_64.tar.bz2.asc
 # Q: Is there a standard ansible play for this sort of thing?
+
+# Bigger Q: Do I care?
+# slimerjs seems to be the firefox equivalent to
+# phantomjs, based on chrome.
+# Both are definitely worth testing, but loading either
+# onto here feels wrong

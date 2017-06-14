@@ -9,4 +9,4 @@
 # A: When there are multiple groups w/ the same host, the last one
 # wins.
 # Better Q: How was this ever working? This was as issue back in 1.4
-10.0.3.218 ansible_ssh_user=jimrthy ansible_ssh_pass=abc123
+10.0.3.12 ansible_ssh_user=jimrthy ansible_ssh_pass=abc123

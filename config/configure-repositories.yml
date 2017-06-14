@@ -1,8 +1,8 @@
 ---
 - hosts: ubuntu-non-privileged
-  #sudo: yes
-  #sudo_user: jimrthy
   remote_user: jimrthy
   roles:
+  # This doesn't particularly belong in here, but
+  # it probably makes more sense than anywhere else
+  - clojure-runner
   - frereth-hacker
-

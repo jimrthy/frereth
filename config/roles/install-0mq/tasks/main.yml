@@ -1,6 +1,6 @@
 ---
 - name: Install 0mq
-  command: make install chdir=/home/jimrthy/projects/libzmq
+  command: make install chdir=/home/jimrthy/projects/zeromq4-1
 
 # This is duplicated from the install-sodium role.
 # It's duplicate code, but adding the extra boiler

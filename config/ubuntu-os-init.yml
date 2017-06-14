@@ -1,9 +1,20 @@
 ---
 - hosts: ubuntu-privileged
+  # In an environment where sudo isn't an option,
+  # how can I take these steps using ansible?
+  # Maybe this approach is just completely and totally
+  # wrong.
+  # Q: Would it make more sense to just do this part of
+  # the install as the template that builds the LXC in
+  # the first place?
+  # That would have to be a privileged LXC, so it can
+  # add users and install packages, but that may be the
+  # way to go.
+
   #remote_user: frereth
 
-  roles:  
-  - normal-user
+  # Assume that we need to actually install zsh
+  # before assigning it as the dev user's shell
+  roles:
   - must-have-ubuntu-packages
-  - clojure-runner
-
+  - normal-user

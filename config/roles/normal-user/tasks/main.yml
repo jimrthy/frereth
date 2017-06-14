@@ -7,9 +7,10 @@
 
 # This hasn't been tested...but it's taken straight from the ansible docs
 - name: Set up that user's password
-  expect: command: passwd jimrthy
-  	  responses:
-	      (?i)password: "abc123"
+  expect:
+        command: passwd jimrthy
+        responses:
+          (?i)password: "abc123"
 
 - name: Let that new user log in
   authorized_key: user=jimrthy
