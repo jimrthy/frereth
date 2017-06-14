@@ -16,6 +16,8 @@
   # TODO: Move these into ../vars/main.yml
   with_items:
     - autoconf
+    # Used by zmq-jni
+    - cmake
     - emacs
     - g++
     - gettext
