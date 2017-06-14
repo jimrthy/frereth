@@ -25,6 +25,8 @@ So I'm covering my bases twice"
              :todo/state :todo.state/dreaming}]
     @(d/transact cxn [txn])))
 
+;;; TODO: These next pieces really don't belong in here
+
 (defn list-dreams
   [url]
   ;; Q: What's the :todo/done clause doing here?

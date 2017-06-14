@@ -31,4 +31,5 @@ tools.namespace for refresh is pretty much mandatory"
 
 (defn stop
   []
+  ;; TODO: Write this
   (throw (RuntimeException. "clean up sandcastle")))
