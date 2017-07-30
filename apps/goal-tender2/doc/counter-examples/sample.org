@@ -1,0 +1,10 @@
+* Pull down prime open-source contenders from day-job work
+** Transformers should be fair game now
+*** Need to be sure to clean it
+**** up
+**** out
+** Minimalist example seems worth publishing
+*** If only for reference
+* Need to deal with local hosting issues
+** SSL expires soon
+** Convert poly pieces to wildfly
