@@ -5,7 +5,7 @@
   "Sum of rolling an m-sided die n times"
   [n m]
   (reduce (fn [acc i]
-            (+ acc (inc (rand-int (dec m)))))
+            (+ acc (inc (rand-int m))))
           0
           (range n)))
 
