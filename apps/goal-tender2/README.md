@@ -48,7 +48,7 @@ Ability to coordinate "today's tasks" with a mobile app
 
 ## License
 
-Copyright © 2017 James Gatannah
+Copyright © 2016-2017 James Gatannah
 
 Distributed under the Eclipse Public License either version 1.0 or (at
 your option) any later version.
