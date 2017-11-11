@@ -56,6 +56,10 @@ working on most heavily lately. It's the networking piece that ties
 everything else together. Although I have my doubts about the sensibility
 of the basic idea.
 
+[Frereth Common](https://github.com/jimrthy/frereth-common) is a foundation
+layer for pieces that are shared by the others. It's my attempt at keeping
+the whole thing DRY.
+
 [Frereth Server](https://github.com/jimrthy/frereth-server) is the part
 that I see as the bottom-end layer where the work happens, but end-users
 never think about. This is the realm of databases and user authorization.
