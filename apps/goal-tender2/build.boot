@@ -3,9 +3,9 @@
 
 (set-env! :resource-paths #{"resources" "src"}
           :source-paths   #{"dev" "test"}
-          :dependencies   '[[com.datomic/datomic-free "0.9.5561.62"]
+          :dependencies   '[[com.datomic/datomic-free "0.9.5656"]
                             [com.jimrthy.substratum "0.1.0-SNAPSHOT"]
-                            [org.clojure/clojure "1.9.0-RC1"]
+                            [org.clojure/clojure "1.9.0"]
                             [org.clojure/spec.alpha "0.1.143"]
                             [org.clojure/tools.namespace "0.3.0-alpha4"]
                             [adzerk/boot-test "RELEASE" :scope "test"]])
