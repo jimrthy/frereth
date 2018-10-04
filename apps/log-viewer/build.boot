@@ -1,3 +1,5 @@
+(def project-name "com.frereth.log-viewer")
+
 (require '[clojure.java.shell :as sh])
 
 (defn next-version [version]
@@ -37,16 +39,17 @@
 
 (set-env! :dependencies   '[[adzerk/boot-cljs "2.1.4" :scope "test"]
                             [adzerk/boot-cljs-repl "0.4.0" :scope "test"]
-                            [adzerk/boot-reload "0.6.0-SNAPSHOT" :scope "test"]
+                            [adzerk/boot-reload "0.6.0" :scope "test"]
+                            [bidi "2.1.4"]
                             [cider/piggieback "0.3.9" :scope "test"]
                             [com.cemerick/pomegranate
-                             "1.0.0"
+                             "1.1.0"
                              :exclusions [commons-codec
                                           org.clojure/clojure
                                           org.slf4j/jcl-over-slf4j]
                              :scope "test"]
                             [crisptrutski/boot-cljs-test "0.3.4" :scope "test"]
-                            [doo "0.1.8" :scope "test"]
+                            [doo "0.1.10" :scope "test"]
                             [metosin/boot-alt-test "0.3.2" :scope "test"]
                             [metosin/boot-deps-size "0.1.0" :scope "test"]
                             [nrepl "0.4.5"]
@@ -55,18 +58,18 @@
                             [org.clojure/spec.alpha "0.2.176" :exclusions [org.clojure/clojure]]
                             [org.clojure/test.check "0.10.0-alpha3" :scope "test" :exclusions [org.clojure/clojure]]
                             ;; This is the task that combines all the linters
-                            [tolitius/boot-check "0.1.11" :scope "test" :exclusions [org.tcrawley/dynapath]]
+                            [tolitius/boot-check "0.1.11" :scope "test" :exclusions [boot/core
+                                                                                     org.tcrawley/dynapath]]
                             [weasel "0.7.0" :scope "test"]
 
                             ;; Backend
-                            [aleph "0.4.5-alpha6"]
                             [frereth-cp "0.0.1-SNAPSHOT"]
                             [integrant "0.7.0"]
                             [integrant/repl "0.3.1"]
-                            [javax.servlet/servlet-api "2.5"]  ; for ring multipart middleware
+                            [javax.servlet/servlet-api "3.0-alpha-1"]  ; for ring multipart middleware
                             [metosin/ring-http-response "0.9.0"]
                             [org.clojure/tools.namespace "0.3.0-alpha4"]
-                            [ring/ring-core "1.6.3"]
+                            [ring/ring-core "1.7.0"]
 
                             ;; Frontend
                             [reagent "0.8.1" :scope "test"]
@@ -77,34 +80,59 @@
           :resource-paths #{"src/clj" "src/cljc"}
           ;; Test path can be included here as source-files are not included in JAR
           ;; Just be careful to not AOT them
-          :source-paths   #{"dev" "dev-resources" "test/clj" "test/cljs"})
+          :source-paths   #{"dev" "test/clj" "test/cljs"})
 
+(require
+ '[adzerk.boot-cljs :refer [cljs]]
+ '[adzerk.boot-cljs-repl :refer [cljs-repl start-repl repl-env]]
+ '[adzerk.boot-reload :refer [reload]]
+ '[metosin.boot-alt-test :refer [alt-test]]
+ '[metosin.boot-deps-size :refer [deps-size]]
+ '[crisptrutski.boot-cljs-test :refer [test-cljs]]
+ '[backend.boot :refer [start-app]]
+ '[integrant.repl :refer [clear go halt prep init reset reset-all]]
+ '[tolitius.boot-check :as check])
+
+;; Really need to consider less vs. sass vs. garden
 (task-options!
- aot {:namespace   #{'com.frereth.client.system}}
- pom {:project     project
-      :version     version
-      :description "Shared frereth components"
+ aot {:namespace   #{'backend.main}}
+ jar {:file        (str "frereth-log-viewer-" version ".jar")
+      :main 'backend.main}
+ pom {:project     (symbol project-name)
+      :version     (deduce-version-from-git)
+      :description "Log viewer to demo frereth architecture"
       ;; TODO: Add a real website
       :url         "https://github.com/jimrthy/frereth/apps/log-viewer"
       :scm         {:url "https://github.com/jimrthy/frereth"}
       :license     {"Eclipse Public License"
-                    "http://www.eclipse.org/legal/epl-v10.html"}}
- jar {:file        (str "frereth-log-viewer-" version ".jar")})
+                    "http://www.eclipse.org/legal/epl-v10.html"}})
 
-(require
- '[adzerk.boot-cljs :refer [cljs]]
- '[])
-(require '[samestep.boot-refresh :refer [refresh]])
-(require '[tolitius.boot-check :as check])
-
-(deftask build
-  "Build the project locally as a JAR."
-  [d dir PATH #{str} "the set of directories to write to (target)."]
-  ;; Note that this approach passes the raw command-line parameters
-  ;; to -main, as opposed to what happens with `boot run`
-  ;; TODO: Eliminate this discrepancy
-  (let [dir (if (seq dir) dir #{"target"})]
-    (comp (javac) (aot) (pom) (uber) (jar) (target :dir dir))))
+(deftask dev
+  "Start the dev env..."
+  [s speak         bool "Notify when build is done"
+   p port     PORT int "Port for web server"
+   ;; Q: Break down and use this approach?
+   a use-sass      bool "Use Sass instead of less"
+   t test-cljs     bool "Compile and run cljs tests"]
+  (comp
+   (watch)
+   ;; TODO: Switch the open-file to connect to a running emacs instance
+   (reload :open-file "vim --servername log_viewer --remote-silent +norm%sG%s| %s"
+           :ids #{"js/main"})
+   #_(if use-sass
+     (sass)
+     (less))
+   ;; This starts a repl server with piggieback middleware
+   (cljs-repl :ids #{"js/main"})
+   (cljs :ids #{"js/main"})
+   ;; Remove cljs output from classpath but keep within fileset with output role
+   (sift :to-asset #{#"^js/.*"})
+   ;; Write the resources to filesystem for dev server
+   (target :dir #{"dev-output"})
+   (start-app :port port)
+   (if speak
+     (boot.task.built-in/speak)
+     identity)))
 
 (deftask local-install
   "Create a jar to go into your local maven repository"
@@ -115,8 +143,10 @@
 (deftask cider-repl
   "Set up a REPL for connecting from CIDER"
   []
-  ;; Just because I'm prone to forget one of the vital helper steps
-  (comp (cider) (javac) (repl)))
+  ;; This belongs in here even less than it does under
+  ;; the CurveCP translation. At least that one has a java
+  ;; compilation step to make this a little easier to remember
+  (comp (cider) (repl)))
 
 (deftask run
   "Run the project."
@@ -127,4 +157,30 @@
   (require '[frereth-cp.server :as app])
   (apply (resolve 'app/-main) file))
 
-(require '[adzerk.boot-test :refer [test]])
+(ns-unmap *ns* 'test)
+(deftask test []
+  (comp
+   (alt-test)
+   ;; FIXME: This is not a good place to define which namespaces to test
+   (test-cljs :namespaces #{"frontend.core-test"})))
+
+(deftask autotest []
+  (comp
+   (watch)
+   (test)))
+
+(deftask package
+  "Build the package"
+  []
+  (comp
+   ;; Note that this doesn't offer an option between less and sass
+   #_(less :compression true)
+   (cljs :optimizations :advanced
+         :compiler-options {:preloads nil})
+   (aot)
+   (pom)
+   (uber)
+   ;; Q: Are there any rules about the name of the .jar file?
+   (jar :file "frereth.load-viewer.jar")
+   (sift :include #{#".*\.jar"})
+   (target)))
