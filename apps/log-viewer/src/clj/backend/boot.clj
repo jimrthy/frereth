@@ -9,6 +9,7 @@
 
 (b/deftask start-app
   [p port   PORT int  "Port"]
+  (println "Trying to start the app")
   (let [x (atom nil)]
     (b/cleanup (halt))
     (b/with-pre-wrap fileset

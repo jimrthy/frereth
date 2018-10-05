@@ -134,12 +134,6 @@
      (boot.task.built-in/speak)
      identity)))
 
-(deftask local-install
-  "Create a jar to go into your local maven repository"
-  [d dir PATH #{str} "the set of directories to write to (target)."]
-  (let [dir (if (seq dir) dir #{"target"})]
-    (comp (pom) (jar) (target :dir dir) (install))))
-
 (deftask cider-repl
   "Set up a REPL for connecting from CIDER"
   []
@@ -180,7 +174,12 @@
    (aot)
    (pom)
    (uber)
-   ;; Q: Are there any rules about the name of the .jar file?
-   (jar :file "frereth.load-viewer.jar")
+   (jar)
    (sift :include #{#".*\.jar"})
    (target)))
+
+(deftask local-install
+  "Create a jar to go into your local maven repository"
+  [d dir PATH #{str} "the set of directories to write to (target)."]
+  (let [dir (if (seq dir) dir #{"target"})]
+    (comp (package)  (install))))
