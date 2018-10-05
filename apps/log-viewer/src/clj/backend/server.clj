@@ -8,18 +8,24 @@
             [aleph.http.server :as http]
             [backend.index :as index]))
 
+;; TODO: Convert the routing to its own component in the system.
+;; Possibly even set up the handler function to call the mapping
+;; dynamically so this can reload without restarting the entire
+;; system
+
 ;; Note: when running uberjar from project dir, it is
 ;; possible that the dev-output dir exists.
-(def routes ["/" ["js/" (if (.exists (io/file "dev-output/js"))
+(def routes ["/" {"js/" (if (.exists (io/file "dev-output/js"))
                           (ring/->Files {:dir "dev-output/js"})
                           (ring/->Resources {:prefix "js"}))
                   "css/" (if (.exists (io/file "dev-output/css"))
                            (ring/->Files {:dir "dev-output/js"})
                            (ring/->Resources {:prefix "css"}))
-                  #{"index.html"} (-> index/index-page (bidi/tag ::index))
+                  #{""  "index.html"} (-> index/index-page (bidi/tag ::index))
                   "echo" (-> index/echo-page (bidi/tag ::echo))
-                  "test" (-> index/test-page (bidi/tag ::test))
-                  true (-> index/index-page (bidi/tag ::index))]])
+                  "test" (-> index/test-page (bidi/tag ::test))}])
+(comment
+  (bidi/match-route routes "/"))
 
 (def handler
   (ring/make-handler routes))

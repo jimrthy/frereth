@@ -19,5 +19,7 @@
             [frereth-cp.shared.logging :as log]
             [frereth-cp.shared.specs :as shared-specs]
             [frereth-cp.util :as utils]
+            [integrant.repl :refer [clear go halt prep init reset reset-all] :as ig-repl]
+            [integrant.repl.state :as ig-state]
             [manifold.deferred :as dfrd]
             [manifold.stream :as strm]))
