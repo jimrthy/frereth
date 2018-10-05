@@ -6,7 +6,7 @@
             [ring.util.response :refer [redirect]]
             [ring.util.http-response :refer :all]
             [aleph.http.server :as http]
-            [backend.index :as index]))
+            [backend.routes :as routes]))
 
 ;; TODO: Convert the routing to its own component in the system.
 ;; Possibly even set up the handler function to call the mapping
@@ -21,9 +21,9 @@
                   "css/" (if (.exists (io/file "dev-output/css"))
                            (ring/->Files {:dir "dev-output/js"})
                            (ring/->Resources {:prefix "css"}))
-                  #{""  "index.html"} (-> index/index-page (bidi/tag ::index))
-                  "echo" (-> index/echo-page (bidi/tag ::echo))
-                  "test" (-> index/test-page (bidi/tag ::test))}])
+                  #{""  "index.html"} (-> routes/index-page (bidi/tag ::index))
+                  "echo" (-> routes/echo-page (bidi/tag ::echo))
+                  "test" (-> routes/test-page (bidi/tag ::test))}])
 (comment
   (bidi/match-route routes "/"))
 
