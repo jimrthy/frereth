@@ -1,5 +1,6 @@
 (ns backend.route-test
-  (:require  [backend.routes :as routes]
+  (:require  [backend.web.routes :as routes]
+             [backend.web.server :as server]
              [bidi.bidi :as bidi]
              [clojure.test :as t]))
 

@@ -1,14 +1,14 @@
-(ns backend.server
+(ns backend.web.server
   "This really should be renamed to backend.web.server"
   (:require [bidi.ring :as ring]
             [integrant.core :as ig]
             [ring.util.response :refer [redirect]]
             [ring.util.http-response :refer :all]
             [aleph.http.server :as http]
-            [backend.routes :as routes]))
+            [backend.web.routes :as routes]))
 
 (def handler
-  (ring/make-handler routes))
+  (ring/make-handler routes/routes))
 
 (defmethod ig/init-key ::web-server
   [_ {:keys [:port]

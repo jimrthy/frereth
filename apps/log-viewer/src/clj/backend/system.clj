@@ -1,5 +1,5 @@
 (ns backend.system
-  (:require [backend.server]))
+  (:require [backend.web.server]))
 
 (defn ctor [opts]
-  {:backend.server/web-server opts})
+  {:backend.web.server/web-server opts})
