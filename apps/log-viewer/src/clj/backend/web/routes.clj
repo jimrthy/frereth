@@ -3,6 +3,7 @@
    [bidi.bidi :as bidi]
    [bidi.ring :as ring]
    [clojure.java.io :as io]
+   [clojure.pprint :refer [pprint]]
    [hiccup.core :refer [html]]
    [hiccup.page :refer [html5 include-js include-css]]
    [ring.util.response :as rsp]))
@@ -22,8 +23,11 @@
       [:meta {:name "viewport" :content "width=device-width, initial-scale=1.0"}]
       (include-css "css/main.css")]
      [:body
-      ;; FIXME: Need to html-encode the request
-      [:div.container [:pre [:code request]]]]))))
+      ;; At one point, it looked like the request gets html-encoded automatically.
+      ;; I have some doubts about that working if I give it a hard-coded string
+      ;; this way, rather than the data structure I was passing in when I saw
+      ;; that.
+      [:div.container [:pre [:code "" (with-out-str (pprint request))]]]]))))
 
 (defn index-page
   [_]
