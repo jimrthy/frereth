@@ -6,8 +6,8 @@
 (defn init
   ([] (init nil))
   ([opts]
-   (require 'backend.server)
-   ((resolve 'backend.server/new-system) opts)))
+   (require 'backend.system)
+   ((resolve 'backend.system/ctor) opts)))
 
 (defn setup-app! [opts]
   (integrant.repl/set-prep! #(init opts)))
