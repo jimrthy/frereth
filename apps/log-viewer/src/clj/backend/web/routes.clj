@@ -71,7 +71,7 @@
                   "css/" (if (.exists (io/file "dev-output/css"))
                            (ring/->Files {:dir "dev-output/js"})
                            (ring/->Resources {:prefix "css"}))
-                  #{""  "index.html"} (-> index-page (bidi/tag ::index))
+                  #{"" "index" "index.html"} (-> index-page (bidi/tag ::index))
                   "echo" (-> echo-page (bidi/tag ::echo))
                   "test" (-> test-page (bidi/tag ::test))}])
 (comment

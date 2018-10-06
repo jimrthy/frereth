@@ -49,6 +49,8 @@
                                           org.slf4j/jcl-over-slf4j]
                              :scope "test"]
                             [crisptrutski/boot-cljs-test "0.3.4" :scope "test"]
+                            [deraen/boot-sass "0.3.1" :scope "test"]
+                            [deraen/boot-less "0.6.2" :scope "test"]
                             [doo "0.1.10" :scope "test"]
                             [metosin/boot-alt-test "0.3.2" :scope "test"]
                             [metosin/boot-deps-size "0.1.0" :scope "test"]
@@ -57,6 +59,8 @@
                             [org.clojure/clojurescript "1.10.339" :scope "test"]
                             [org.clojure/spec.alpha "0.2.176" :exclusions [org.clojure/clojure]]
                             [org.clojure/test.check "0.10.0-alpha3" :scope "test" :exclusions [org.clojure/clojure]]
+                            ;; For boot-less
+                            [org.slf4j/slf4j-nop "1.7.25" :scope "test"]
                             ;; This is the task that combines all the linters
                             [tolitius/boot-check "0.1.11" :scope "test" :exclusions [boot/core
                                                                                      org.tcrawley/dynapath]]
@@ -75,17 +79,24 @@
                             [reagent "0.8.1" :scope "test"]
                             [binaryage/devtools "0.9.10" :scope "test"]
                             ;; Q: Why?
-                            [cljsjs/babel-standalone "6.18.1-3" :scope "test"]]
+                            [cljsjs/babel-standalone "6.18.1-3" :scope "test"]
+
+                            ;; LESS
+                            [org.webjars/bootstrap "3.3.7-1"]
+                            ;; SASS
+                            [org.webjars.bower/bootstrap "4.1.1" :exclusions [org.webjars.bower/jquery]]]
           :project project
           :resource-paths #{"src/clj" "src/cljc"}
           ;; Test path can be included here as source-files are not included in JAR
           ;; Just be careful to not AOT them
-          :source-paths   #{"dev" "test/clj" "test/cljs"})
+          :source-paths   #{"dev" "src/less" "src/scss" "test/clj" "test/cljs"})
 
 (require
  '[adzerk.boot-cljs :refer [cljs]]
  '[adzerk.boot-cljs-repl :refer [cljs-repl start-repl repl-env]]
  '[adzerk.boot-reload :refer [reload]]
+ '[deraen.boot-less :refer [less]]
+ '[deraen.boot-sass :refer [sass]]
  '[metosin.boot-alt-test :refer [alt-test]]
  '[metosin.boot-deps-size :refer [deps-size]]
  '[crisptrutski.boot-cljs-test :refer [test-cljs]]
@@ -98,6 +109,7 @@
  aot {:namespace   #{'backend.main}}
  jar {:file        (str "frereth-log-viewer-" version ".jar")
       :main 'backend.main}
+ less {:source-map true}
  pom {:project     (symbol project-name)
       :version     (deduce-version-from-git)
       :description "Log viewer to demo frereth architecture"
@@ -105,13 +117,13 @@
       :url         "https://github.com/jimrthy/frereth/apps/log-viewer"
       :scm         {:url "https://github.com/jimrthy/frereth"}
       :license     {"Eclipse Public License"
-                    "http://www.eclipse.org/legal/epl-v10.html"}})
+                    "http://www.eclipse.org/legal/epl-v10.html"}}
+ sass {:source-map true})
 
 (deftask dev
   "Start the dev env..."
   [s speak         bool "Notify when build is done"
    p port     PORT int "Port for web server"
-   ;; Q: Break down and use this approach?
    a use-sass      bool "Use Sass instead of less"
    t test-cljs     bool "Compile and run cljs tests"]
   (comp
@@ -119,7 +131,7 @@
    ;; TODO: Switch the open-file to connect to a running emacs instance
    (reload :open-file "vim --servername log_viewer --remote-silent +norm%sG%s| %s"
            :ids #{"js/main"})
-   #_(if use-sass
+   (if use-sass
      (sass)
      (less))
    ;; This starts a repl server with piggieback middleware
@@ -165,10 +177,12 @@
 
 (deftask package
   "Build the package"
-  []
+  [a use-sass      bool "Use Sass instead of less"]
   (comp
    ;; Note that this doesn't offer an option between less and sass
-   #_(less :compression true)
+   (if use-sass
+     (sass :compression true)
+     (less :compression true))
    (cljs :optimizations :advanced
          :compiler-options {:preloads nil})
    (aot)
