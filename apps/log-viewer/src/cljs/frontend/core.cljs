@@ -4,6 +4,8 @@
             [common.hello :refer [foo-cljc]]
             [foo.bar]))
 
+(.log js/console "Top of main")
+
 ;; Reagent application state
 ;; Defonce used to that the state is kept between reloads
 (defonce app-state (r/atom {:y 2017}))

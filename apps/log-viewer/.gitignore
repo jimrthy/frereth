@@ -1,6 +1,7 @@
 /classes
 /checkouts
 /dev-output
+/out
 /target
 .lein-*
 .nrepl-*

@@ -55,7 +55,7 @@
                             [metosin/boot-alt-test "0.3.2" :scope "test"]
                             [metosin/boot-deps-size "0.1.0" :scope "test"]
                             [nrepl "0.4.5"]
-                            [org.clojure/clojure "1.10.0-alpha8"]
+                            [org.clojure/clojure "1.10.0-beta1"]
                             [org.clojure/clojurescript "1.10.339" :scope "test"]
                             [org.clojure/spec.alpha "0.2.176" :exclusions [org.clojure/clojure]]
                             [org.clojure/test.check "0.10.0-alpha3" :scope "test" :exclusions [org.clojure/clojure]]
@@ -89,7 +89,7 @@
           :resource-paths #{"src/clj" "src/cljc"}
           ;; Test path can be included here as source-files are not included in JAR
           ;; Just be careful to not AOT them
-          :source-paths   #{"dev" "src/less" "src/scss" "test/clj" "test/cljs"})
+          :source-paths   #{"dev" "src/cljs" "src/less" "src/scss" "test/clj" "test/cljs"})
 
 (require
  '[adzerk.boot-cljs :refer [cljs]]
