@@ -2,9 +2,8 @@
   (:require-macros [frontend.macro :refer [foobar]])
   (:require [reagent.core :as r]
             [common.hello :refer [foo-cljc]]
-            [foo.bar]))
-
-(.log js/console "Top of main")
+            [foo.bar]
+            [weasel.repl :as repl]))
 
 ;; Reagent application state
 ;; Defonce used to that the state is kept between reloads
@@ -27,6 +26,10 @@
 
 (defn start! []
   (js/console.log "Starting the app")
+
+  (when-not (repl/alive?)
+    (repl/connect "ws://localhost:9001"))
+
   (r/render-component [main] (js/document.getElementById "app")))
 
 ;; When this namespace is (re)loaded the Reagent app is mounted to DOM
