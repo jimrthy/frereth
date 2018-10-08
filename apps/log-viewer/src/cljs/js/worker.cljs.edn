@@ -1,5 +1,5 @@
-{:compiler-options {:main frontend.core
-                    :asset-path "js/worker.out"
+{:compiler-options {:main frontend.worker
+                    :asset-path "/js/worker.out"
                     :parallel-build true
                     :preloads [devtools.preload]
                     :external-config {:devtools/config {:features-to-install [:formatters :hints]}}

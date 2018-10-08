@@ -1,7 +1,7 @@
 (ns frontend.core
   (:require-macros [frontend.macro :refer [foobar]])
-  (:require [reagent.core :as r]
-            [foo.bar]
+  (:require [foo.bar]
+            [reagent.core :as r]
             [weasel.repl :as repl]))
 
 (enable-console-print!)
@@ -74,7 +74,8 @@
     (catch :default ex
       (console.error ex))))
 
-(start!)
+(when js/window
+  (start!))
 
 (comment
   ;; Macro test

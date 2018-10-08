@@ -4,27 +4,34 @@
   (:require [common.hello :refer [foo-cljc]]
             [reagent.core :as r]))
 
+(enable-console-print!)
+(console.log "Worker top")
+
 ;; Reagent application state
 ;; Defonce used to that the state is kept between reloads
 (defonce app-state (r/atom {:y 2017}))
 
 (defn main []
-  (let [dom [:div
-             [:h1 (foo-cljc (:y @app-state))]
-             [:div.btn-toolbar
-              [:button.btn.btn-danger
-               {:type "button"
-                ;; Allowing them to pass arbitrary code around
-                ;; like this would defeat the purpose
-                :on-click #(swap! app-state update :y inc)} "+"]
-              [:button.btn.btn-success
-               {:type "button"
-                :on-click #(swap! app-state update :y dec)} "-"]
-              [:button.btn.btn-default
-               {:type "button"
-                :on-click #(js/console.log @app-state)}
-               "Console.log"]]]]
-    (js/postMessage dom)))
+  (try
+    (let [dom [:div
+               [:h1 (foo-cljc (:y @app-state))]
+               [:div.btn-toolbar
+                [:button.btn.btn-danger
+                 {:type "button"
+                  ;; Allowing them to pass arbitrary code around
+                  ;; like this would defeat the purpose
+                  :on-click #(swap! app-state update :y inc)} "+"]
+                [:button.btn.btn-success
+                 {:type "button"
+                  :on-click #(swap! app-state update :y dec)} "-"]
+                [:button.btn.btn-default
+                 {:type "button"
+                  :on-click #(js/console.log @app-state)}
+                 "Console.log"]]]]
+      (.postMessage js/self dom))
+    (catch :default ex
+      (console.error ex))))
+(main)
 
 (defn onerror
   [error]
@@ -42,3 +49,4 @@
 (defn onmessage
   [event]
   (console.log "Received event" (clj->js event)))
+(console.log "Worker bottom")
