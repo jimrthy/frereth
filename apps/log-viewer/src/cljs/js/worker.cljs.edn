@@ -1,8 +1,9 @@
 {:compiler-options {:main frontend.core
-                    :asset-path "js/main.out"
+                    :asset-path "js/worker.out"
                     :parallel-build true
                     :preloads [devtools.preload]
                     :external-config {:devtools/config {:features-to-install [:formatters :hints]}}
+                    :target :webworker
                     ;; Node deps test
                     ; :install-deps true
                     ; :process-shim true

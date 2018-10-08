@@ -81,6 +81,8 @@
                             ;; Q: Why?
                             [cljsjs/babel-standalone "6.18.1-3" :scope "test"]
 
+                            ;; These next 2 have updated to 4.1.3.
+                            ;; TODO: See how well that works
                             ;; LESS
                             [org.webjars/bootstrap "3.3.7-1"]
                             ;; SASS
@@ -128,6 +130,11 @@
    t test-cljs     bool "Compile and run cljs tests"]
   (comp
    (watch)
+   ;; boot-cljs recommends doing this with :modules to avoid code duplication.
+   ;; Unless you need separate builds.
+   ;; Which really is the case, since this is simulating something that
+   ;; could/should have been supplied from some totally different server.
+   (cljs :ids #{"js/worker"})
    ;; TODO: Switch the open-file to connect to a running emacs instance
    (reload :open-file "vim --servername log_viewer --remote-silent +norm%sG%s| %s"
            :ids #{"js/main"})
@@ -136,11 +143,14 @@
      (less))
    ;; This starts a repl server with piggieback middleware
    (cljs-repl :ids #{"js/main"})
+   ;; Main app
    (cljs :ids #{"js/main"})
    ;; Remove cljs output from classpath but keep within fileset with output role
    (sift :to-asset #{#"^js/.*"})
    ;; Write the resources to filesystem for dev server
    (target :dir #{"dev-output"})
+   ;; TODO: Experiment with this when I get web workers to compile correctly
+   #_(repl :server true)
    (start-app :port port)
    (if speak
      (boot.task.built-in/speak)

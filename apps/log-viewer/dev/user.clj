@@ -29,10 +29,10 @@
 (defn cljs-repl
   ;; The last time I actually tried this, it opened a new browser window with
   ;; instructions about writing and index.html.
-  ;; That was when my cljs config was pretty broken. So this might work
-  ;; fine.
+
   ;; In practice, under cider and emacs, running cider-connect-sibling-cljs
-  ;; and choosing the weaser REPL type works fine.
+  ;; and choosing the weaser REPL type, then reloading the web page works fine.
+
   ;; This seems worth keeping around as a starting point for the sake of
   ;; anyone who isn't using emacs.
   "In theory, this launches a REPL that interacts with a new browser window"
