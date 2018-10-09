@@ -51,10 +51,17 @@
                       ;; supported on DedicatedWorker
                       #js{"type" "classic"})]
       (set! (.-onmessage worker)
-            (fn [new-dom]
-              (println "Rendering DOM")
-              (r/render-component [(constantly new-dom)]
-                                  (js/document.getElementById "app"))))
+            (fn [event]
+              (let [new-dom-wrapper (.-data event)
+                    _ (println (str "Trying to read '"
+                                    new-dom-wrapper
+                                    "' as EDN"))
+                    ;; This looks like it fail because (pr-str (fn [] ...))
+                    ;; produces #object[Function]
+                    dom (cljs.reader/read-string new-dom-wrapper)]
+                (println "Rendering DOM" (pr-str dom))
+                (r/render-component [(constantly dom)]
+                                    (js/document.getElementById "app")))))
       worker)))
 
 (defn start! []
