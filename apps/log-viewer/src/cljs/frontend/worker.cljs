@@ -14,35 +14,28 @@
 (defn main [self]
   ;; Keep in mind: web workers can absolutely open their own websockets.
   (try
-    (let [dom '[:div
-                [:h1 (foo-cljc (:y @app-state))]
-                [:div.btn-toolbar
-                 [:button.btn.btn-danger
-                  {:type "button"
-                   ;; Allowing them to pass arbitrary code around
-                   ;; like this would defeat the purpose
-                   ;:on-click ::button-+  ; #(swap! app-state update :y inc)
-                   }
-                  "+"]
-                 [:button.btn.btn-success
-                  {:type "button"
-                   ;:on-click ::button--  ; #(swap! app-state update :y dec)
-                   } "-"]
-                 [:button.btn.btn-default
-                  {:type "button"
-                   ;:on-click ::button-log  ; #(js/console.log @app-state)
-                   }
-                  "Console.log"]]]]
+    (let [dom [:div
+               ;; Changes here aren't making it to the browser.
+               [:h1 (#_foo-cljc str "Hello from hard-coding " (:y @app-state))]
+               [:div.btn-toolbar
+                [:button.btn.btn-danger
+                 {:type "button"
+                  ;; Allowing them to pass arbitrary code around
+                  ;; like this would defeat the purpose
+                  :on-click ::button-+  ; #(swap! app-state update :y inc)
+                  }
+                 "+"]
+                [:button.btn.btn-success
+                 {:type "button"
+                  :on-click ::button--  ; #(swap! app-state update :y dec)
+                  } "-"]
+                [:button.btn.btn-default
+                 {:type "button"
+                  :on-click ::button-log  ; #(js/console.log @app-state)
+                  }
+                 "Console.log"]]]]
       ;; TODO: transit should be faster than EDN
       ;; And transfer ownership rather than spending the time on a clone
-      ;; These fail
-      (comment (.postMessage js/self dom)  ; dom can't be cloned.
-               ;; ditto
-               (.postMessage js/self (clj->js dom))
-               ;; frontend$worker$main.postMessage is not a function
-               (.postMesage js/self (pr-str dom))
-               ;; postMessage is undefined
-               (postMessage (pr-str dom)))
       (.postMessage self (pr-str dom)))
     (catch :default ex
       (js/console.error ex))))
