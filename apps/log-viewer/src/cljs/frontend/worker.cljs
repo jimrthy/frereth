@@ -46,16 +46,7 @@
 (set! (.-onerror js/self)
       (fn
         [error]
-        (console.warn error)
-        ;; These properties are non-standard and need to go away
-        (let [description (str (.-filename error)
-                               ":"
-                               error.lineno
-                               " -- "
-                               error.message)]
-          ;; This incarnation gets a TypeError here when we try to
-          ;; translate the event data from clj->js on a button click.
-          (console.error description))
+        (console.error error)
         ;; We can call .preventDefault on error to "prevent the default
         ;; action from taking place.
         ;; Q: Do we want to?
@@ -64,5 +55,6 @@
 (set! (.-onmessage js/self)
       (fn
         [event]
+        ;; Q: What can we do with this?
         (console.log "Received event" (clj->js (.-data event)))))
 (console.log "Worker bottom")

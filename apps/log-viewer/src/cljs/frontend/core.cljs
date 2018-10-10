@@ -32,8 +32,6 @@
   ;; react wrappers and either write my own (insanity!) or
   ;; see if something like Matt-Esch/virtual-dom could possibly work.
   (when tag
-    (console.log "Trying to sanitize" tag attributes body)
-
     (let [prefix (into [tag]
                        (when (map? attributes)
                          [(reduce
@@ -54,12 +52,7 @@
                   (if (map? attributes)
                     body
                     (into [attributes] body))]
-              (console.log "Content body:" body "because attributes is" (if (map? attributes)
-                                                                          ""
-                                                                          "not")
-                           "a map")
               (map (fn [content]
-                     (console.log "Possibly recursively sanitizing" content)
                      (if (vector? content)
                        (sanitize-scripts worker content)
                        content))
@@ -98,12 +91,8 @@
       (set! (.-onmessage worker)
             (fn [event]
               (let [new-dom-wrapper (.-data event)
-                    _ (println (str "Trying to read '"
-                                    new-dom-wrapper
-                                    "' as EDN"))
                     raw-dom (cljs.reader/read-string new-dom-wrapper)
                     dom (sanitize-scripts worker raw-dom)]
-                (println "Rendering DOM" (pr-str dom))
                 (r/render-component [(constantly dom)]
                                     (js/document.getElementById "app")))))
       worker)))
@@ -117,7 +106,7 @@
   (try
     (if (spawn-worker)
       (do
-        ;; This is getting ahead of myself.
+        ;; The worker pool is getting ahead of myself.
         ;; Part of the missing Window Manager abstraction mentioned above
         (swap! idle-worker-pool conj spawn-worker)
         (.log js/console "Worker spawned"))
