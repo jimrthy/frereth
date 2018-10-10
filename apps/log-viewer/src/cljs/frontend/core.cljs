@@ -34,17 +34,36 @@
   (when tag
     (console.log "Trying to sanitize" tag attributes body)
 
-    [tag
-     ;; Q: Is nil attributes legal?
-     (when (map? attributes)
-       (throw (js/Error. "Not Implemented")))
-     (let [body
-           (if (map? attributes)
-             body
-             (into [attributes] body))]
-       (into []
-             (map (partial sanitize-scripts worker)
-                  body)))]))
+    (let [prefix (into [tag]
+                       (when (map? attributes)
+                         [(reduce
+                            (fn [acc [k v]]
+                              (let [s (name k)
+                                    prefix (subs s 0 3)]
+                                (assoc acc k
+                                       (if (= "on-" prefix)
+                                         (fn [event]
+                                           (console.log "Posting" v "to web worker")
+                                           ;; Can't POST the raw event
+                                           (.postMessage worker [v #_event]))
+                                         v))))
+                            {}
+                            attributes)]))]
+      (into prefix
+            (let [body
+                  (if (map? attributes)
+                    body
+                    (into [attributes] body))]
+              (console.log "Content body:" body "because attributes is" (if (map? attributes)
+                                                                          ""
+                                                                          "not")
+                           "a map")
+              (map (fn [content]
+                     (console.log "Possibly recursively sanitizing" content)
+                     (if (vector? content)
+                       (sanitize-scripts worker content)
+                       content))
+                   body))))))
 
 (defn spawn-worker
   []
@@ -71,7 +90,7 @@
     ;; weight. Is it worth spawning a new one for each
     ;; world (which are also supposed to be pretty hefty).
     (let [worker (new window.Worker
-                      "js/worker.js"
+                      "/js/worker.js"
                       ;; Currently redundant:
                       ;; in Chrome, at least, module scripts are not
                       ;; supported on DedicatedWorker

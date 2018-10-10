@@ -15,8 +15,9 @@
   ;; Keep in mind: web workers can absolutely open their own websockets.
   (try
     (let [dom [:div
-               ;; Changes here aren't making it to the browser.
-               [:h1 (#_foo-cljc str "Hello from hard-coding " (:y @app-state))]
+               ;; Changes in here still aren't propagating to the browser correctly
+               [:h1 (foo-cljc (:y @app-state))
+                #_(str "Hello from hard-coding " (:y @app-state))]
                [:div.btn-toolbar
                 [:button.btn.btn-danger
                  {:type "button"
@@ -35,26 +36,33 @@
                   }
                  "Console.log"]]]]
       ;; TODO: transit should be faster than EDN
-      ;; And transfer ownership rather than spending the time on a clone
+      ;; Pretty definitely want to transfer ownership rather than
+      ;; spending the time on a clone
       (.postMessage self (pr-str dom)))
     (catch :default ex
-      (js/console.error ex))))
+      (console.error ex))))
 (main js/self)
 
-(defn onerror
-  [error]
-  (let [description (str error.filename
-                         ":"
-                         error.lineno
-                         " -- "
-                         error.message)]
-    (js/console.error description))
-  ;; We can call .preventDefault on error to "prevent the default
-  ;; action from taking place.
-  ;; Q: Do we want to?
-  (comment (.preventDefault error)))
+(set! (.-onerror js/self)
+      (fn
+        [error]
+        (console.warn error)
+        ;; These properties are non-standard and need to go away
+        (let [description (str (.-filename error)
+                               ":"
+                               error.lineno
+                               " -- "
+                               error.message)]
+          ;; This incarnation gets a TypeError here when we try to
+          ;; translate the event data from clj->js on a button click.
+          (console.error description))
+        ;; We can call .preventDefault on error to "prevent the default
+        ;; action from taking place.
+        ;; Q: Do we want to?
+        (comment (.preventDefault error))))
 
-(defn onmessage
-  [event]
-  (js/console.log "Received event" (clj->js event)))
-(js/console.log "Worker bottom")
+(set! (.-onmessage js/self)
+      (fn
+        [event]
+        (console.log "Received event" (clj->js (.-data event)))))
+(console.log "Worker bottom")
