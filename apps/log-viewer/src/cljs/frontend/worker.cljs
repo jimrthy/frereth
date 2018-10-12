@@ -1,7 +1,8 @@
 (ns frontend.worker
   ;; This really should be a stand-alone project supplied by Server
   "Generate DOM structure and manage state"
-  (:require [common.hello :refer [foo-cljc]]
+  (:require [cljs.reader]
+            [common.hello :refer [foo-cljc]]
             [reagent.core :as r]))
 
 (enable-console-print!)
@@ -54,7 +55,12 @@
 
 (set! (.-onmessage js/self)
       (fn
-        [event]
+        [wrapper]
         ;; Q: What can we do with this?
-        (console.log "Received event" (clj->js (.-data event)))))
+        (comment (console.log "Received event" (clj->js (.-data wrapper))))
+        (console.log "Worker received event" wrapper)
+        ;; Wrapper.data looks like:
+
+        (let [[tag event :as data] (cljs.reader/read-string (.-data wrapper))]
+          (console.log "Should dispatch" event "based on" tag))))
 (console.log "Worker bottom")

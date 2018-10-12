@@ -48,6 +48,8 @@
                                           org.clojure/clojure
                                           org.slf4j/jcl-over-slf4j]
                              :scope "test"]
+                            [com.cognitect/transit-clj "0.8.313"]
+                            [com.cognitect/transit-cljs "0.8.256"]
                             [crisptrutski/boot-cljs-test "0.3.4" :scope "test"]
                             [deraen/boot-sass "0.3.1" :scope "test"]
                             [deraen/boot-less "0.6.2" :scope "test"]

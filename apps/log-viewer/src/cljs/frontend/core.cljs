@@ -42,8 +42,42 @@
                                        (if (= "on-" prefix)
                                          (fn [event]
                                            (console.log "Posting" v "to web worker")
-                                           ;; Can't POST the raw event
-                                           (.postMessage worker [v #_event]))
+                                           ;; Failing experiments
+                                           (comment
+                                             ;; Can't POST the raw event
+                                             (.postMessage worker [v #_event])
+                                             ;; Can't serialize event this way
+
+                                             (.postMessage worker (prn-str [v (js->clj event)]))
+                                             (let [cloned (goog.object/forEach event
+                                                                               ;; called for side-effects
+                                                                               ;; Q: Is this really the way to go?
+                                                                               ;; What's a solid idiomatic way to
+                                                                               ;; handle this?
+                                                                               (fn [val key obj]
+                                                                                 ))]))
+                                           (let [ks (.keys js/Object event)
+                                                 ;; Q: Would this be worth using a transducer?
+                                                 pairs (map (fn [k]
+                                                              (let [v (aget event k)]
+                                                                (when (or (not v)
+                                                                          (boolean? v)
+                                                                          (number? v)
+                                                                          (string? v)
+                                                                          ;; clojurescript has issues with the
+                                                                          ;; js/Symbol primitive.
+                                                                          ;; e.g. https://dev.clojure.org/jira/browse/CLJS-1628
+                                                                          ;; For now, skip them.
+                                                                          )
+                                                                  [k v])))
+                                                            ks)
+                                                 pairs (filter identity pairs)
+                                                 clone (reduce
+                                                        (fn [acc [k v]]
+                                                          (assoc acc k v))
+                                                        {}
+                                                        pairs)]
+                                             (.postMessage worker (pr-str [v clone]))))
                                          v))))
                             {}
                             attributes)]))]
