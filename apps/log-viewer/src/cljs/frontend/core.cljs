@@ -1,14 +1,16 @@
 (ns frontend.core
   (:require-macros [frontend.macro :refer [foobar]])
   (:require [foo.bar]
-            ;; Start by supporting this, since it's so popular
+            ;; Start by at least partially supporting this, since it's
+            ;; so popular
             [reagent.core :as r]
+            [clojure.spec.alpha :as s]
             [weasel.repl :as repl]))
 
 (enable-console-print!)
 
 (def idle-worker-pool
-  "Workers were designed to be lightweight. How dangerous to share them?"
+  "Workers were designed to be heavyweight. How dangerous to pool?"
   (atom []))
 (comment
   (println idle-worker-pool)
@@ -17,10 +19,45 @@
   (.postMessage (-> idle-worker-pool deref first) ::abc)
   )
 
+(defn event-forwarder
+  "Sanitize event and post it to Worker"
+  [worker tag]
+  (fn [event]
+    (console.debug "Posting" v "to web worker")
+    (let [ks (.keys js/Object event)
+          ;; Q: Would this be worth using a transducer?
+          pairs (map (fn [k]
+                       (let [v (aget event k)]
+                         ;; Only transfer primitives
+                         (when (some #(% v)
+                                               #{not
+                                                 boolean?
+                                                 number?
+                                                 string?
+                                                 ;; clojurescript has issues with the
+                                                 ;; js/Symbol primitive.
+                                                 ;; e.g. https://dev.clojure.org/jira/browse/CLJS-1628
+                                                 ;; For now, skip them.
+                                                 })
+                                     [k v])))
+                     ks)
+          pairs (filter identity pairs)
+          clone (into {} pairs)]
+      (.postMessage worker (pr-str [tag clone])))))
+
+(defn on-*-replace
+  [worker ctrl-id acc [k v]]
+  (let [s (name k)
+        prefix (subs s 0 3)]
+    (assoc acc k
+           (if (= "on-" prefix)
+             (event-forwarder worker ctrl-id)
+             v))))
+
 (defn sanitize-scripts
   "Convert scripting events to messages that get posted back to worker"
   [worker
-   [tag attributes & body :as raw-dom]]
+   [ctrl-id attributes & body :as raw-dom]]
   ;; Need to walk the tree to find any/all scripting components
   ;; This is fine for plain "Form-1" components (as defined in
   ;; https://purelyfunctional.tv/guide/reagent) that just
@@ -31,54 +68,11 @@
   ;; It's very tempting to just give up on any of the main
   ;; react wrappers and either write my own (insanity!) or
   ;; see if something like Matt-Esch/virtual-dom could possibly work.
-  (when tag
-    (let [prefix (into [tag]
+  (when ctrl-id
+    (let [prefix (into [ctrl-id]
                        (when (map? attributes)
                          [(reduce
-                            (fn [acc [k v]]
-                              (let [s (name k)
-                                    prefix (subs s 0 3)]
-                                (assoc acc k
-                                       (if (= "on-" prefix)
-                                         (fn [event]
-                                           (console.log "Posting" v "to web worker")
-                                           ;; Failing experiments
-                                           (comment
-                                             ;; Can't POST the raw event
-                                             (.postMessage worker [v #_event])
-                                             ;; Can't serialize event this way
-
-                                             (.postMessage worker (prn-str [v (js->clj event)]))
-                                             (let [cloned (goog.object/forEach event
-                                                                               ;; called for side-effects
-                                                                               ;; Q: Is this really the way to go?
-                                                                               ;; What's a solid idiomatic way to
-                                                                               ;; handle this?
-                                                                               (fn [val key obj]
-                                                                                 ))]))
-                                           (let [ks (.keys js/Object event)
-                                                 ;; Q: Would this be worth using a transducer?
-                                                 pairs (map (fn [k]
-                                                              (let [v (aget event k)]
-                                                                (when (or (not v)
-                                                                          (boolean? v)
-                                                                          (number? v)
-                                                                          (string? v)
-                                                                          ;; clojurescript has issues with the
-                                                                          ;; js/Symbol primitive.
-                                                                          ;; e.g. https://dev.clojure.org/jira/browse/CLJS-1628
-                                                                          ;; For now, skip them.
-                                                                          )
-                                                                  [k v])))
-                                                            ks)
-                                                 pairs (filter identity pairs)
-                                                 clone (reduce
-                                                        (fn [acc [k v]]
-                                                          (assoc acc k v))
-                                                        {}
-                                                        pairs)]
-                                             (.postMessage worker (pr-str [v clone]))))
-                                         v))))
+                           (partial on-*-replace worker ctrl-id)
                             {}
                             attributes)]))]
       (into prefix

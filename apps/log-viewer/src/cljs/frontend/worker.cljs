@@ -17,27 +17,26 @@
   (try
     (let [dom [:div
                ;; Changes in here still aren't propagating to the browser correctly
-               [:h1 (foo-cljc (:y @app-state))
-                #_(str "Hello from hard-coding " (:y @app-state))]
+               [:h1 (foo-cljc (:y @app-state))]
                [:div.btn-toolbar
                 [:button.btn.btn-danger
                  {:type "button"
-                  ;; Allowing them to pass arbitrary code around
-                  ;; like this would defeat the purpose
-                  :on-click ::button-+  ; #(swap! app-state update :y inc)
+                  ;; Primitive parts of events will be forwarded here
+                  ;; using these keywords as tags to identify them.
+                  :on-click ::button-+
                   }
                  "+"]
                 [:button.btn.btn-success
                  {:type "button"
-                  :on-click ::button--  ; #(swap! app-state update :y dec)
+                  :on-click ::button--
                   } "-"]
                 [:button.btn.btn-default
                  {:type "button"
-                  :on-click ::button-log  ; #(js/console.log @app-state)
+                  :on-click ::button-log
                   }
                  "Console.log"]]]]
       ;; TODO: transit should be faster than EDN
-      ;; Pretty definitely want to transfer ownership rather than
+      ;; Almost certain we want to transfer ownership rather than
       ;; spending the time on a clone
       (.postMessage self (pr-str dom)))
     (catch :default ex
@@ -56,11 +55,8 @@
 (set! (.-onmessage js/self)
       (fn
         [wrapper]
-        ;; Q: What can we do with this?
-        (comment (console.log "Received event" (clj->js (.-data wrapper))))
         (console.log "Worker received event" wrapper)
         ;; Wrapper.data looks like:
-
         (let [[tag event :as data] (cljs.reader/read-string (.-data wrapper))]
           (console.log "Should dispatch" event "based on" tag))))
 (console.log "Worker bottom")
