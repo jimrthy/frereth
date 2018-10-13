@@ -21,9 +21,9 @@
 
 (defn event-forwarder
   "Sanitize event and post it to Worker"
-  [worker tag]
+  [worker ctrl-id tag]
   (fn [event]
-    (console.debug "Posting" v "to web worker")
+    (console.info "Posting" tag "to web worker for" ctrl-id)
     (let [ks (.keys js/Object event)
           ;; Q: Would this be worth using a transducer?
           pairs (map (fn [k]
@@ -43,7 +43,7 @@
                      ks)
           pairs (filter identity pairs)
           clone (into {} pairs)]
-      (.postMessage worker (pr-str [tag clone])))))
+      (.postMessage worker (pr-str [tag ctrl-id clone])))))
 
 (defn on-*-replace
   [worker ctrl-id acc [k v]]
@@ -51,7 +51,7 @@
         prefix (subs s 0 3)]
     (assoc acc k
            (if (= "on-" prefix)
-             (event-forwarder worker ctrl-id)
+             (event-forwarder worker ctrl-id v)
              v))))
 
 (defn sanitize-scripts

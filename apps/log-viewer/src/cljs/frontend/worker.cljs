@@ -12,7 +12,7 @@
 ;; Defonce used to that the state is kept between reloads
 (defonce app-state (r/atom {:y 2017}))
 
-(defn main [self]
+(defn main []
   ;; Keep in mind: web workers can absolutely open their own websockets.
   (try
     (let [dom [:div
@@ -38,10 +38,10 @@
       ;; TODO: transit should be faster than EDN
       ;; Almost certain we want to transfer ownership rather than
       ;; spending the time on a clone
-      (.postMessage self (pr-str dom)))
+      (.postMessage js/self (pr-str dom)))
     (catch :default ex
       (console.error ex))))
-(main js/self)
+(main)
 
 (set! (.-onerror js/self)
       (fn
@@ -57,6 +57,19 @@
         [wrapper]
         (console.log "Worker received event" wrapper)
         ;; Wrapper.data looks like:
-        (let [[tag event :as data] (cljs.reader/read-string (.-data wrapper))]
-          (console.log "Should dispatch" event "based on" tag))))
+        (let [[tag ctrl-id event :as data] (cljs.reader/read-string (.-data wrapper))]
+          (console.log "Should dispatch" event "to" ctrl-id "based on" tag)
+          (try
+            (let [dirty?
+                  (condp = tag
+                    ;; button-log is working.
+                    ;; But button-- and button-+ fail because there's
+                    ;; "No matching clause"
+                    ::button-- (swap app-state update :y dec)
+                    ::button-+ (swap app-state update :y inc)
+                    ::button-log (console.log @app-state))]
+              (console.log "Dirty?" dirty)
+              (when dirty? (main)))
+            (catch :default ex
+              (console.error ex))))))
 (console.log "Worker bottom")
