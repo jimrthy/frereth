@@ -65,8 +65,8 @@
                     ;; button-log is working.
                     ;; But button-- and button-+ fail because there's
                     ;; "No matching clause"
-                    ::button-- (swap app-state update :y dec)
-                    ::button-+ (swap app-state update :y inc)
+                    ::button-- (swap! app-state update :y dec)
+                    ::button-+ (swap! app-state update :y inc)
                     ::button-log (console.log @app-state))]
               (console.log "Dirty?" dirty)
               (when dirty? (main)))
