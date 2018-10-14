@@ -23,26 +23,38 @@
   "Sanitize event and post it to Worker"
   [worker ctrl-id tag]
   (fn [event]
+    ;; TODO: Window manager needs to set up something so events
+    ;; don't go to unfocused windows.
+    ;; Those really need some kind of extra styling to show an
+    ;; inactive overlay. The click (or mouse-over...whichever
+    ;; matches the end-user's preferences) should transfer
+    ;; focus.
     (console.info "Posting" tag "to web worker for" ctrl-id)
     (let [ks (.keys js/Object event)
           ;; Q: Would this be worth using a transducer?
+          ;; Or possibly clojure.walk?
           pairs (map (fn [k]
                        (let [v (aget event k)]
                          ;; Only transfer primitives
                          (when (some #(% v)
-                                               #{not
-                                                 boolean?
-                                                 number?
-                                                 string?
-                                                 ;; clojurescript has issues with the
-                                                 ;; js/Symbol primitive.
-                                                 ;; e.g. https://dev.clojure.org/jira/browse/CLJS-1628
-                                                 ;; For now, skip them.
-                                                 })
-                                     [k v])))
+                                     #{not
+                                       boolean?
+                                       number?
+                                       string?
+                                       ;; clojurescript has issues with the
+                                       ;; js/Symbol primitive.
+                                       ;; e.g. https://dev.clojure.org/jira/browse/CLJS-1628
+                                       ;; For now, skip them.
+                                       })
+                           [k v])))
                      ks)
           pairs (filter identity pairs)
           clone (into {} pairs)]
+      ;; Q: How do I indicate that this has been handled?
+      ;; In greater depth, how should the Worker indicate that it has
+      ;; handled the event, so this can do whatever's appropriate with
+      ;; it (whether that's cancelling it, stopping the bubbling, or
+      ;; whatever).
       (.postMessage worker (pr-str [tag ctrl-id clone])))))
 
 (defn on-*-replace
