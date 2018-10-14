@@ -8,6 +8,9 @@
       (when (and a b)
         (str a (inc (Long/parseLong b)))))))
 
+(def default-version
+  "Really just for running inside docker w/out git tags"
+  "0.0.1-???-dirty")
 (defn deduce-version-from-git
   "Avoid another decade of pointless, unnecessary and error-prone
   fiddling with version labels in source code.
@@ -29,10 +32,12 @@
                                        "--long"
                                        "--tags"
                                        "--match" "[0-9].*"))))]
-    (cond
-      dirty? (str (next-version version) "-" hash "-dirty")
-      (pos? (Long/parseLong commits)) (str (next-version version) "-" hash)
-      :otherwise version)))
+    (if commits
+      (cond
+        dirty? (str (next-version version) "-" hash "-dirty")
+        (pos? (Long/parseLong commits)) (str (next-version version) "-" hash)
+        :otherwise version)
+      default-version)))
 
 (def project 'com.frereth/log-viewer)
 (def version #_"0.1.0-SNAPSHOT" (deduce-version-from-git))
@@ -41,47 +46,100 @@
                             [adzerk/boot-cljs-repl "0.4.0" :scope "test"]
                             [adzerk/boot-reload "0.6.0" :scope "test"]
                             [bidi "2.1.4"]
-                            [cider/piggieback "0.3.9" :scope "test"]
+                            [cider/piggieback "0.3.9" :scope "test" :exclusions [com.google.guava/guava
+                                                                                 com.google.javascript/closure-compiler-externs
+                                                                                 com.google.javascript/closure-compiler-unshaded
+                                                                                 nrepl
+                                                                                 org.clojure/clojure
+                                                                                 org.clojure/clojurescript
+                                                                                 org.clojure/tools.reader]]
                             [com.cemerick/pomegranate
                              "1.1.0"
-                             :exclusions [commons-codec
+                             :exclusions [com.google.guava/guava
+                                          commons-codec
+                                          commons-io
                                           org.clojure/clojure
-                                          org.slf4j/jcl-over-slf4j]
+                                          org.slf4j/jcl-over-slf4j
+                                          org.slf4j/slf4j-api]
                              :scope "test"]
-                            [com.cognitect/transit-clj "0.8.313"]
+                            [com.cognitect/transit-clj "0.8.313" :exclusions [commons-codec]]
                             [com.cognitect/transit-cljs "0.8.256"]
                             [crisptrutski/boot-cljs-test "0.3.4" :scope "test"]
                             [deraen/boot-sass "0.3.1" :scope "test"]
                             [deraen/boot-less "0.6.2" :scope "test"]
-                            [doo "0.1.10" :scope "test"]
+                            [doo "0.1.10" :scope "test" :exclusions [args4j
+                                                                     com.google.code.findbugs/jsr305
+                                                                     com.google.code.gson/gson
+                                                                     com.google.guava/guava
+                                                                     com.google.javascript/closure-compiler-externs
+                                                                     com.google.javascript/closure-compiler-unshaded
+                                                                     com.google.protobuf/protobuf-java
+                                                                     org.clojure/clojure
+                                                                     org.clojure/clojurescript
+                                                                     org.clojure/clojure.specs.alpha
+                                                                     org.clojure/google-closure-library
+                                                                     org.clojure/google-closure-library-third-party
+                                                                     org.clojure/spec.alpha
+                                                                     org.clojure/tools.reader]]
                             [metosin/boot-alt-test "0.3.2" :scope "test"]
                             [metosin/boot-deps-size "0.1.0" :scope "test"]
-                            [nrepl "0.4.5"]
-                            [org.clojure/clojure "1.10.0-beta1"]
-                            [org.clojure/clojurescript "1.10.339" :scope "test"]
+                            [nrepl "0.4.5" :exclusions [org.clojure/clojure]]
+                            [org.clojure/clojure "1.10.0-beta3"]
+                            [org.clojure/clojurescript "1.10.339" :scope "test" :exclusions [commons-codec
+                                                                                             com.cognitect/transit-clj
+                                                                                             com.cognitect/transit-java
+                                                                                             org.clojure/clojure]]
                             [org.clojure/spec.alpha "0.2.176" :exclusions [org.clojure/clojure]]
                             [org.clojure/test.check "0.10.0-alpha3" :scope "test" :exclusions [org.clojure/clojure]]
                             ;; For boot-less
                             [org.slf4j/slf4j-nop "1.7.25" :scope "test"]
                             ;; This is the task that combines all the linters
                             [tolitius/boot-check "0.1.11" :scope "test" :exclusions [boot/core
+                                                                                     org.clojure/clojure
                                                                                      org.tcrawley/dynapath]]
-                            [weasel "0.7.0" :scope "test"]
+                            [weasel "0.7.0" :scope "test" :exclusions [args4j
+                                                                       com.google.code.findbugs/jsr305
+                                                                       com.google.code.gson/gson
+                                                                       com.google.guava/guava
+                                                                       com.google.javascript/closure-compiler-externs
+                                                                       com.google.protobuf/protobuf-java
+                                                                       org.clojure/clojure
+                                                                       org.clojure/clojurescript
+                                                                       org.clojure/google-closure-library
+                                                                       org.clojure/google-closure-library-third-party
+                                                                       org.clojure/tools.reader]]
 
                             ;; Backend
+                            ;; Q: Conflict w/ core.specs.alpha ?
+                            ;; A: Must have an older version installed
                             [frereth-cp "0.0.1-SNAPSHOT"]
-                            [integrant "0.7.0"]
-                            [integrant/repl "0.3.1"]
+                            [integrant "0.7.0" :exclusions [org.clojure/clojure
+                                                            org.clojure/core.specs.alpha
+                                                            org.clojure/spec.alpha]]
+                            [integrant/repl "0.3.1" :exclusions [integrant
+                                                                 org.clojure/clojure
+                                                                 org.clojure/core.specs.alpha
+                                                                 org.clojure/spec.alpha
+                                                                 org.clojure/tools.namespace]]
                             [javax.servlet/servlet-api "3.0-alpha-1"]  ; for ring multipart middleware
-                            [metosin/ring-http-response "0.9.0"]
-                            [org.clojure/tools.namespace "0.3.0-alpha4"]
-                            [ring/ring-core "1.7.0"]
+                            [metosin/ring-http-response "0.9.0" :exclusions [clj-time
+                                                                             commons-codec
+                                                                             commons-fileupload
+                                                                             commons-io
+                                                                             joda-time
+                                                                             potemkin
+                                                                             ring/ring-codec
+                                                                             ring/ring-core]]
+                            [org.clojure/tools.namespace "0.3.0-alpha4" :exclusions [org.clojure/clojure
+                                                                                     org.clojure/tools.reader]]
+                            [ring/ring-core "1.7.0" :exclusions [org.clojure/clojure]]
 
                             ;; Frontend
-                            [reagent "0.8.1" :scope "test"]
-                            [binaryage/devtools "0.9.10" :scope "test"]
+                            [reagent "0.8.1" :scope "test" :exclusions [org.clojure/clojure
+                                                                        org.clojure/spec.alpha]]
+                            [binaryage/devtools "0.9.10" :scope "test" :exclusions [org.clojure/tools.reader]]
                             ;; Q: Why?
-                            [cljsjs/babel-standalone "6.18.1-3" :scope "test"]
+                            [cljsjs/babel-standalone "6.18.1-3" :scope "test" :exclusions [org.clojure/clojure]]
 
                             ;; These next 2 have updated to 4.1.3.
                             ;; TODO: See how well that works
@@ -99,13 +157,15 @@
  '[adzerk.boot-cljs :refer [cljs]]
  '[adzerk.boot-cljs-repl :refer [cljs-repl start-repl repl-env]]
  '[adzerk.boot-reload :refer [reload]]
+ ;; This one's defined under src/clj/
+ '[backend.boot :refer [start-app]]
+ '[boot.pod :as pod]
  '[deraen.boot-less :refer [less]]
  '[deraen.boot-sass :refer [sass]]
  '[metosin.boot-alt-test :refer [alt-test]]
  '[metosin.boot-deps-size :refer [deps-size]]
  '[crisptrutski.boot-cljs-test :refer [test-cljs]]
- '[backend.boot :refer [start-app]]
- '[integrant.repl :refer [clear go halt prep init reset reset-all]]
+  '[integrant.repl :refer [clear go halt prep init reset reset-all]]
  '[tolitius.boot-check :as check])
 
 ;; Really need to consider less vs. sass vs. garden
@@ -124,10 +184,22 @@
                     "http://www.eclipse.org/legal/epl-v10.html"}}
  sass {:source-map true})
 
+(deftask check-conflicts
+  "Verify there are no dependency conflicts."
+  []
+  (with-pass-thru fs
+    (require '[boot.pedantic :as pedant])
+    (let [dep-conflicts (resolve 'pedant/dep-conflicts)]
+      (if-let [conflicts (not-empty (dep-conflicts pod/env))]
+        (throw (ex-info (str "Unresolved dependency conflicts. "
+                             "Use :exclusions to resolve them!")
+                        conflicts))
+        (println "\nVerified there are no dependency conflicts.")))))
+
 (deftask dev
   "Start the dev env..."
   [s speak         bool "Notify when build is done"
-   p port     PORT int "Port for web server"
+   p port     PORT int  "Port for web server"
    a use-sass      bool "Use Sass instead of less"
    t test-cljs     bool "Compile and run cljs tests"]
   (comp
