@@ -22,16 +22,7 @@ RUN mkdir -p src/clj && \
     mkdir -p test/clj && \
     mkdir test/cljs
 
-COPY .boot-jvm-options boot.properties profile.boot ./
-
-# Get the fundamental dependencies cached
-RUN boot help
-
-# It's tempting to just do one COPY command. But build.boot
-# is going to change more often than the others. So might
-# as well try to minimize the overlap, since downloading its
-# dependencies takes a while.
-COPY build.boot .
+COPY .boot-jvm-options boot.properties profile.boot build.boot ./
 
 # The way this is set up is obnoxious.
 # Any changes to the backend mean downloading a slew of new
@@ -42,17 +33,15 @@ COPY build.boot .
 COPY src/clj/backend/ ./src/clj/backend/
 
 # Pull in extras that go with day-to-day dev work.
-# These leave out several dependencies, like the various nrepl
-# tools. Running cider repl -s later helps with that.
-# But this cuts back on the dependencies that has to download
-RUN boot check-conflicts
+RUN boot cider repl -s
 
 COPY . .
 
 RUN chmod u+x boot.sh
 
-# FIXME: Bring this back
-RUN ./boot.sh cider repl -s
+# These don't seem to cache all the dependencies from maven.
+# Q: Why not?
+RUN boot cljs --ids js/main cljs --ids js/worker target
 
 # Want to run local boot.sh to pick up local overrides.
 # So override base image entrypoint to nothing.

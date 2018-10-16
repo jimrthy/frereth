@@ -65,7 +65,7 @@
                     ::button-- (swap! app-state update :y dec)
                     ::button-+ (swap! app-state update :y inc)
                     ::button-log (console.log @app-state))]
-              (console.log "Dirty?" dirty)
+              (console.log "Dirty?" dirty?)
               (when dirty? (main)))
             (catch :default ex
               (console.error ex))))))

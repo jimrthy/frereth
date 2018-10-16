@@ -165,12 +165,13 @@
  '[metosin.boot-alt-test :refer [alt-test]]
  '[metosin.boot-deps-size :refer [deps-size]]
  '[crisptrutski.boot-cljs-test :refer [test-cljs]]
-  '[integrant.repl :refer [clear go halt prep init reset reset-all]]
+ '[integrant.repl :refer [clear go halt prep init reset reset-all]]
  '[tolitius.boot-check :as check])
 
 ;; Really need to consider less vs. sass vs. garden
 (task-options!
  aot {:namespace   #{'backend.main}}
+ cljs-repl {:nrepl-opts {:bind "0.0.0.0" :port 43043}}
  jar {:file        (str "frereth-log-viewer-" version ".jar")
       :main 'backend.main}
  less {:source-map true}
@@ -182,7 +183,8 @@
       :scm         {:url "https://github.com/jimrthy/frereth"}
       :license     {"Eclipse Public License"
                     "http://www.eclipse.org/legal/epl-v10.html"}}
- sass {:source-map true})
+ sass {:source-map true}
+ start-repl {:ip "0.0.0.0" :port 9001})
 
 (deftask check-conflicts
   "Verify there are no dependency conflicts."
@@ -211,12 +213,15 @@
    (cljs :ids #{"js/worker"})
    ;; TODO: Switch the open-file to connect to a running emacs instance
    (reload :open-file "vim --servername log_viewer --remote-silent +norm%sG%s| %s"
-           :ids #{"js/main"})
+           :ids #{"js/main"}
+           ;; Q: Do I want/need to specify the :ip?
+           ;; Need to map this
+           :port 43140)
    (if use-sass
      (sass)
      (less))
    ;; This starts a repl server with piggieback middleware
-   (cljs-repl :ids #{"js/main"})
+   (cljs-repl :ids #{"js/main"} :port #_43043 9001)
    ;; Main app
    (cljs :ids #{"js/main"})
    ;; Remove cljs output from classpath but keep within fileset with output role
