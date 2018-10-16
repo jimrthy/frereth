@@ -37,4 +37,7 @@
   ;; anyone who isn't using emacs.
   "In theory, this launches a REPL that interacts with a new browser window"
   []
-  (cider.piggieback/cljs-repl (cljs-browser/repl-env)))
+  (cider.piggieback/cljs-repl (cljs-browser/repl-env)
+                              :host "0.0.0.0"
+                              :launch-browser false
+                              :port 9001))

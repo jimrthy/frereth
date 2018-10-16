@@ -171,7 +171,8 @@
 ;; Really need to consider less vs. sass vs. garden
 (task-options!
  aot {:namespace   #{'backend.main}}
- cljs-repl {:nrepl-opts {:bind "0.0.0.0" :port 43043}}
+ cljs-repl {:nrepl-opts {:bind "0.0.0.0" :port 43043}
+            :ip "0.0.0.0"}
  jar {:file        (str "frereth-log-viewer-" version ".jar")
       :main 'backend.main}
  less {:source-map true}
@@ -183,7 +184,11 @@
       :scm         {:url "https://github.com/jimrthy/frereth"}
       :license     {"Eclipse Public License"
                     "http://www.eclipse.org/legal/epl-v10.html"}}
+ repl-env {:ip "0.0.0.0"}
  sass {:source-map true}
+ ;; Either Weasel or CIDER ignores this setting. Need to run
+ ;; (start-repl) manually and then open a browser connection
+ ;; to http://localhost:10555/index
  start-repl {:ip "0.0.0.0" :port 9001})
 
 (deftask check-conflicts
@@ -214,14 +219,12 @@
    ;; TODO: Switch the open-file to connect to a running emacs instance
    (reload :open-file "vim --servername log_viewer --remote-silent +norm%sG%s| %s"
            :ids #{"js/main"}
-           ;; Q: Do I want/need to specify the :ip?
-           ;; Need to map this
            :port 43140)
    (if use-sass
      (sass)
      (less))
    ;; This starts a repl server with piggieback middleware
-   (cljs-repl :ids #{"js/main"} :port #_43043 9001)
+   (cljs-repl :ids #{"js/main"} :ip "0.0.0.0")
    ;; Main app
    (cljs :ids #{"js/main"})
    ;; Remove cljs output from classpath but keep within fileset with output role

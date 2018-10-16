@@ -33,7 +33,7 @@ COPY .boot-jvm-options boot.properties profile.boot build.boot ./
 COPY src/clj/backend/ ./src/clj/backend/
 
 # Pull in extras that go with day-to-day dev work.
-RUN boot cider repl -s
+RUN boot cider repl -s less
 
 COPY . .
 
@@ -41,7 +41,7 @@ RUN chmod u+x boot.sh
 
 # These don't seem to cache all the dependencies from maven.
 # Q: Why not?
-RUN boot cljs --ids js/main cljs --ids js/worker target
+RUN boot cljs --ids js/main target
 
 # Want to run local boot.sh to pick up local overrides.
 # So override base image entrypoint to nothing.
