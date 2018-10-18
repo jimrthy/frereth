@@ -14,4 +14,4 @@
 
 (defn -main [& args]
   (setup-app! {})
-  (integrant.repl/go (init)))
+  (integrant.repl/go))
