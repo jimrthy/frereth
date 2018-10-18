@@ -1,0 +1,12 @@
+/classes
+/checkouts
+/dev-output
+/out
+/target
+.lein-*
+.nrepl-*
+pom.xml
+pom.xml.asc
+*.jar
+*.class
+*~
