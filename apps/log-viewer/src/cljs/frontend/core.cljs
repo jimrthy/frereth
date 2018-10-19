@@ -7,6 +7,9 @@
             [clojure.spec.alpha :as s]
             [weasel.repl :as repl]))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; Globals
+
 (enable-console-print!)
 
 (def idle-worker-pool
@@ -18,6 +21,11 @@
   (console.log (-> idle-worker-pool deref first))
   (.postMessage (-> idle-worker-pool deref first) ::abc)
   )
+
+(def shared-socket (atom nil))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; Internal Implementation
 
 (defn event-forwarder
   "Sanitize event and post it to Worker"
@@ -143,6 +151,17 @@
   (when-not (repl/alive?)
     (repl/connect "ws://localhost:9001"))
 
+  (let [ws (WebSocket. "ws://localhost:10555/ws")]
+    (set! (.-onopen ws) (fn [event]
+                          ;; Probably reasonable to base this on
+                          ;; something like the CurveCP handshake.
+                          ;; Honestly, the server could/should inject
+                          ;; a new key-pair at the top of this file
+                          ;; before serving it.
+                          ;; For now, it doesn't much matter
+                          (.send ws "Need a key exchange")
+                          (reset! shared-socket ws))))
+
   (try
     (if (spawn-worker)
       (do
@@ -153,6 +172,9 @@
       (.warn js/console "Spawning worker failed"))
     (catch :default ex
       (console.error ex))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; Public
 
 (when js/window
   (start!))

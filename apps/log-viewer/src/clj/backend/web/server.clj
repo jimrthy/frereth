@@ -7,13 +7,11 @@
             [aleph.http.server :as http]
             [backend.web.routes :as routes]))
 
-(def handler
-  (ring/make-handler routes/routes))
-
 (defmethod ig/init-key ::web-server
   [_ {:keys [:port]
       :as opts}]
-  (let [port (or port 10555)]
+  (let [port (or port 10555)
+        handler (ring/make-handler routes/routes)]
     (println "Starting web server on http://localhost:" port "from" opts)
     (http/start-server handler {:port port})))
 
