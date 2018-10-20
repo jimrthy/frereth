@@ -1,6 +1,7 @@
 (ns frontend.core
   (:require-macros [frontend.macro :refer [foobar]])
-  (:require [foo.bar]
+  (:require [cognitect.transit :as transit]
+            [foo.bar]
             ;; Start by at least partially supporting this, since it's
             ;; so popular
             [reagent.core :as r]
@@ -22,7 +23,23 @@
   (.postMessage (-> idle-worker-pool deref first) ::abc)
   )
 
+(def secret-key
+  "Need something we can use for authentication and validation
+
+  There are multiple levels to this. Each World instance needs its own
+  key [pair?]"
+  [-39 -55 106 103
+   -31 117 120 57
+   -102 12 -102 -36
+   32 77 -66 -74
+   97 29 9 16
+   12 -79 -102 -96
+   89 87 -73 116
+   66 43 39 -61])
 (def shared-socket (atom nil))
+
+;; Map of world-keys to WebWorkers
+(def worlds (atom {}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Internal Implementation
@@ -151,25 +168,54 @@
   (when-not (repl/alive?)
     (repl/connect "ws://localhost:9001"))
 
-  (let [ws (WebSocket. "ws://localhost:10555/ws")]
-    (set! (.-onopen ws) (fn [event]
-                          ;; Probably reasonable to base this on
-                          ;; something like the CurveCP handshake.
-                          ;; Honestly, the server could/should inject
-                          ;; a new key-pair at the top of this file
-                          ;; before serving it.
-                          ;; For now, it doesn't much matter
-                          (.send ws "Need a key exchange")
-                          (reset! shared-socket ws))))
-
+  (console.log "Connecting WebSocket")
   (try
-    (if (spawn-worker)
-      (do
-        ;; The worker pool is getting ahead of myself.
-        ;; Part of the missing Window Manager abstraction mentioned above
-        (swap! idle-worker-pool conj spawn-worker)
-        (.log js/console "Worker spawned"))
-      (.warn js/console "Spawning worker failed"))
+    (let [ws (WebSocket. "ws://localhost:10555/ws")
+          writer (transit/writer :json)]
+      ;; Q: Worth using a library?
+      (set! (.-onopen ws) (fn [event]
+                            (console.log event)
+                            ;; Probably reasonable to base this on
+                            ;; something like the CurveCP handshake.
+                            ;; Honestly, the server could/should inject
+                            ;; a new key-pair at the top of this file
+                            ;; before serving it.
+                            ;; For now, it doesn't much matter
+                            (.send ws (transit/write writer secret-key))
+                            (reset! shared-socket ws)
+                            ;; This is where things like deferreds, core.async,
+                            ;; and promises come in handy.
+                            ;; Once this has completed, we want to spin up the
+                            ;; top-level shell (which, in this case, is our
+                            ;; log-viewer Worker)
+                            (if-let [worker (spawn-worker)]
+                              (do
+                                (comment
+                                  ;; The worker pool is getting ahead of myself.
+                                  ;; Part of the missing Window Manager abstraction mentioned above
+                                  (swap! idle-worker-pool conj spawn-worker))
+                                (swap! worlds assoc worker-key worker)
+                                ;; TODO: Need to notify the Client that this World is ready to interact
+                                (.log js/console "Shell spawned"))
+                              (.warn js/console "Spawning shell failed"))))
+      (let [reader (transit/reader :json)]  ; Q: msgpack ?
+        (set! (.onmessage ws (fn [event]
+                               (console.log event)
+                               (let [raw-envelope (.-data event)
+                                     envelope (transit/read reader raw-envelope)
+                                     world-key (:frereth/world envelope)
+                                     worker (get @worlds world-key)]
+                                 (if worker
+                                   (let [body (:frereth/body envelope)]
+                                     (.postMessage worker body))
+                                   (console.error "Message for"
+                                                  world-key
+                                                  "in"
+                                                  envelope
+                                                  ". No match in"
+                                                  (keys @worlds))))))))
+      (set! (.onclose ws (fn [event]
+                           (console.error "Server closed connection:" event)))))
     (catch :default ex
       (console.error ex))))
 

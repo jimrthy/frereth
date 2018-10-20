@@ -8,7 +8,10 @@
    [hiccup.core :refer [html]]
    [hiccup.page :refer [html5 include-js include-css]]
    [manifold.deferred :as dfrd]
-   [ring.util.response :as rsp]))
+   [manifold.stream :as strm]
+   [renderer.lib :as lib]
+   [ring.util.response :as rsp])
+  (:import clojure.lang.ExceptionInfo))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Handlers
@@ -32,7 +35,15 @@
                            (http/websocket-connection request)
                            (fn [_] nil))]
     (if conn
-      (throw (RuntimeException. "Get this written"))
+      (let [shared-key (strm/take! conn)]
+        (try
+          (lib/complete-renderer-connection! shared-key conn)
+          (catch ExceptionInfo ex
+            ;; FIXME: Better error handling via tap>
+            ;; As ironic as that seems
+            (println "Renderer connection completion failed")
+            (pprint ex)
+            (.close conn))))
       non-websocket-request)))
 
 (defn connect-world
