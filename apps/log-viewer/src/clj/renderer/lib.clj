@@ -34,7 +34,7 @@
   At the very least, we need a map of pending connections so we can mark this
   one complete"
   [public-key connection]
-  (if (some #{public-key} pending-connections)
+  (if (some #{public-key} pending-renderer-connections)
     (swap! renderer-connections
            (fn [conns]
              (update conns public-key
@@ -46,5 +46,6 @@
                      ::connected @renderer-connections}))))
 
 (defn post-message
+  "Forward value to the associated World"
   [world-id value]
   (throw (RuntimeException. "Not implemented")))

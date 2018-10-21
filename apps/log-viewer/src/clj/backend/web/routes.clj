@@ -35,7 +35,7 @@
                            (http/websocket-connection request)
                            (fn [_] nil))]
     (if conn
-      (let [shared-key (strm/take! conn)]
+      (let [shared-key (strm/take! conn)]  ; FIXME: Better handshake
         (try
           (lib/complete-renderer-connection! shared-key conn)
           (catch ExceptionInfo ex
@@ -65,7 +65,8 @@
   ;; in a single web page over a single WebSocket.
 
   ;; What *does* make sense is for
-  ;; a) World opens on a Renderer
+  ;; a) World opens on a Renderer (at this level, this means
+  ;;    a WebWorker)
   ;; b) That World sends back a notification that it's ready
   ;; c) Start routing messages between Client/Browser portions
   (throw (RuntimeException. "Does this make any sense at all?")))
