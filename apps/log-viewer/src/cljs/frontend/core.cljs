@@ -6,6 +6,7 @@
             ;; so popular
             [reagent.core :as r]
             [clojure.spec.alpha :as s]
+            [clojure.string]
             [weasel.repl :as repl]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -162,44 +163,115 @@
                                     (js/document.getElementById "app")))))
       worker)))
 
-(defn start! []
-  (js/console.log "Starting the app")
+(defn fork-shell!
+  []
+  (let [crypto (.-subtle (.-crypto js/window))
+        ;; Q: Any point to encrypting?
+        ;; Q: Are these settings reasonable?
+        ;; As a first step, I really just want a randomly-generated
+        ;; public key that I can use as a PID to make it difficult for
+        ;; other "processes" to interfere.
+        signing-key-promise (.generateKey crypto
+                                          (clj->js {:name "ECDSA"
+                                                    "namedCurve" "P-384"})
+                                          true
+                                          (clj->js ["sign"
+                                                    "verify"]))
+        signing-key (atom nil)]
+    (.then signing-key-promise (fn [generated]
+                                 (reset! signing-key generated)))
+    (if-let [worker (spawn-worker)]
+      (do
+        (comment
+          ;; The worker pool is getting ahead of myself.
+          ;; Part of the missing Window Manager abstraction
+          ;; mentioned above. Assuming that it makes any sense
+          ;; at all.
+          ;; It seems like a good optimization, but breaking
+          ;; the isolation we get from web workers may not be
+          ;; worth any theoretical gain.
+          (swap! idle-worker-pool conj spawn-worker))
+        ;; FIXME: Need to define worker-key
+        ;; Honestly, that should be something that gets
+        ;; assigned here. It's independent of whatever key the
+        ;; Worker might actually use.
+        ;; It's really just for routing messages to/from that
+        ;; Worker.
+        ;; Q: How about this approach?
+        ;; We query the web server for a shell URL. Include our
+        ;; version of the worker ID as a query param.
+        ;; Q: Worth using the websocket for that? (it doesn't
+        ;; seem likely).
+        ;; The web server creates a pending-world (keyed to
+        ;; our worker-id), and
+        ;; its response includes the actual URL to load that
+        ;; Worker.
+        ;; Then each Worker could be responsible for tracking
+        ;; its own signing key.
+        ;; Except that sharing the responsibility would be
+        ;; silly.
+        ;; Want the signing key out here at this level, so we
+        ;; don't have to duplicate the signing code
+        ;; everywhere.
+        ;; So, generate the short-term key pair here. Send
+        ;; the public half to the web server for validation.
+        ;; Possibly sign that request with the Session key.
+        ;; Then use the public key to dispatch messages.
+        (swap! worlds assoc signing-key worker)
+        ;; TODO: Need to notify the Client that this World is ready to interact
+        (.log js/console "Shell spawned"))
+      (.warn js/console "Spawning shell failed"))))
 
-  (when-not (repl/alive?)
-    (repl/connect "ws://localhost:9001"))
-
+(defn connect-web-socket!
+  [fork-shell!]
   (console.log "Connecting WebSocket")
   (try
-    (let [ws (WebSocket. "ws://localhost:10555/ws")
+    ;; TODO: Build this from window.location
+    ;; c.f. https://stackoverflow.com/questions/10406930/how-to-construct-a-websocket-uri-relative-to-the-page-uri
+    (let [location (.-location js/window)
+          origin-protocol (.-protocol location)
+          protocol-length (count origin-protocol)
+          protocol (if (= \s
+                          (clojure.string/lower-case (aget origin-protocol
+                                                           (- protocol-length 2))))
+                     "wss"
+                     "ws")
+          base-url (str protocol "://" (.-host location))
+          url (str base-url  "/ws")
+          ws (js/WebSocket. url)
           writer (transit/writer :json)]
+      ;; Q: Does "arraybuffer" make any sense here?
+      (set! (.-binaryType ws) "blob")
       ;; Q: Worth using a library?
       (set! (.-onopen ws)
             (fn [event]
               (console.log event)
-              ;; Probably reasonable to base this on
-              ;; something like the CurveCP handshake.
-              ;; Honestly, the server could/should inject
-              ;; a new key-pair at the top of this file
-              ;; before serving it.
-              ;; For now, it doesn't much matter
+              ;; Probably reasonable to base this on something like the
+              ;; CurveCP handshake.
+              ;; Honestly, the server could/should inject a new key-pair
+              ;; at the top of this file before serving it.
+              ;; For now, it doesn't much matter.
+              ;; However:
+              ;; There really needs to be an intermediate login step that
+              ;; handles this for real.
+              ;; In terms of a linux ssh connection, opening the
+              ;; websocket is similar to connecting to a pty.
+              ;; We need a login "process" that authenticates the user,
+              ;; using this (I'm starting to think of it as a "session
+              ;; key) to help the server side correlate between the
+              ;; original http request and the websocket connection
+              ;; that, really, gets authorized during login.
               (.send ws (transit/write writer secret-key))
               (reset! shared-socket ws)
               ;; This is where things like deferreds, core.async,
               ;; and promises come in handy.
-              ;; Once this has completed, we want to spin up the
-              ;; top-level shell (which, in this case, is our
+              ;; Once the login sequence has completed, we want to spin
+              ;; up the top-level shell (which, in this case, is our
               ;; log-viewer Worker)
-              (if-let [worker (spawn-worker)]
-                (do
-                  (comment
-                    ;; The worker pool is getting ahead of myself.
-                    ;; Part of the missing Window Manager abstraction mentioned above
-                    (swap! idle-worker-pool conj spawn-worker))
-                  (swap! worlds assoc worker-key worker)
-                  ;; TODO: Need to notify the Client that this World is ready to interact
-                  (.log js/console "Shell spawned"))
-                (.warn js/console "Spawning shell failed"))))
-      (let [reader (transit/reader :json)]  ; Q: msgpack ?
+              (fork-shell!)))
+      ;; Q: msgpack ?
+      ;; A: Not in clojurescript, yet.
+      (let [reader (transit/reader :json)]
         (set! (.-onmessage ws)
               (fn [event]
                 (console.log event)
@@ -221,6 +293,14 @@
               (console.error "Server closed connection:" event))))
     (catch :default ex
       (console.error ex))))
+
+(defn start! []
+  (js/console.log "Starting the app")
+
+  (when-not (repl/alive?)
+    (repl/connect "ws://localhost:9001"))
+
+  (connect-web-socket! fork-shell!))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Public

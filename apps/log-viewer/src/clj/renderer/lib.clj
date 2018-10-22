@@ -1,5 +1,9 @@
 (ns renderer.lib
-  "Library functions specific for the web renderer")
+  "Library functions specific for the web renderer"
+  (:require [cognitect.transit :as transit]
+            [manifold.stream :as strm])
+  (:import [java.io ByteArrayInputStream
+            ByteArrayOutputStream]))
 
 (def test-key
   "Placeholder for crypto key to identify a connection.
@@ -21,7 +25,7 @@
 (def pending-renderer-connections
   "This really should be an atom. Or part of a bigger Universe-state atom"
   ;; For now, just hard-code some arbitrary random key as a baby-step
-  [test-key])
+  (atom #{test-key}))
 
 (def renderer-connections
   "Connections to actual browser sessions"
@@ -34,7 +38,8 @@
   At the very least, we need a map of pending connections so we can mark this
   one complete"
   [public-key connection]
-  (if (some #{public-key} pending-renderer-connections)
+  (if (some #{public-key} @pending-renderer-connections)
+    ;; FIXME: Also need to dissoc public-key from the pending set
     (swap! renderer-connections
            (fn [conns]
              (update conns public-key
@@ -42,10 +47,21 @@
                        (conj xs connection)))))
     (throw (ex-info "Client trying to complete non-pending connection"
                     {::attempt public-key
-                     ::pending pending-renderer-connections
+                     ::pending @pending-renderer-connections
                      ::connected @renderer-connections}))))
 
 (defn post-message
   "Forward value to the associated World"
   [world-id value]
-  (throw (RuntimeException. "Not implemented")))
+  (if-let [connections (-> renderer-connections
+                       deref
+                       (get world-id))]
+    (let [unwrapped-envelope {:frereth/world-id world-id
+                              :frereth/value value}
+          envelope (ByteArrayOutputStream. 4096)  ; Q: Useful size?
+          writer (transit/writer envelope :json)]
+      (transit/write writer unwrapped-envelope)
+      ;; Q: What are the odds this will work?
+      (strm/put! connections envelope))
+    (throw (ex-info "Trying to POST to unconnected World"
+                    {::pending pending-renderer-connections}))))
