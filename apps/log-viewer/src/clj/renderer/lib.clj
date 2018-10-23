@@ -3,7 +3,8 @@
   (:require [cognitect.transit :as transit]
             [manifold.stream :as strm]
             [clojure.pprint :refer [pprint]]
-            [clojure.spec.alpha :as s])
+            [clojure.spec.alpha :as s]
+            [manifold.deferred :as dfrd])
   (:import clojure.lang.ExceptionInfo
            [java.io
             ByteArrayInputStream
@@ -33,7 +34,6 @@
 
 (def renderer-connections
   "Connections to actual browser sessions"
-  ;; Since I'm only using 1 key as a starting point, plan on each of these being a sequence
   (atom {}))
 
 (s/fdef complete-renderer-connection!
@@ -47,24 +47,36 @@
   [connection]
   (try
     ;; FIXME: Better handshake
-    (let [serialized-key @(strm/take! connection)
-          in (ByteArrayInputStream. (.getBytes serialized-key))
-          reader (transit/reader in :json)
-          public-key (transit/read reader)]
-      (if (@pending-renderer-connections public-key)
-        ;; FIXME: Also need to dissoc public-key from the pending set.
-        ;; And send back the URL for the current user's shell.
-        ;; Or maybe that should be standardized, with this public key
-        ;; as a query parameter.
-        (swap! renderer-connections
-               (fn [conns]
-                 (update conns public-key
-                         (fn [xs]
-                           (conj xs connection)))))
-        (throw (ex-info "Client trying to complete non-pending connection"
-                        {::attempt public-key
-                         ::pending @pending-renderer-connections
-                         ::connected @renderer-connections}))))
+    (println "Trying to pull the Renderer's key from new websocket")
+    (let [first-response (strm/try-take! connection ::drained 500 ::timed-out)]
+      (dfrd/on-realized first-response
+                        (fn [serialized-key]
+                          (if (and (not= ::drained serialized-key)
+                                   (not= ::timed-out serialized-key))
+                            (let [_ (println "Key pulled:" serialized-key)
+                                  in (ByteArrayInputStream. (.getBytes serialized-key))
+                                  reader (transit/reader in :json)
+                                  public-key (transit/read reader)]
+                              (println "Trying to move\n" public-key "\nfrom\n"
+                                       @pending-renderer-connections)
+                              (if (@pending-renderer-connections public-key)
+                                (do
+                                  (println "Swapping")
+                                  ;; FIXME: Also need to dissoc public-key from the pending set.
+                                  ;; And send back the URL for the current user's shell.
+                                  ;; Or maybe that should be standardized, with this public key
+                                  ;; as a query parameter.
+                                  (swap! renderer-connections
+                                         assoc
+                                         public-key connection))
+                                (do
+                                  (println "Not found")
+                                  (throw (ex-info "Client trying to complete non-pending connection"
+                                                  {::attempt public-key
+                                                   ::pending @pending-renderer-connections
+                                                   ::connected @renderer-connections})))))))
+                        (fn [error]
+                          (println "Failed pulling initial key:" error))))
     (catch ExceptionInfo ex
       ;; FIXME: Better error handling via tap>
       ;; As ironic as that seems
@@ -75,6 +87,10 @@
 (defn post-message
   "Forward value to the associated World"
   [world-id value]
+  (println "Trying to forward\n"
+           value
+           "\nto\n"
+           world-id)
   (if-let [connections (-> renderer-connections
                        deref
                        (get world-id))]
@@ -86,4 +102,6 @@
       ;; Q: What are the odds this will work?
       (strm/put! connections envelope))
     (throw (ex-info "Trying to POST to unconnected World"
-                    {::pending pending-renderer-connections}))))
+                    {::pending @pending-renderer-connections
+                     ::world-id world-id
+                     ::connected @renderer-connections}))))

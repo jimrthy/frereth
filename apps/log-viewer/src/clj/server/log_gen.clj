@@ -8,7 +8,7 @@
 (defn send-log-eventually
   [halted n]
   (when-not (realized? halted)
-    (Thread/sleep (rand-int 1500))
+    (Thread/sleep (rand-int 5000))
     (tap> {::counter n})
     (recur halted (inc n))))
 

@@ -9,15 +9,18 @@
   ;; FIXME: This really needs to send the message to web sockets
   ;; attached to the front-end worker(s)
   (prn o)
-  (lib/post-message uuid o))
+  (try
+    (lib/post-message uuid o)
+    (catch Exception ex
+      (println "Posting message failed:" ex))))
 
 (defmethod ig/init-key ::monitor
   [_ _]
-  ;; This UUID is just one that I generated randomly at the REPL.
-  ;; Really want/need to just generate something like 256 crypto-strong
-  ;; random bits and use that as the key for the app.
-  ;; TODO: Worry about that later.
-  (let [func (partial do-it #uuid "de5837db-8041-4524-8ca9-f9b66b543401")]
+  ;; FIXME: This should really start when a browser signals
+  ;; that a log-viewer World is ready to begin.
+  ;; Realistically, that's part of an internal Component System for
+  ;; those World(s).
+  (let [func (partial do-it lib/test-key)]
     (add-tap func)
     func))
 

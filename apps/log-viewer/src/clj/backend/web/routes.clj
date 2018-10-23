@@ -33,6 +33,7 @@
   (dfrd/let-flow [conn (dfrd/catch
                            (http/websocket-connection request)
                            (fn [_] nil))]
+    (println "websocket upgrade: '" conn "'")
     (if conn
       (lib/complete-renderer-connection! conn)
       non-websocket-request)))

@@ -17,5 +17,10 @@
 
 (defmethod ig/halt-key! ::web-server
   [_ server]
+  ;; FIXME: Also need to close the web socket connections currently
+  ;; owned by routes.
+  ;; Although they don't belong in there, and definitely should not be
+  ;; be controlled in here.
+  ;; So there are a couple of missing Components.
   (when server
     (.close server)))
