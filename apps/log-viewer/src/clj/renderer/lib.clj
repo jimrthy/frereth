@@ -1,8 +1,12 @@
 (ns renderer.lib
   "Library functions specific for the web renderer"
   (:require [cognitect.transit :as transit]
-            [manifold.stream :as strm])
-  (:import [java.io ByteArrayInputStream
+            [manifold.stream :as strm]
+            [clojure.pprint :refer [pprint]]
+            [clojure.spec.alpha :as s])
+  (:import clojure.lang.ExceptionInfo
+           [java.io
+            ByteArrayInputStream
             ByteArrayOutputStream]))
 
 (def test-key
@@ -32,23 +36,41 @@
   ;; Since I'm only using 1 key as a starting point, plan on each of these being a sequence
   (atom {}))
 
+(s/fdef complete-renderer-connection!
+  :args (s/cat :serialized-public-key string?
+               :connection any?))
 (defn complete-renderer-connection!
   "This smells suspiciously like a step in a communictions/security protocol.
 
   At the very least, we need a map of pending connections so we can mark this
   one complete"
-  [public-key connection]
-  (if (some #{public-key} @pending-renderer-connections)
-    ;; FIXME: Also need to dissoc public-key from the pending set
-    (swap! renderer-connections
-           (fn [conns]
-             (update conns public-key
-                     (fn [xs]
-                       (conj xs connection)))))
-    (throw (ex-info "Client trying to complete non-pending connection"
-                    {::attempt public-key
-                     ::pending @pending-renderer-connections
-                     ::connected @renderer-connections}))))
+  [connection]
+  (try
+    ;; FIXME: Better handshake
+    (let [serialized-key @(strm/take! connection)
+          in (ByteArrayInputStream. (.getBytes serialized-key))
+          reader (transit/reader in :json)
+          public-key (transit/read reader)]
+      (if (@pending-renderer-connections public-key)
+        ;; FIXME: Also need to dissoc public-key from the pending set.
+        ;; And send back the URL for the current user's shell.
+        ;; Or maybe that should be standardized, with this public key
+        ;; as a query parameter.
+        (swap! renderer-connections
+               (fn [conns]
+                 (update conns public-key
+                         (fn [xs]
+                           (conj xs connection)))))
+        (throw (ex-info "Client trying to complete non-pending connection"
+                        {::attempt public-key
+                         ::pending @pending-renderer-connections
+                         ::connected @renderer-connections}))))
+    (catch ExceptionInfo ex
+      ;; FIXME: Better error handling via tap>
+      ;; As ironic as that seems
+      (println "Renderer connection completion failed")
+      (pprint ex)
+      (.close connection))))
 
 (defn post-message
   "Forward value to the associated World"

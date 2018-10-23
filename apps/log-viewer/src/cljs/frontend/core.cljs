@@ -242,7 +242,7 @@
           writer (transit/writer :json)]
       ;; Q: Does "arraybuffer" make any sense here?
       (set! (.-binaryType ws) "blob")
-      ;; Q: Worth using a library?
+      ;; Q: Worth using a library to wrap the details?
       (set! (.-onopen ws)
             (fn [event]
               (console.log event)

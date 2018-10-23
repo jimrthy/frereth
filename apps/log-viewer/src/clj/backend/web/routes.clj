@@ -10,8 +10,7 @@
    [manifold.deferred :as dfrd]
    [manifold.stream :as strm]
    [renderer.lib :as lib]
-   [ring.util.response :as rsp])
-  (:import clojure.lang.ExceptionInfo))
+   [ring.util.response :as rsp]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Handlers
@@ -35,15 +34,7 @@
                            (http/websocket-connection request)
                            (fn [_] nil))]
     (if conn
-      (let [shared-key (strm/take! conn)]  ; FIXME: Better handshake
-        (try
-          (lib/complete-renderer-connection! shared-key conn)
-          (catch ExceptionInfo ex
-            ;; FIXME: Better error handling via tap>
-            ;; As ironic as that seems
-            (println "Renderer connection completion failed")
-            (pprint ex)
-            (.close conn))))
+      (lib/complete-renderer-connection! conn)
       non-websocket-request)))
 
 (defn connect-world
