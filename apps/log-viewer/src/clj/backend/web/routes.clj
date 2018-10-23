@@ -30,12 +30,15 @@
     (catch Exception ex
       (println ex)))
   (pprint request)
-  (dfrd/let-flow [conn (dfrd/catch
-                           (http/websocket-connection request)
-                           (fn [_] nil))]
-    (println "websocket upgrade: '" conn "'")
-    (if conn
-      (lib/complete-renderer-connection! conn)
+  (dfrd/let-flow [connection (dfrd/catch
+                                 (http/websocket-connection request)
+                                 (fn [_] nil))]
+    (println "websocket upgrade: '" connection "'")
+    (if connection
+      (do
+        (lib/complete-renderer-connection! connection)
+        (println "ws handler exiting")
+        (pprint connection))
       non-websocket-request)))
 
 (defn connect-world

@@ -35,6 +35,7 @@
 (def renderer-connections
   "Connections to actual browser sessions"
   (atom {}))
+(comment)
 
 (s/fdef complete-renderer-connection!
   :args (s/cat :serialized-public-key string?
@@ -48,6 +49,7 @@
   (try
     ;; FIXME: Better handshake
     (println "Trying to pull the Renderer's key from new websocket")
+    (pprint connection)
     (let [first-response (strm/try-take! connection ::drained 500 ::timed-out)]
       (dfrd/on-realized first-response
                         (fn [serialized-key]
@@ -68,7 +70,9 @@
                                   ;; as a query parameter.
                                   (swap! renderer-connections
                                          assoc
-                                         public-key connection))
+                                         public-key connection)
+                                  (println "Swapped:")
+                                  (pprint connection))
                                 (do
                                   (println "Not found")
                                   (throw (ex-info "Client trying to complete non-pending connection"
@@ -84,6 +88,19 @@
       (pprint ex)
       (.close connection))))
 
+(defn wrap
+  [world-id value]
+  (let [unwrapped-envelope {:frereth/world-id world-id
+                            :frereth/body value}
+        envelope (ByteArrayOutputStream. 4096)  ; Q: Useful size?
+        writer (transit/writer envelope :json)]
+    (transit/write writer unwrapped-envelope)
+    (.toByteArray envelope)))
+
+(comment
+  (String. (wrap "12345" {:a 1 :b 2 :c 3}))
+  )
+
 (defn post-message
   "Forward value to the associated World"
   [world-id value]
@@ -91,17 +108,26 @@
            value
            "\nto\n"
            world-id)
-  (if-let [connections (-> renderer-connections
+  (if-let [connection (-> renderer-connections
                        deref
                        (get world-id))]
-    (let [unwrapped-envelope {:frereth/world-id world-id
-                              :frereth/value value}
-          envelope (ByteArrayOutputStream. 4096)  ; Q: Useful size?
-          writer (transit/writer envelope :json)]
-      (transit/write writer unwrapped-envelope)
-      ;; Q: What are the odds this will work?
-      (strm/put! connections envelope))
-    (throw (ex-info "Trying to POST to unconnected World"
-                    {::pending @pending-renderer-connections
-                     ::world-id world-id
-                     ::connected @renderer-connections}))))
+    (try
+      (pprint connection)
+      (let [envelope (wrap world-id value)]
+        (let [success (strm/try-put! connection envelope 500 ::timed-out)]
+          (dfrd/on-realized success
+                            #(println value "forwarded:" %)
+                            #(println value "Forwarding failed:" %))))
+      (catch Exception ex
+        (println "Message forwarding failed:" ex)))
+    (do
+      (println "No such world")
+      (throw (ex-info "Trying to POST to unconnected World"
+                      {::pending @pending-renderer-connections
+                       ::world-id world-id
+                       ::connected @renderer-connections})))))
+
+(comment
+  ;; cljs doesn't need to specify
+  (transit/writer :json)
+  )

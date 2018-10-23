@@ -45,6 +45,13 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Internal Implementation
 
+(defn array-buffer->string
+  [bs]
+  (let [data-view (js/DataView. bs)
+        ;; Q: What encoding is appropriate here?
+        decoder (js/TextDecoder. "utf-8")]
+    (.decode decoder data-view)))
+
 (defn event-forwarder
   "Sanitize event and post it to Worker"
   [worker ctrl-id tag]
@@ -241,11 +248,15 @@
           ws (js/WebSocket. url)
           writer (transit/writer :json)]
       ;; Q: Does "arraybuffer" make any sense here?
-      (set! (.-binaryType ws) "blob")
+      ;; A: Yes, most definitely.
+      ;; A blob is really just a file handle. Have to jump through an
+      ;; async op to convert it to an arraybuffer.
+      ;;(set! (.-binaryType ws) "blob")
+      (set! (.-binaryType ws) "arraybuffer")
       ;; Q: Worth using a library to wrap the details?
       (set! (.-onopen ws)
             (fn [event]
-              (console.log event)
+              (console.log "Websocket opened:" event ws)
               ;; Probably reasonable to base this on something like the
               ;; CurveCP handshake.
               ;; Honestly, the server could/should inject a new key-pair
@@ -275,9 +286,10 @@
         (set! (.-onmessage ws)
               (fn [event]
                 (console.log event)
-                (let [raw-envelope (.-data event)
+                (let [raw-envelope (array-buffer->string (.-data event))
+                      _ (console.log "Trying to read" raw-envelope)
                       envelope (transit/read reader raw-envelope)
-                      world-key (:frereth/world envelope)
+                      world-key (:frereth/world-id envelope)
                       worker (get @worlds world-key)]
                   (if worker
                     (let [body (:frereth/body envelope)]
@@ -290,7 +302,10 @@
                                    (keys @worlds)))))))
       (set! (.-onclose ws)
             (fn [event]
-              (console.error "Server closed connection:" event))))
+              (console.warn "Connection closed:" event)))
+      (set! (.-onerror ws)
+            (fn [event]
+              (console.error "Connection error:" event))))
     (catch :default ex
       (console.error ex))))
 
