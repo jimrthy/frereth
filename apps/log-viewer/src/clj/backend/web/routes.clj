@@ -35,10 +35,7 @@
                                  (fn [_] nil))]
     (println "websocket upgrade: '" connection "'")
     (if connection
-      (do
-        (lib/complete-renderer-connection! connection)
-        (println "ws handler exiting")
-        (pprint connection))
+      (lib/activate-session! connection)
       non-websocket-request)))
 
 (defn connect-world

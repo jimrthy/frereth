@@ -24,7 +24,7 @@
   (.postMessage (-> idle-worker-pool deref first) ::abc)
   )
 
-(def secret-key
+(def session-id-from-server
   "Need something we can use for authentication and validation
 
   There are multiple levels to this. Each World instance needs its own
@@ -132,7 +132,7 @@
                    body))))))
 
 (defn spawn-worker
-  []
+  [session-id public-key]
   (when window.Worker
     ;; This is missing a layer of indirection.
     ;; The worker this spawns should return a shadow
@@ -155,8 +155,10 @@
     ;; Q: Web Workers are designed to be relatively heavy-
     ;; weight. Is it worth spawning a new one for each
     ;; world (which are also supposed to be pretty hefty).
-    (let [worker (new window.Worker
-                      "/js/worker.js"
+    (let [encoded-key (js/encodeURIComponent public-key)
+          worker (new window.Worker
+                      (str "/js/worker.js?world-key=" encoded-key "&session-id=" session-id)
+                      #_(str "/shell?world-key=" encoded-key "&session-id=" session-id)
                       ;; Currently redundant:
                       ;; in Chrome, at least, module scripts are not
                       ;; supported on DedicatedWorker
@@ -170,24 +172,19 @@
                                     (js/document.getElementById "app")))))
       worker)))
 
-(defn fork-shell!
-  []
-  (let [crypto (.-subtle (.-crypto js/window))
-        ;; Q: Any point to encrypting?
-        ;; Q: Are these settings reasonable?
-        ;; As a first step, I really just want a randomly-generated
-        ;; public key that I can use as a PID to make it difficult for
-        ;; other "processes" to interfere.
-        signing-key-promise (.generateKey crypto
-                                          (clj->js {:name "ECDSA"
-                                                    "namedCurve" "P-384"})
-                                          true
-                                          (clj->js ["sign"
-                                                    "verify"]))
-        signing-key (atom nil)]
-    (.then signing-key-promise (fn [generated]
-                                 (reset! signing-key generated)))
-    (if-let [worker (spawn-worker)]
+(defn build-worker-from-exported-key
+  "Spawn worker based on newly exported public key."
+  [socket session-id spawner raw-key-pair public]
+  (let [signing-key (atom nil)
+        full-pk (js->clj public)]
+    (console.log "cljs JWK:" full-pk)
+    ;; FIXME: Server needs to handle this by setting up
+    ;; a pending World associated with this web socket's
+    ;; session-id.
+    #_(.send socket {:frereth/action :frereth/fork
+                   :frereth/pid full-pk})
+    (reset! signing-key full-pk)
+    (if-let [worker (spawner session-id full-pk)]
       (do
         (comment
           ;; The worker pool is getting ahead of myself.
@@ -197,8 +194,7 @@
           ;; It seems like a good optimization, but breaking
           ;; the isolation we get from web workers may not be
           ;; worth any theoretical gain.
-          (swap! idle-worker-pool conj spawn-worker))
-        ;; FIXME: Need to define worker-key
+          (swap! idle-worker-pool conj (partial spawn-worker session-id)))
         ;; Honestly, that should be something that gets
         ;; assigned here. It's independent of whatever key the
         ;; Worker might actually use.
@@ -224,17 +220,40 @@
         ;; the public half to the web server for validation.
         ;; Possibly sign that request with the Session key.
         ;; Then use the public key to dispatch messages.
-        (swap! worlds assoc signing-key worker)
+        (swap! worlds assoc full-pk {::worker worker
+                                     ::key-pair raw-key-pair})
         ;; TODO: Need to notify the Client that this World is ready to interact
         (.log js/console "Shell spawned"))
       (.warn js/console "Spawning shell failed"))))
 
+(defn fork-shell!
+  [socket session-id]
+  (let [crypto (.-subtle (.-crypto js/window))
+        ;; Q: Any point to encrypting?
+        ;; Q: Are these settings reasonable?
+        ;; As a first step, I really just want a randomly-generated
+        ;; public key that I can use as a PID to make it difficult for
+        ;; other "processes" to interfere.
+        signing-key-promise (.generateKey crypto
+                                          (clj->js {:name "ECDSA"
+                                                    "namedCurve" "P-384"})
+                                          true
+                                          (clj->js ["sign"
+                                                    "verify"]))]
+    (.then signing-key-promise (fn [key-pair]
+                                 (let [secret (.-privateKey key-pair)
+                                       raw-public (.-publicKey key-pair)
+                                       exported (.exportKey crypto "jwk" raw-public)]
+                                   (.then exported (partial build-worker-from-exported-key
+                                                            socket
+                                                            session-id
+                                                            spawn-worker
+                                                            key-pair)))))))
+
 (defn connect-web-socket!
-  [fork-shell!]
+  [fork-shell! session-id]
   (console.log "Connecting WebSocket")
   (try
-    ;; TODO: Build this from window.location
-    ;; c.f. https://stackoverflow.com/questions/10406930/how-to-construct-a-websocket-uri-relative-to-the-page-uri
     (let [location (.-location js/window)
           origin-protocol (.-protocol location)
           protocol-length (count origin-protocol)
@@ -243,6 +262,7 @@
                                                            (- protocol-length 2))))
                      "wss"
                      "ws")
+          ;; FIXME: Save this. It's generally useful.
           base-url (str protocol "://" (.-host location))
           url (str base-url  "/ws")
           ws (js/WebSocket. url)
@@ -259,7 +279,7 @@
               (console.log "Websocket opened:" event ws)
               ;; Probably reasonable to base this on something like the
               ;; CurveCP handshake.
-              ;; Honestly, the server could/should inject a new key-pair
+              ;; Honestly, the server could/should inject a "long-term" key-pair
               ;; at the top of this file before serving it.
               ;; For now, it doesn't much matter.
               ;; However:
@@ -272,16 +292,17 @@
               ;; key) to help the server side correlate between the
               ;; original http request and the websocket connection
               ;; that, really, gets authorized during login.
-              (.send ws (transit/write writer secret-key))
+              (.send ws (transit/write writer session-id))
               (reset! shared-socket ws)
               ;; This is where things like deferreds, core.async,
               ;; and promises come in handy.
               ;; Once the login sequence has completed, we want to spin
               ;; up the top-level shell (which, in this case, is our
               ;; log-viewer Worker)
-              (fork-shell!)))
+              (fork-shell! ws session-id)))
       ;; Q: msgpack ?
       ;; A: Not in clojurescript, yet.
+      ;; At least, not "natively"
       (let [reader (transit/reader :json)]
         (set! (.-onmessage ws)
               (fn [event]
@@ -290,7 +311,9 @@
                       _ (console.log "Trying to read" raw-envelope)
                       envelope (transit/read reader raw-envelope)
                       world-key (:frereth/world-id envelope)
-                      worker (get @worlds world-key)]
+                      worker (->> world-key
+                                  (get @worlds)
+                                  ::worker)]
                   (if worker
                     (let [body (:frereth/body envelope)]
                       (.postMessage worker body))
@@ -315,7 +338,7 @@
   (when-not (repl/alive?)
     (repl/connect "ws://localhost:9001"))
 
-  (connect-web-socket! fork-shell!))
+  (connect-web-socket! fork-shell! session-id-from-server))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Public

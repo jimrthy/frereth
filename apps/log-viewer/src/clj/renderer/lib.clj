@@ -27,20 +27,19 @@
    89 87 -73 116
    66 43 39 -61])
 
-(def pending-renderer-connections
+(def pending-sessions
   "This really should be an atom. Or part of a bigger Universe-state atom"
   ;; For now, just hard-code some arbitrary random key as a baby-step
   (atom #{test-key}))
 
-(def renderer-connections
+(def active-sessions
   "Connections to actual browser sessions"
   (atom {}))
-(comment)
 
-(s/fdef complete-renderer-connection!
+(s/fdef activate-session!
   :args (s/cat :serialized-public-key string?
                :connection any?))
-(defn complete-renderer-connection!
+(defn activate-session!
   "This smells suspiciously like a step in a communictions/security protocol.
 
   At the very least, we need a map of pending connections so we can mark this
@@ -60,15 +59,15 @@
                                   reader (transit/reader in :json)
                                   public-key (transit/read reader)]
                               (println "Trying to move\n" public-key "\nfrom\n"
-                                       @pending-renderer-connections)
-                              (if (@pending-renderer-connections public-key)
+                                       @pending-sessions)
+                              (if (@pending-sessions public-key)
                                 (do
                                   (println "Swapping")
                                   ;; FIXME: Also need to dissoc public-key from the pending set.
                                   ;; And send back the URL for the current user's shell.
                                   ;; Or maybe that should be standardized, with this public key
                                   ;; as a query parameter.
-                                  (swap! renderer-connections
+                                  (swap! active-sessions
                                          assoc
                                          public-key connection)
                                   (println "Swapped:")
@@ -77,8 +76,8 @@
                                   (println "Not found")
                                   (throw (ex-info "Client trying to complete non-pending connection"
                                                   {::attempt public-key
-                                                   ::pending @pending-renderer-connections
-                                                   ::connected @renderer-connections})))))))
+                                                   ::pending @pending-sessions
+                                                   ::connected @active-sessions})))))))
                         (fn [error]
                           (println "Failed pulling initial key:" error))))
     (catch ExceptionInfo ex
@@ -108,7 +107,7 @@
            value
            "\nto\n"
            world-id)
-  (if-let [connection (-> renderer-connections
+  (if-let [connection (-> active-sessions
                        deref
                        (get world-id))]
     (try
@@ -123,9 +122,9 @@
     (do
       (println "No such world")
       (throw (ex-info "Trying to POST to unconnected World"
-                      {::pending @pending-renderer-connections
+                      {::pending @pending-sessions
                        ::world-id world-id
-                       ::connected @renderer-connections})))))
+                       ::connected @active-sessions})))))
 
 (comment
   ;; cljs doesn't need to specify
