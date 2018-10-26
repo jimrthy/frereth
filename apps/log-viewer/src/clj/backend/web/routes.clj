@@ -30,12 +30,12 @@
     (catch Exception ex
       (println ex)))
   (pprint request)
-  (dfrd/let-flow [connection (dfrd/catch
+  (dfrd/let-flow [websocket (dfrd/catch
                                  (http/websocket-connection request)
                                  (fn [_] nil))]
-    (println "websocket upgrade: '" connection "'")
-    (if connection
-      (lib/activate-session! connection)
+    (println "websocket upgrade: '" websocket "'")
+    (if websocket
+      (lib/activate-session! websocket)
       non-websocket-request)))
 
 (defn connect-world

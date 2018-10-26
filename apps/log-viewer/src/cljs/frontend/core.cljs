@@ -10,9 +10,18 @@
             [weasel.repl :as repl]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; Specs
+
+;; FIXME: Define these
+(s/def ::session-id any?)
+(s/def ::web-socket any?)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Globals
 
 (enable-console-print!)
+
+(def base-url (atom ""))
 
 (def idle-worker-pool
   "Workers were designed to be heavyweight. How dangerous to pool?"
@@ -37,6 +46,7 @@
    12 -79 -102 -96
    89 87 -73 116
    66 43 39 -61])
+
 (def shared-socket (atom nil))
 
 ;; Map of world-keys to WebWorkers
@@ -178,10 +188,8 @@
   (let [signing-key (atom nil)
         full-pk (js->clj public)]
     (console.log "cljs JWK:" full-pk)
-    ;; FIXME: Server needs to handle this by setting up
-    ;; a pending World associated with this web socket's
-    ;; session-id.
-    #_(.send socket {:frereth/action :frereth/fork
+    ;; FIXME: Need to transit-encode the message envelope
+    (.send socket {:frereth/action :frereth/fork
                    :frereth/pid full-pk})
     (reset! signing-key full-pk)
     (if-let [worker (spawner session-id full-pk)]
@@ -226,6 +234,35 @@
         (.log js/console "Shell spawned"))
       (.warn js/console "Spawning shell failed"))))
 
+(s/fdef fork-login!
+  :args (s/cat :socket ::web-socket
+               :session-id ::session-id)
+  :ret any)
+(defn fork-login!
+  "Returns "
+  [socket session-id]
+  ;; Probably reasonable to base this on something like the
+  ;; CurveCP handshake.
+
+  ;; Remember the login protocol that never actually exchanges
+  ;; passwords. (SRP: Secure Remote Password protocol)
+  ;; c.f. https://www.owasp.org/index.php/Authentication_Cheat_Sheet
+
+  ;; Honestly, the server could/should inject a "long-term" key-pair
+  ;; at the top of this file before serving it.
+  ;; For now, it doesn't much matter.
+  ;; However:
+  ;; There really needs to be an intermediate login step that
+  ;; handles this for real.
+  ;; In terms of a linux ssh connection, opening the
+  ;; websocket is similar to connecting to a pty.
+  ;; We need a login "process" that authenticates the user,
+  ;; using this (I'm starting to think of it as a "session
+  ;; key) to help the server side correlate between the
+  ;; original http request and the websocket connection
+  ;; that, really, gets authorized during login.
+  (.send socket (transit/write (transit/writer :json) session-id)))
+
 (defn fork-shell!
   [socket session-id]
   (let [crypto (.-subtle (.-crypto js/window))
@@ -235,11 +272,11 @@
         ;; public key that I can use as a PID to make it difficult for
         ;; other "processes" to interfere.
         signing-key-promise (.generateKey crypto
-                                          (clj->js {:name "ECDSA"
-                                                    "namedCurve" "P-384"})
+                                          #js {:name "ECDSA"
+                                               :namedCurve "P-384"}
                                           true
-                                          (clj->js ["sign"
-                                                    "verify"]))]
+                                          #js ["sign"
+                                               "verify"])]
     (.then signing-key-promise (fn [key-pair]
                                  (let [secret (.-privateKey key-pair)
                                        raw-public (.-publicKey key-pair)
@@ -262,11 +299,10 @@
                                                            (- protocol-length 2))))
                      "wss"
                      "ws")
-          ;; FIXME: Save this. It's generally useful.
-          base-url (str protocol "://" (.-host location))
-          url (str base-url  "/ws")
-          ws (js/WebSocket. url)
-          writer (transit/writer :json)]
+          local-base-url (str protocol "://" (.-host location))
+          url (str local-base-url  "/ws")
+          ws (js/WebSocket. url)]
+      (reset! base-url local-base-url)
       ;; Q: Does "arraybuffer" make any sense here?
       ;; A: Yes, most definitely.
       ;; A blob is really just a file handle. Have to jump through an
@@ -277,23 +313,9 @@
       (set! (.-onopen ws)
             (fn [event]
               (console.log "Websocket opened:" event ws)
-              ;; Probably reasonable to base this on something like the
-              ;; CurveCP handshake.
-              ;; Honestly, the server could/should inject a "long-term" key-pair
-              ;; at the top of this file before serving it.
-              ;; For now, it doesn't much matter.
-              ;; However:
-              ;; There really needs to be an intermediate login step that
-              ;; handles this for real.
-              ;; In terms of a linux ssh connection, opening the
-              ;; websocket is similar to connecting to a pty.
-              ;; We need a login "process" that authenticates the user,
-              ;; using this (I'm starting to think of it as a "session
-              ;; key) to help the server side correlate between the
-              ;; original http request and the websocket connection
-              ;; that, really, gets authorized during login.
-              (.send ws (transit/write writer session-id))
               (reset! shared-socket ws)
+
+              (fork-login! ws session-id)
               ;; This is where things like deferreds, core.async,
               ;; and promises come in handy.
               ;; Once the login sequence has completed, we want to spin
