@@ -48,7 +48,8 @@ RUN chmod u+x boot.sh
 
 # These don't seem to cache all the dependencies from maven.
 # Q: Why not?
-RUN boot less cljs --ids js/main target
+RUN boot less cljs --ids js/main target && \
+    boot lint
 
 # Want to run local boot.sh to pick up local overrides.
 # So override base image entrypoint to nothing.

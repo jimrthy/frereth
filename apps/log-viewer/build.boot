@@ -46,6 +46,7 @@
                             [adzerk/boot-cljs-repl "0.4.0" :scope "test"]
                             [adzerk/boot-reload "0.6.0" :scope "test"]
                             [bidi "2.1.4"]
+                            [boot/core "2.8.2" :scope "provided"]
                             [cider/piggieback "0.3.9" :scope "test" :exclusions [com.google.guava/guava
                                                                                  com.google.javascript/closure-compiler-externs
                                                                                  com.google.javascript/closure-compiler-unshaded
@@ -62,6 +63,7 @@
                                           org.slf4j/jcl-over-slf4j
                                           org.slf4j/slf4j-api]
                              :scope "test"]
+                            [com.cemerick/url "0.1.1"]
                             [com.cognitect/transit-clj "0.8.313" :exclusions [commons-codec]]
                             [com.cognitect/transit-cljs "0.8.256"]
                             [crisptrutski/boot-cljs-test "0.3.4" :scope "test"]
@@ -84,11 +86,12 @@
                             [metosin/boot-alt-test "0.3.2" :scope "test"]
                             [metosin/boot-deps-size "0.1.0" :scope "test"]
                             [nrepl "0.4.5" :exclusions [org.clojure/clojure]]
-                            [org.clojure/clojure "1.10.0-beta3"]
+                            [org.clojure/clojure "1.10.0-beta4"]
                             [org.clojure/clojurescript "1.10.339" :scope "test" :exclusions [commons-codec
                                                                                              com.cognitect/transit-clj
                                                                                              com.cognitect/transit-java
                                                                                              org.clojure/clojure]]
+                            [org.clojure/core.async "0.4.474"]
                             [org.clojure/spec.alpha "0.2.176" :exclusions [org.clojure/clojure]]
                             [org.clojure/test.check "0.10.0-alpha3" :scope "test" :exclusions [org.clojure/clojure]]
                             ;; For boot-less
@@ -160,11 +163,11 @@
  ;; This one's defined under src/clj/
  '[backend.boot :refer [start-app]]
  '[boot.pod :as pod]
+ '[crisptrutski.boot-cljs-test :refer [test-cljs]]
  '[deraen.boot-less :refer [less]]
  '[deraen.boot-sass :refer [sass]]
  '[metosin.boot-alt-test :refer [alt-test]]
  '[metosin.boot-deps-size :refer [deps-size]]
- '[crisptrutski.boot-cljs-test :refer [test-cljs]]
  '[integrant.repl :refer [clear go halt prep init reset reset-all]]
  '[tolitius.boot-check :as check])
 
@@ -245,6 +248,14 @@
   ;; the CurveCP translation. At least that one has a java
   ;; compilation step to make this a little easier to remember
   (comp (cider) (repl)))
+
+(deftask lint
+  []
+  (comp
+   (check/with-yagni)
+   (check/with-eastwood)
+   (check/with-kibit)
+   (check/with-bikeshed)))
 
 (deftask run
   "Run the project."
