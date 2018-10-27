@@ -1,6 +1,7 @@
 (ns renderer.lib
   "Library functions specific for the web renderer"
-  (:require [cognitect.transit :as transit]
+  (:require [client.propagate]
+            [cognitect.transit :as transit]
             [manifold.stream :as strm]
             [clojure.pprint :refer [pprint]]
             [clojure.spec.alpha :as s]
@@ -48,16 +49,49 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Internal Implementation
 
-(defmethod dispatch! :frereth/fork
-  [session-id {:keys [:frereth/pid]}]
-  (let [session (get @active-sessions session-id)]
-    (if-not (contains? session pid)
-      (do
-        (swap! active-sessions
-               (fn [sessions]
-                 ;; FIXME: Needs some sort of UUID to identify the app that's being spawned
-                 (assoc-in sessions [session-id pid] {:frereth/state :frereth/pending}))))
-      (println "Error: trying to re-fork pid" pid))))
+(defmethod dispatch! :frereth/forked
+  [session-id
+   {:keys [:frereth/pid]}]
+  ;; Once the browser has its worker up and running, we need to start
+  ;; interacting.
+  ;; Actually, there's an entire lifecycle here.
+  ;; It's probably worth contemplating the way React handles the entire
+  ;; idea (though it may not fit at all).
+  ;; Main point:
+  ;; This needs to start up a new System of Component(s) that
+  ;; :frereth/forking prepped.
+  ;; In this specific case, the main piece of that is
+  ;; :client.propagate/monitor
+  (throw (RuntimeException. "Not Implemented")))
+
+(defmethod dispatch! :frereth/forking
+  [session-id
+   {:keys [:frereth/command
+           :frereth/pid]}]
+  (if (and command pid)
+    (let [session (get @active-sessions session-id)]
+      (if-not (contains? session pid)
+        (do
+          ;; This is dangerous and easily exploited.
+          ;; Really do need something like this to tell the client the URL for loading.
+          ;; And update the routing table to be able to serve the javascript it's about
+          ;; to request.
+          ;; At the same time, it would be pretty trivial for a bunch of rogue clients to
+          ;; overload a server this naive.
+          ;; The fact that the client is authenticated helps with post-mortems, but
+          ;; we should try to avoid those.
+          ;; So need some sort of throttle on forks per second and/or pending
+          ;; forks.
+          (swap! active-sessions
+                 (fn [sessions]
+                   (assoc-in sessions [session-id pid] {:frereth/state :frereth/pending
+                                                        :frereth/system-description {:client.propagate/monitor {}}}))))
+        (println "Error: trying to re-fork pid" pid)))
+    (println (str "Missing either/both of '"
+                  command
+                  "' or/and '"
+                  pid
+                  "'"))))
 
 ;; TODO: Rename to serialize
 (s/fdef wrap
@@ -102,11 +136,12 @@
 
 (defn login-realized
   "Client has finished its authentication"
-  [websocket serialized-key]
-  (if (and (not= ::drained serialized-key)
-           (not= ::timed-out serialized-key))
-    (let [_ (println "Key pulled:" serialized-key)
-          public-key (deserialize serialized-key)]
+  [websocket wrapper]
+  (if (and (not= ::drained wrapper)
+           (not= ::timed-out wrapper))
+    (let [envelope (deserialize wrapper)
+          _ (println "Key pulled:" envelope)
+          public-key (:frereth/body envelope)]
       (println "Trying to move\n" public-key "\nfrom\n"
                @pending-sessions)
       (if (@pending-sessions public-key)

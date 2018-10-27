@@ -1,6 +1,5 @@
 (ns backend.system
   (:require [backend.web.server]
-            [client.propagate]
             [server.log-gen]))
 
 (defn ctor [opts]
@@ -10,5 +9,4 @@
   ;; call to reset.
   ;; FIXME: That isn't acceptable.
   {:backend.web.server/web-server opts
-   :client.propagate/monitor opts
    :server.log-gen/samples opts})

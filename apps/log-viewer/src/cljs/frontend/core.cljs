@@ -141,6 +141,10 @@
                        content))
                    body))))))
 
+(s/fdef spawn-worker
+  ;; TODO: Need specs for these args
+  :args (s/cat :session-id any?
+               :public-key any?))
 (defn spawn-worker
   [session-id public-key]
   (when window.Worker
@@ -174,6 +178,16 @@
                       ;; supported on DedicatedWorker
                       #js{"type" "classic"})]
       (set! (.-onmessage worker)
+            ;; This needs to be fleshed out.
+            ;; Sure, the worker can send us renderer events.
+            ;; But that's the tip of the iceberg.
+            ;; It also needs to send a notification to the server
+            ;; that it's ready to start doing work (:frereth/forked,
+            ;; so its ::state switches from ::pending to ::active).
+            ;; It might even be legal to have a full-blown message
+            ;; bus here so workers can communicate among each other,
+            ;; though that seems risky.
+            ;; FIXME: Start back here
             (fn [event]
               (let [new-dom-wrapper (.-data event)
                     raw-dom (cljs.reader/read-string new-dom-wrapper)
@@ -182,15 +196,76 @@
                                     (js/document.getElementById "app")))))
       worker)))
 
+(s/fdef recv-message!
+  ;; Q: What *is* event?
+  :args (s/cat :event any?))
+
+(s/fdef send-message!
+  :args (s/cat :socket any?
+               ;; should be bytes? but cljs doesn't have the concept
+               ;; Q: Is it a string?
+               ;; A: Actually, it should be a map of a JWK
+               :world-id any?
+               ;; Anything that transit can serialize natively, anyway
+               :body any?))
+
+(let [lamport (atom 0)
+      ;; Q: msgpack ?
+      ;; A: Not in clojurescript, yet.
+      ;; At least, not "natively"
+      reader (transit/reader :json)
+      writer (transit/writer :json)]
+
+  (defn recv-message!
+    [event]
+    (console.log (str "Incoming at "
+                      (.now js/Date)
+                      ": "
+                      event))
+    (let [raw-envelope (array-buffer->string (.-data event))
+          _ (console.log "Trying to read" raw-envelope)
+          envelope (transit/read reader raw-envelope)
+          {:keys [:frereth/world-id]
+           remote-lamport :frereth/lamport
+           :or [remote-lamport 0]} envelope
+          worker (->> world-id
+                      (get @worlds)
+                      ::worker)]
+      (swap! lamport
+             (fn [current]
+               (if (>= remote-lamport current)
+                 (inc remote-lamport)
+                 (inc current))))
+      (if worker
+        (let [body (:frereth/body envelope)]
+          (.postMessage worker body))
+        (console.error "Message for"
+                       world-id
+                       "in"
+                       envelope
+                       ". No match in"
+                       (keys @worlds)))))
+
+  (defn send-message!
+    [socket
+     world-id
+     body]
+    (swap! lamport inc)
+    (let [envelope {:frereth/body body
+                    :frereth/lamport @lamport
+                    :frereth/wall-clock (.now js/Date)
+                    :frereth/world world-id}]
+      (.send socket (transit/write writer envelope)))))
+
 (defn build-worker-from-exported-key
   "Spawn worker based on newly exported public key."
   [socket session-id spawner raw-key-pair public]
   (let [signing-key (atom nil)
         full-pk (js->clj public)]
     (console.log "cljs JWK:" full-pk)
-    ;; FIXME: Need to transit-encode the message envelope
-    (.send socket {:frereth/action :frereth/fork
-                   :frereth/pid full-pk})
+    (send-mesage! socket full-pk {:frereth/action :frereth/forking
+                                  :frereth/command 'shell
+                                  :frereth/pid full-pk})
     (reset! signing-key full-pk)
     (if-let [worker (spawner session-id full-pk)]
       (do
@@ -237,7 +312,7 @@
 (s/fdef fork-login!
   :args (s/cat :socket ::web-socket
                :session-id ::session-id)
-  :ret any)
+  :ret any?)
 (defn fork-login!
   "Returns "
   [socket session-id]
@@ -261,7 +336,7 @@
   ;; key) to help the server side correlate between the
   ;; original http request and the websocket connection
   ;; that, really, gets authorized during login.
-  (.send socket (transit/write (transit/writer :json) session-id)))
+  (send-message! socket ::login session-id))
 
 (defn fork-shell!
   [socket session-id]
@@ -322,29 +397,7 @@
               ;; up the top-level shell (which, in this case, is our
               ;; log-viewer Worker)
               (fork-shell! ws session-id)))
-      ;; Q: msgpack ?
-      ;; A: Not in clojurescript, yet.
-      ;; At least, not "natively"
-      (let [reader (transit/reader :json)]
-        (set! (.-onmessage ws)
-              (fn [event]
-                (console.log event)
-                (let [raw-envelope (array-buffer->string (.-data event))
-                      _ (console.log "Trying to read" raw-envelope)
-                      envelope (transit/read reader raw-envelope)
-                      world-key (:frereth/world-id envelope)
-                      worker (->> world-key
-                                  (get @worlds)
-                                  ::worker)]
-                  (if worker
-                    (let [body (:frereth/body envelope)]
-                      (.postMessage worker body))
-                    (console.error "Message for"
-                                   world-key
-                                   "in"
-                                   envelope
-                                   ". No match in"
-                                   (keys @worlds)))))))
+      (set! (.-onmessage ws) recv-message!)
       (set! (.-onclose ws)
             (fn [event]
               (console.warn "Connection closed:" event)))
