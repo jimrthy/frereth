@@ -255,7 +255,14 @@
                     :frereth/lamport @lamport
                     :frereth/wall-clock (.now js/Date)
                     :frereth/world world-id}]
-      (.send socket (transit/write writer envelope)))))
+      ;; TODO: Check that bufferedAmount is low enough
+      ;; to send more
+      (try
+        (println "Trying to send a message")
+        (.send socket (transit/write writer envelope))
+        (println body "sent successfully")
+        (catch :default ex
+          (console.error "Sending message failed:" ex))))))
 
 (defn build-worker-from-exported-key
   "Spawn worker based on newly exported public key."
@@ -263,7 +270,7 @@
   (let [signing-key (atom nil)
         full-pk (js->clj public)]
     (console.log "cljs JWK:" full-pk)
-    (send-mesage! socket full-pk {:frereth/action :frereth/forking
+    (send-message! socket full-pk {:frereth/action :frereth/forking
                                   :frereth/command 'shell
                                   :frereth/pid full-pk})
     (reset! signing-key full-pk)
@@ -338,6 +345,17 @@
   ;; that, really, gets authorized during login.
   (send-message! socket ::login session-id))
 
+(defn export-key-and-build-worker!
+  [socket session-id crypto key-pair]
+  (let [secret (.-privateKey key-pair)
+        raw-public (.-publicKey key-pair)
+        exported (.exportKey crypto "jwk" raw-public)]
+    (.then exported (partial build-worker-from-exported-key
+                             socket
+                             session-id
+                             spawn-worker
+                             key-pair))))
+
 (defn fork-shell!
   [socket session-id]
   (let [crypto (.-subtle (.-crypto js/window))
@@ -352,18 +370,13 @@
                                           true
                                           #js ["sign"
                                                "verify"])]
-    (.then signing-key-promise (fn [key-pair]
-                                 (let [secret (.-privateKey key-pair)
-                                       raw-public (.-publicKey key-pair)
-                                       exported (.exportKey crypto "jwk" raw-public)]
-                                   (.then exported (partial build-worker-from-exported-key
-                                                            socket
-                                                            session-id
-                                                            spawn-worker
-                                                            key-pair)))))))
+    (.then signing-key-promise (partial export-key-and-build-worker!
+                                        socket
+                                        session-id
+                                        crypto))))
 
 (defn connect-web-socket!
-  [fork-shell! session-id]
+  [shell-forker session-id]
   (console.log "Connecting WebSocket")
   (try
     (let [location (.-location js/window)
@@ -384,7 +397,8 @@
       ;; async op to convert it to an arraybuffer.
       ;;(set! (.-binaryType ws) "blob")
       (set! (.-binaryType ws) "arraybuffer")
-      ;; Q: Worth using a library to wrap the details?
+      ;; Q: Worth using a library like sente or haslett to wrap the
+      ;; details?
       (set! (.-onopen ws)
             (fn [event]
               (console.log "Websocket opened:" event ws)
@@ -396,7 +410,7 @@
               ;; Once the login sequence has completed, we want to spin
               ;; up the top-level shell (which, in this case, is our
               ;; log-viewer Worker)
-              (fork-shell! ws session-id)))
+              (shell-forker ws session-id)))
       (set! (.-onmessage ws) recv-message!)
       (set! (.-onclose ws)
             (fn [event]

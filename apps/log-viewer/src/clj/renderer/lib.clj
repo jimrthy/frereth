@@ -49,6 +49,11 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Internal Implementation
 
+(defmethod dispatch! :default
+  [session-id
+   body]
+  (println "Unhandled action:" body))
+
 (defmethod dispatch! :frereth/forked
   [session-id
    {:keys [:frereth/pid]}]
@@ -82,6 +87,28 @@
           ;; we should try to avoid those.
           ;; So need some sort of throttle on forks per second and/or pending
           ;; forks.
+
+          ;; TODO: Put this data into an encrypted cookie. It could be
+          ;; a real cookie or a GET parameter.
+          ;; Whichever.
+          ;; Take a page from the CurveCP handshake. Use a
+          ;; minute-cookie for encryption.
+          ;; When the client notifies us that it has forked (and that
+          ;; notification must be signed with the PID...it should
+          ;; probably include the PID to match that part of the
+          ;; protocol), we can decrypt the cookie and mark this World
+          ;; active for the appropriate SESSION.
+          ;; Q: Would it be worthwhile to add another layer to this?
+          ;; Have the browser query for the worker code. We use this
+          ;; cookie to inject another short-term cookie key into that
+          ;; worker code.
+          ;; Then the ::forked handler could verify them all.
+          ;; It seems like we really have to do something along those
+          ;; lines, since we cannot possibly trust the browser and the
+          ;; HTTP request could come from anywhere.
+          ;; A malicious client could still share the client's private
+          ;; key and request a billion copies of the browser page.
+          ;; Then again, that seems like a weakness in CurveCP also.
           (swap! active-sessions
                  (fn [sessions]
                    (assoc-in sessions [session-id pid] {:frereth/state :frereth/pending
@@ -93,12 +120,11 @@
                   pid
                   "'"))))
 
-;; TODO: Rename to serialize
-(s/fdef wrap
+(s/fdef serialize
   :args (s/cat :world-id any?
                :value any?)
   :ret bytes?)
-(defn wrap
+(defn serialize
   [world-id value]
   (let [unwrapped-envelope {:frereth/world-id world-id
                             :frereth/body value}
@@ -108,7 +134,7 @@
     (.toByteArray envelope)))
 
 (comment
-  (String. (wrap "12345" {:a 1 :b 2 :c 3}))
+  (String. (serialize "12345" {:a 1 :b 2 :c 3}))
   )
 
 (defn deserialize
@@ -120,10 +146,21 @@
 (defn on-message
   "Deserialize and dispatch a raw message from browser"
   [public-key message-string]
-  ;; This almost doesn't seem worth having
+  (println (str "Incoming message from "
+                public-key
+                ": "
+                message-string))
   (if (get @active-sessions public-key)
-    (let [body (deserialize message-string)]
-      (dispatch! public-key body))
+    (try
+      (let [{:keys [:frereth/body]
+             :as wrapper} (deserialize message-string)]
+        ;; The actual point.
+        ;; It's easy to miss this in the middle of the error handling.
+        ;; Which is one reason this is worth keeping separate from the
+        ;; dispatching code.
+        (dispatch! public-key body))
+      (catch Exception ex
+        (println ex "trying to deserialize/dispatch" message-string)))
     ;; This consumes messages from the websocket associated
     ;; with public-key until that websocket closes.
     (println "This should be impossible\n"
@@ -164,11 +201,11 @@
             ;; Cope with it closing
             (dfrd/on-realized connection-closed
                               (fn [succeeded]
-                                (println "Socket closed cleanly for"
-                                         "session"
-                                         public-key
-                                         ":"
-                                         succeeded)
+                                (println (str "Socket closed cleanly"
+                                          " for session "
+                                          public-key
+                                          ": "
+                                          succeeded))
                                 (swap! active-sessions
                                        dissoc
                                        public-key))
@@ -230,7 +267,7 @@
                        (get world-id))]
     (try
       (pprint connection)
-      (let [envelope (wrap world-id value)]
+      (let [envelope (serialize world-id value)]
         (let [success (strm/try-put! connection envelope 500 ::timed-out)]
           (dfrd/on-realized success
                             #(println value "forwarded:" %)
