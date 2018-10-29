@@ -2,17 +2,36 @@
   "Library functions specific for the web renderer"
   (:require [client.propagate]
             [cognitect.transit :as transit]
-            [manifold.stream :as strm]
             [clojure.pprint :refer [pprint]]
             [clojure.spec.alpha :as s]
-            [manifold.deferred :as dfrd])
+            [frereth-cp.shared.crypto :as crypto]
+            [manifold
+             [deferred :as dfrd]
+             [stream :as strm]])
   (:import clojure.lang.ExceptionInfo
            [java.io
             ByteArrayInputStream
-            ByteArrayOutputStream]))
+            ByteArrayOutputStream]
+           java.util.Base64))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Globals
+
+(def minute-key
+  ;; TODO: Need another System Component that rotates this once a
+  ;; minute
+  "Symmetric key used for encrypting short-term key pairs in a Cookie
+
+  (using the CurveCP, not web, sense of the term)"
+  (atom (crypto/random-key)))
+
+(def previous-minute-key
+  ;; TODO: Need another System Component that rotates this once a
+  ;; minute
+  "Old symmetric key used for encrypting short-term key pairs in Cookie
+
+  (using the CurveCP, not web, sense of the term)"
+  (atom (crypto/random-key)))
 
 (def test-key
   "Placeholder for crypto key to identify a connection.
@@ -48,6 +67,29 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Internal Implementation
+
+(s/fdef serialize
+  :args (s/cat :world-id any?
+               :value any?)
+  :ret bytes?)
+(defn serialize
+  [world-id value]
+  (let [unwrapped-envelope {:frereth/world-id world-id
+                            :frereth/body value}
+        envelope (ByteArrayOutputStream. 4096)  ; Q: Useful size?
+        writer (transit/writer envelope :json)]
+    (transit/write writer unwrapped-envelope)
+    (.toByteArray envelope)))
+
+(comment
+  (String. (serialize "12345" {:a 1 :b 2 :c 3}))
+  )
+
+(defn deserialize
+  [message-string]
+  (let [in (ByteArrayInputStream. (.getBytes message-string))
+        reader (transit/reader in :json)]
+    (transit/read reader)))
 
 (defmethod dispatch! :default
   [session-id
@@ -89,7 +131,8 @@
           ;; forks.
 
           ;; TODO: Put this data into an encrypted cookie. It could be
-          ;; a real cookie or a GET parameter.
+          ;; a real cookie (well, no it couldn't, unless we convert this
+          ;; to an HTTP request) or a GET parameter.
           ;; Whichever.
           ;; Take a page from the CurveCP handshake. Use a
           ;; minute-cookie for encryption.
@@ -109,39 +152,25 @@
           ;; A malicious client could still share the client's private
           ;; key and request a billion copies of the browser page.
           ;; Then again, that seems like a weakness in CurveCP also.
-          (swap! active-sessions
-                 (fn [sessions]
-                   (assoc-in sessions [session-id pid] {:frereth/state :frereth/pending
-                                                        :frereth/system-description {:client.propagate/monitor {}}}))))
+          (comment (swap! active-sessions
+                          (fn [sessions]
+                            (assoc-in sessions [session-id pid] {:frereth/state :frereth/pending
+                                                                 :frereth/system-description {:client.propagate/monitor {}}}))))
+          (let [session {:frereth/pid pid
+                         :frereth/state :frereth/pending
+                         :frereth/system-description {:client.propagate/monitor {}}}
+                session-string (pr session)
+                ;; Q: Will this need Unicode? UTF-8 seems safer
+                session-bytes (.getBytes session-string "ASCII")
+                encoded (.encode (Base64/getEncoder) session-bytes)
+                ack (serialize pid {:frereth/action :frereth/ack-forking})]
+            ()))
         (println "Error: trying to re-fork pid" pid)))
     (println (str "Missing either/both of '"
                   command
                   "' or/and '"
                   pid
                   "'"))))
-
-(s/fdef serialize
-  :args (s/cat :world-id any?
-               :value any?)
-  :ret bytes?)
-(defn serialize
-  [world-id value]
-  (let [unwrapped-envelope {:frereth/world-id world-id
-                            :frereth/body value}
-        envelope (ByteArrayOutputStream. 4096)  ; Q: Useful size?
-        writer (transit/writer envelope :json)]
-    (transit/write writer unwrapped-envelope)
-    (.toByteArray envelope)))
-
-(comment
-  (String. (serialize "12345" {:a 1 :b 2 :c 3}))
-  )
-
-(defn deserialize
-  [message-string]
-  (let [in (ByteArrayInputStream. (.getBytes message-string))
-        reader (transit/reader in :json)]
-    (transit/read reader)))
 
 (defn on-message
   "Deserialize and dispatch a raw message from browser"

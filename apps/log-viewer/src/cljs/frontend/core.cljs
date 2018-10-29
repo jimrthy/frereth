@@ -272,7 +272,9 @@
     (console.log "cljs JWK:" full-pk)
     (send-message! socket full-pk {:frereth/action :frereth/forking
                                   :frereth/command 'shell
-                                  :frereth/pid full-pk})
+                                   :frereth/pid full-pk})
+    ;; FIXME: Have to set up core.async to read the cookie
+    ;; that the server's going to send back so we can proceed.
     (reset! signing-key full-pk)
     (if-let [worker (spawner session-id full-pk)]
       (do
@@ -358,6 +360,12 @@
 
 (defn fork-shell!
   [socket session-id]
+  ;; TODO: Look into using something like
+  ;; https://tweetnacl.js.org/#/
+  ;; instead.
+  ;; It seems like it might be faster, and definitely simpler,
+  ;; but the ability to use a native API that the browser
+  ;; writer optimized probably offsets those advantages.
   (let [crypto (.-subtle (.-crypto js/window))
         ;; Q: Any point to encrypting?
         ;; Q: Are these settings reasonable?

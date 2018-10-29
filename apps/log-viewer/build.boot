@@ -113,8 +113,6 @@
                                                                        org.clojure/tools.reader]]
 
                             ;; Backend
-                            ;; Q: Conflict w/ core.specs.alpha ?
-                            ;; A: Must have an older version installed
                             [frereth-cp "0.0.1-SNAPSHOT"]
                             [integrant "0.7.0" :exclusions [org.clojure/clojure
                                                             org.clojure/core.specs.alpha
