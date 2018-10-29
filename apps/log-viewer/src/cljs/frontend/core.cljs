@@ -1,10 +1,12 @@
 (ns frontend.core
-  (:require-macros [frontend.macro :refer [foobar]])
+  (:require-macros [cljs.core.async.macros :refer [go]]
+                   [frontend.macro :refer [foobar]])
   (:require [cognitect.transit :as transit]
             [foo.bar]
             ;; Start by at least partially supporting this, since it's
             ;; so popular
             [reagent.core :as r]
+            [cljs.core.async :as async]
             [clojure.spec.alpha :as s]
             [clojure.string]
             [weasel.repl :as repl]))
@@ -264,59 +266,85 @@
         (catch :default ex
           (console.error "Sending message failed:" ex))))))
 
+(defn build-actual-worker
+  [ch spawner session-id raw-key-pair full-pk]
+  (go
+    (let [response (async/<! ch)]
+      (if-let [worker (spawner session-id full-pk)]
+        (do
+          (comment
+            ;; The worker pool is getting ahead of myself.
+            ;; Part of the missing Window Manager abstraction
+            ;; mentioned above. Assuming that it makes any sense
+            ;; at all.
+            ;; It seems like a good optimization, but breaking
+            ;; the isolation we get from web workers may not be
+            ;; worth any theoretical gain.
+            (swap! idle-worker-pool conj (partial spawn-worker session-id)))
+          ;; Honestly, that should be something that gets
+          ;; assigned here. It's independent of whatever key the
+          ;; Worker might actually use.
+          ;; It's really just for routing messages to/from that
+          ;; Worker.
+          ;; Q: How about this approach?
+          ;; We query the web server for a shell URL. Include our
+          ;; version of the worker ID as a query param.
+          ;; Q: Worth using the websocket for that? (it doesn't
+          ;; seem likely).
+          ;; The web server creates a pending-world (keyed to
+          ;; our worker-id), and
+          ;; its response includes the actual URL to load that
+          ;; Worker.
+          ;; Then each Worker could be responsible for tracking
+          ;; its own signing key.
+          ;; Except that sharing the responsibility would be
+          ;; silly.
+          ;; Want the signing key out here at this level, so we
+          ;; don't have to duplicate the signing code
+          ;; everywhere.
+          ;; So, generate the short-term key pair here. Send
+          ;; the public half to the web server for validation.
+          ;; Possibly sign that request with the Session key.
+          ;; Then use the public key to dispatch messages.
+          (swap! worlds assoc full-pk {::worker worker
+                                       ::key-pair raw-key-pair})
+          ;; TODO: Need to notify the Client that this World is ready to interact
+          (.log js/console "Shell spawned"))
+        (.warn js/console "Spawning shell failed")))))
+
+(s/fdef build-worker-from-exported-key
+  ;; TODO: Specs!
+  :args (s/cat :socket any?  ; websocket
+               :session-id any?  ; Q: What is this?
+               :spawner (s/fspec :args (s/cat :session-id any?
+                                              :full-pk any?))
+               :raw-key-pair any? ; Something like crypto/KeyPair
+               ;; Something like crypto/Key
+               :public any?)
+  ;; Returns a core.async channel
+  :ret any?)
 (defn build-worker-from-exported-key
   "Spawn worker based on newly exported public key."
   [socket session-id spawner raw-key-pair public]
   (let [signing-key (atom nil)
-        full-pk (js->clj public)]
+        full-pk (js->clj public)
+        ch (async/chan)
+        actual-work (build-actual-worker ch
+                                         spawner
+                                         session-id
+                                         raw-key-pair
+                                         full-pk)]
     (console.log "cljs JWK:" full-pk)
     (send-message! socket full-pk {:frereth/action :frereth/forking
                                   :frereth/command 'shell
                                    :frereth/pid full-pk})
     ;; FIXME: Have to set up core.async to read the cookie
     ;; that the server's going to send back so we can proceed.
+    ;; Actually, it gets twistier than that.
+    ;; We do need to set up a go block for that. And then do
+    ;; something like alter global state
     (reset! signing-key full-pk)
-    (if-let [worker (spawner session-id full-pk)]
-      (do
-        (comment
-          ;; The worker pool is getting ahead of myself.
-          ;; Part of the missing Window Manager abstraction
-          ;; mentioned above. Assuming that it makes any sense
-          ;; at all.
-          ;; It seems like a good optimization, but breaking
-          ;; the isolation we get from web workers may not be
-          ;; worth any theoretical gain.
-          (swap! idle-worker-pool conj (partial spawn-worker session-id)))
-        ;; Honestly, that should be something that gets
-        ;; assigned here. It's independent of whatever key the
-        ;; Worker might actually use.
-        ;; It's really just for routing messages to/from that
-        ;; Worker.
-        ;; Q: How about this approach?
-        ;; We query the web server for a shell URL. Include our
-        ;; version of the worker ID as a query param.
-        ;; Q: Worth using the websocket for that? (it doesn't
-        ;; seem likely).
-        ;; The web server creates a pending-world (keyed to
-        ;; our worker-id), and
-        ;; its response includes the actual URL to load that
-        ;; Worker.
-        ;; Then each Worker could be responsible for tracking
-        ;; its own signing key.
-        ;; Except that sharing the responsibility would be
-        ;; silly.
-        ;; Want the signing key out here at this level, so we
-        ;; don't have to duplicate the signing code
-        ;; everywhere.
-        ;; So, generate the short-term key pair here. Send
-        ;; the public half to the web server for validation.
-        ;; Possibly sign that request with the Session key.
-        ;; Then use the public key to dispatch messages.
-        (swap! worlds assoc full-pk {::worker worker
-                                     ::key-pair raw-key-pair})
-        ;; TODO: Need to notify the Client that this World is ready to interact
-        (.log js/console "Shell spawned"))
-      (.warn js/console "Spawning shell failed"))))
+    ch))
 
 (s/fdef fork-login!
   :args (s/cat :socket ::web-socket

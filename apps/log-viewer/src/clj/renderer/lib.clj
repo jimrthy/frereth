@@ -152,19 +152,17 @@
           ;; A malicious client could still share the client's private
           ;; key and request a billion copies of the browser page.
           ;; Then again, that seems like a weakness in CurveCP also.
-          (comment (swap! active-sessions
-                          (fn [sessions]
-                            (assoc-in sessions [session-id pid] {:frereth/state :frereth/pending
-                                                                 :frereth/system-description {:client.propagate/monitor {}}}))))
-          (let [session {:frereth/pid pid
-                         :frereth/state :frereth/pending
-                         :frereth/system-description {:client.propagate/monitor {}}}
-                session-string (pr session)
+          (let [dscr {:frereth/pid pid
+                      :frereth/state :frereth/pending
+                      :frereth/system-description {:client.propagate/monitor {}}}
+                session-string (pr dscr)
                 ;; Q: Will this need Unicode? UTF-8 seems safer
                 session-bytes (.getBytes session-string "ASCII")
                 encoded (.encode (Base64/getEncoder) session-bytes)
-                ack (serialize pid {:frereth/action :frereth/ack-forking})]
-            ()))
+                ack (serialize pid {:frereth/action :frereth/ack-forking
+                                    :frereth/cookie encoded})
+                websock (::web-socket session)]
+            (post-message session-id ack)))
         (println "Error: trying to re-fork pid" pid)))
     (println (str "Missing either/both of '"
                   command
@@ -174,12 +172,12 @@
 
 (defn on-message
   "Deserialize and dispatch a raw message from browser"
-  [public-key message-string]
+  [session-id message-string]
   (println (str "Incoming message from "
-                public-key
+                session-id
                 ": "
                 message-string))
-  (if (get @active-sessions public-key)
+  (if (get @active-sessions session-id)
     (try
       (let [{:keys [:frereth/body]
              :as wrapper} (deserialize message-string)]
@@ -187,14 +185,14 @@
         ;; It's easy to miss this in the middle of the error handling.
         ;; Which is one reason this is worth keeping separate from the
         ;; dispatching code.
-        (dispatch! public-key body))
+        (dispatch! session-id body))
       (catch Exception ex
         (println ex "trying to deserialize/dispatch" message-string)))
     ;; This consumes messages from the websocket associated
     ;; with public-key until that websocket closes.
     (println "This should be impossible\n"
              "No"
-             public-key
+             session-id
              "\namong\n"
              (keys @active-sessions)
              "\nPending:\n"
