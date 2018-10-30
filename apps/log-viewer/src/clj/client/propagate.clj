@@ -4,13 +4,13 @@
             [renderer.lib :as lib]))
 
 (defn do-it
-  "Propagate an object sent to tap> to the log-viewer front-end"
+  "Propagate an object sent to a log-stream to the log-viewer front-end"
   [uuid o]
   ;; FIXME: This really needs to send the message to web sockets
   ;; attached to the front-end worker(s)
   (prn o)
   (try
-    (lib/post-message uuid o)
+    (lib/post-message! uuid o)
     (catch Exception ex
       (println "Posting message failed:" ex))))
 
@@ -21,6 +21,9 @@
   ;; Realistically, that's part of an internal Component System for
   ;; those World(s).
   (let [func (partial do-it lib/test-key)]
+    ;; TODO: Need non-global log streams.
+    ;; Don't want to just allow any client to peek at *all* the
+    ;; debugging logs.
     (add-tap func)
     func))
 

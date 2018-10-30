@@ -66,6 +66,8 @@
                             [com.cemerick/url "0.1.1"]
                             [com.cognitect/transit-clj "0.8.313" :exclusions [commons-codec]]
                             [com.cognitect/transit-cljs "0.8.256"]
+                            [com.nimbusds/nimbus-jose-jwt "6.0"]
+                            [com.nimbusds/srp6a "2.0.2"]
                             [crisptrutski/boot-cljs-test "0.3.4" :scope "test"]
                             [deraen/boot-sass "0.3.1" :scope "test"]
                             [deraen/boot-less "0.6.2" :scope "test"]
@@ -83,6 +85,7 @@
                                                                      org.clojure/google-closure-library-third-party
                                                                      org.clojure/spec.alpha
                                                                      org.clojure/tools.reader]]
+                            [funcool/promesa "1.9.0"]
                             [metosin/boot-alt-test "0.3.2" :scope "test"]
                             [metosin/boot-deps-size "0.1.0" :scope "test"]
                             [nrepl "0.4.5" :exclusions [org.clojure/clojure]]

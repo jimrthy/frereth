@@ -1,7 +1,6 @@
 (ns renderer.lib
   "Library functions specific for the web renderer"
-  (:require [client.propagate]
-            [cognitect.transit :as transit]
+  (:require [cognitect.transit :as transit]
             [clojure.pprint :refer [pprint]]
             [clojure.spec.alpha :as s]
             [frereth-cp.shared.crypto :as crypto]
@@ -64,6 +63,10 @@
   (fn [session-id {:keys [:frereth/action]
                    :as body}]
     action))
+
+;; The fact that I need to do this makes me more inclined to move the
+;; dispatch! methods into a different ns.
+(declare post-message!)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Internal Implementation
@@ -154,6 +157,14 @@
           ;; Then again, that seems like a weakness in CurveCP also.
           (let [dscr {:frereth/pid pid
                       :frereth/state :frereth/pending
+                      ;; We don't need to (require 'client.propagate) to be able
+                      ;; to declare the dependency structure here.
+                      ;; But we will need to do so once the browser side has
+                      ;; ::forked and we need to start the System this describes.
+                      ;; Of course, the system that gets created here depends
+                      ;; on the :frereth/command parameter.
+                      ;; Need to split this ns up to avoid the potential circular
+                      ;; dependency.
                       :frereth/system-description {:client.propagate/monitor {}}}
                 session-string (pr dscr)
                 ;; Q: Will this need Unicode? UTF-8 seems safer
@@ -162,7 +173,7 @@
                 ack (serialize pid {:frereth/action :frereth/ack-forking
                                     :frereth/cookie encoded})
                 websock (::web-socket session)]
-            (post-message session-id ack)))
+            (post-message! session-id ack)))
         (println "Error: trying to re-fork pid" pid)))
     (println (str "Missing either/both of '"
                   command
@@ -282,7 +293,7 @@
       (pprint ex)
       (.close websocket))))
 
-(defn post-message
+(defn post-message!
   "Forward value to the associated World"
   [world-id value]
   (println "Trying to forward\n"
