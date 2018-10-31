@@ -229,24 +229,28 @@
           envelope (transit/read reader raw-envelope)
           {:keys [:frereth/world-id]
            remote-lamport :frereth/lamport
-           :or [remote-lamport 0]} envelope
-          worker (->> world-id
-                      (get @worlds)
-                      ::worker)]
+           :or [remote-lamport 0]} envelope]
       (swap! lamport
              (fn [current]
                (if (>= remote-lamport current)
                  (inc remote-lamport)
                  (inc current))))
-      (if worker
-        (let [body (:frereth/body envelope)]
-          (.postMessage worker body))
-        (console.error "Message for"
-                       world-id
-                       "in"
-                       envelope
-                       ". No match in"
-                       (keys @worlds)))))
+      ;; Not all messages are intended for a World's Worker.
+      ;; Current prime case in point: the server's ::ack-forking.
+      ;; That's a signal to this layer to actually start the
+      ;; worker.
+      (let [worker (->> world-id
+                        (get @worlds)
+                        ::worker)]
+        (if worker
+          (let [body (:frereth/body envelope)]
+            (.postMessage worker body))
+          (console.error "Message for"
+                         world-id
+                         "in"
+                         envelope
+                         ". No match in"
+                         (keys @worlds))))))
 
   (defn send-message!
     [socket

@@ -71,6 +71,8 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Internal Implementation
 
+;; Need a lamport clock.
+;; Honestly, this should be a Component in the System.
 (s/fdef serialize
   :args (s/cat :world-id any?
                :value any?)
@@ -121,59 +123,63 @@
   (if (and command pid)
     (let [session (get @active-sessions session-id)]
       (if-not (contains? session pid)
-        (do
-          ;; This is dangerous and easily exploited.
-          ;; Really do need something like this to tell the client the URL for loading.
-          ;; And update the routing table to be able to serve the javascript it's about
-          ;; to request.
-          ;; At the same time, it would be pretty trivial for a bunch of rogue clients to
-          ;; overload a server this naive.
-          ;; The fact that the client is authenticated helps with post-mortems, but
-          ;; we should try to avoid those.
-          ;; So need some sort of throttle on forks per second and/or pending
-          ;; forks.
+        ;; This is dangerous and easily exploited.
+        ;; Really do need something like this to tell the client the URL for loading.
+        ;; And update the routing table to be able to serve the javascript it's about
+        ;; to request.
+        ;; At the same time, it would be pretty trivial for a bunch of rogue clients to
+        ;; overload a server this naive.
+        ;; The fact that the client is authenticated helps with post-mortems, but
+        ;; we should try to avoid those.
+        ;; So need some sort of throttle on forks per second and/or pending
+        ;; forks.
 
-          ;; TODO: Put this data into an encrypted cookie. It could be
-          ;; a real cookie (well, no it couldn't, unless we convert this
-          ;; to an HTTP request) or a GET parameter.
-          ;; Whichever.
-          ;; Take a page from the CurveCP handshake. Use a
-          ;; minute-cookie for encryption.
-          ;; When the client notifies us that it has forked (and that
-          ;; notification must be signed with the PID...it should
-          ;; probably include the PID to match that part of the
-          ;; protocol), we can decrypt the cookie and mark this World
-          ;; active for the appropriate SESSION.
-          ;; Q: Would it be worthwhile to add another layer to this?
-          ;; Have the browser query for the worker code. We use this
-          ;; cookie to inject another short-term cookie key into that
-          ;; worker code.
-          ;; Then the ::forked handler could verify them all.
-          ;; It seems like we really have to do something along those
-          ;; lines, since we cannot possibly trust the browser and the
-          ;; HTTP request could come from anywhere.
-          ;; A malicious client could still share the client's private
-          ;; key and request a billion copies of the browser page.
-          ;; Then again, that seems like a weakness in CurveCP also.
-          (let [dscr {:frereth/pid pid
-                      :frereth/state :frereth/pending
-                      ;; We don't need to (require 'client.propagate) to be able
-                      ;; to declare the dependency structure here.
-                      ;; But we will need to do so once the browser side has
-                      ;; ::forked and we need to start the System this describes.
-                      ;; Of course, the system that gets created here depends
-                      ;; on the :frereth/command parameter.
-                      ;; Need to split this ns up to avoid the potential circular
-                      ;; dependency.
-                      :frereth/system-description {:client.propagate/monitor {}}}
-                session-string (pr dscr)
-                ;; Q: Will this need Unicode? UTF-8 seems safer
-                session-bytes (.getBytes session-string "ASCII")
-                encoded (.encode (Base64/getEncoder) session-bytes)
-                ack (serialize pid {:frereth/action :frereth/ack-forking
-                                    :frereth/cookie encoded})
-                websock (::web-socket session)]
-            (post-message! session-id ack)))
+        ;; TODO: Put this data into an encrypted cookie. It could be
+        ;; a real cookie (well, no it couldn't, unless we convert this
+        ;; to an HTTP request) or a GET parameter.
+        ;; Whichever.
+        ;; Take a page from the CurveCP handshake. Use a
+        ;; minute-cookie for encryption.
+        ;; When the client notifies us that it has forked (and that
+        ;; notification must be signed with the PID...it should
+        ;; probably include the PID to match that part of the
+        ;; protocol), we can decrypt the cookie and mark this World
+        ;; active for the appropriate SESSION.
+        ;; Q: Would it be worthwhile to add another layer to this?
+        ;; Have the browser query for the worker code. We use this
+        ;; cookie to inject another short-term cookie key into that
+        ;; worker code.
+        ;; Then the ::forked handler could verify them all.
+        ;; It seems like we really have to do something along those
+        ;; lines, since we cannot possibly trust the browser and the
+        ;; HTTP request could come from anywhere.
+        ;; A malicious client could still share the client's private
+        ;; key and request a billion copies of the browser page.
+        ;; Then again, that seems like a weakness in CurveCP also.
+        (let [dscr {:frereth/pid pid
+                    :frereth/state :frereth/pending
+                    ;; We don't need to (require 'client.propagate) to be able
+                    ;; to declare the dependency structure here.
+                    ;; But we will need to do so once the browser side has
+                    ;; ::forked and we need to start the System this describes.
+                    ;; Of course, the system that gets created here depends
+                    ;; on the :frereth/command parameter.
+                    ;; Need to split this ns up to avoid the potential circular
+                    ;; dependency.
+                    :frereth/system-description {:client.propagate/monitor {}}}
+              world-system-string (pr-str dscr)
+              ;; Q: Will this need Unicode? UTF-8 seems safer
+              world-system-bytes (.getBytes world-system-string "ASCII")
+              encoded (.encode (Base64/getEncoder) world-system-bytes)
+              ;; There's a discrepancy between this, the serialize
+              ;; function, and (recv-message! in core.cljs.
+              ;; The :cookie probably belongs in the body, the
+              ;; way we're handling here.
+              ;; But the action does not.
+              ack (serialize pid
+                             {:frereth/action :frereth/ack-forking
+                              :frereth/cookie encoded})]
+          (post-message! session-id ack))
         (println "Error: trying to re-fork pid" pid)))
     (println (str "Missing either/both of '"
                   command
@@ -305,11 +311,11 @@
                        (get world-id))]
     (try
       (pprint connection)
-      (let [envelope (serialize world-id value)]
-        (let [success (strm/try-put! connection envelope 500 ::timed-out)]
-          (dfrd/on-realized success
-                            #(println value "forwarded:" %)
-                            #(println value "Forwarding failed:" %))))
+      (let [envelope (serialize world-id value)
+            success (strm/try-put! (::web-socket connection) envelope 500 ::timed-out)]
+        (dfrd/on-realized success
+                          #(println value "forwarded:" %)
+                          #(println value "Forwarding failed:" %)))
       (catch Exception ex
         (println "Message forwarding failed:" ex)))
     (do
