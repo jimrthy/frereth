@@ -227,7 +227,8 @@
     (let [raw-envelope (array-buffer->string (.-data event))
           _ (console.log "Trying to read" raw-envelope)
           envelope (transit/read reader raw-envelope)
-          {:keys [:frereth/world-id]
+          {:keys [:frereth/action
+                  :frereth/world-id]
            remote-lamport :frereth/lamport
            :or [remote-lamport 0]} envelope]
       (swap! lamport
@@ -235,22 +236,31 @@
                (if (>= remote-lamport current)
                  (inc remote-lamport)
                  (inc current))))
-      ;; Not all messages are intended for a World's Worker.
-      ;; Current prime case in point: the server's ::ack-forking.
-      ;; That's a signal to this layer to actually start the
-      ;; worker.
-      (let [worker (->> world-id
-                        (get @worlds)
-                        ::worker)]
-        (if worker
-          (let [body (:frereth/body envelope)]
-            (.postMessage worker body))
-          (console.error "Message for"
-                         world-id
-                         "in"
-                         envelope
-                         ". No match in"
-                         (keys @worlds))))))
+      ;; Using condp for this is weak. Should probably use a defmethod,
+      ;; at least. Or possibly even something like bidi.
+      ;; What I remember about core.match seems like overkill, but it
+      ;; also seems tailor-made for this. Assuming it is available in
+      ;; cljs.
+      (condp = action
+        :frereth/forward
+        ;; Not all messages are intended for a World's Worker.
+        ;; Current prime case in point: the server's ::ack-forking.
+        ;; That's a signal to this layer to actually start the
+        ;; worker.
+        (let [worker (->> world-id
+                          (get @worlds)
+                          ::worker)]
+          (if worker
+            (let [body (:frereth/body envelope)]
+              (.postMessage worker body))
+            (console.error "Message for"
+                           world-id
+                           "in"
+                           envelope
+                           ". No match in"
+                           (keys @worlds))))
+        :frereth/ack-forking (throw (ex-info "Not Implemented"
+                                             {::problem envelope})))))
 
   (defn send-message!
     [socket
@@ -264,7 +274,7 @@
       ;; TODO: Check that bufferedAmount is low enough
       ;; to send more
       (try
-        (println "Trying to send a message")
+        (println "Trying to send-message!")
         (.send socket (transit/write writer envelope))
         (println body "sent successfully")
         (catch :default ex
@@ -430,12 +440,14 @@
           local-base-url (str protocol "://" (.-host location))
           url (str local-base-url  "/ws")
           ws (js/WebSocket. url)]
+      ;; This actually isn't very useful.
+      ;; Although it might be worth saving a format string that lets us
+      ;; swap out the protocol. The websocket connection string really
+      ;; doesn't make any sense after we're done here. But we'll still
+      ;; need lots of XHR interaction for things like Web Workers.
       (reset! base-url local-base-url)
-      ;; Q: Does "arraybuffer" make any sense here?
-      ;; A: Yes, most definitely.
       ;; A blob is really just a file handle. Have to jump through an
       ;; async op to convert it to an arraybuffer.
-      ;;(set! (.-binaryType ws) "blob")
       (set! (.-binaryType ws) "arraybuffer")
       ;; Q: Worth using a library like sente or haslett to wrap the
       ;; details?

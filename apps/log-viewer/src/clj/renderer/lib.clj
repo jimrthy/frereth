@@ -75,12 +75,27 @@
 ;; Honestly, this should be a Component in the System.
 (s/fdef serialize
   :args (s/cat :world-id any?
+               ;; It's tempting to make this a limited set.
+               ;; But it's not like specifying that here would
+               ;; make runtime callers any more reliable.
+               ;; That really gets into things like runtime
+               ;; message validation.
+               ;; Which, honestly, should be pretty strict and
+               ;; happen ASAP on both sides.
+               :action keyword?
                :value any?)
   :ret bytes?)
 (defn serialize
-  [world-id value]
-  (let [unwrapped-envelope {:frereth/world-id world-id
-                            :frereth/body value}
+  [world-id
+   action
+   value]
+  (let [unwrapped-envelope {:frereth/action action
+                            :frereth/body value
+                            ;; FIXME: Need a Lamport clock here.
+                            ;; Except that it doesn't fit at all.
+                            ;; FIXME: The envelope-building part
+                            ;; needs to be separate.
+                            :frereth/world-id world-id}
         envelope (ByteArrayOutputStream. 4096)  ; Q: Useful size?
         writer (transit/writer envelope :json)]
     (transit/write writer unwrapped-envelope)
@@ -170,16 +185,10 @@
               world-system-string (pr-str dscr)
               ;; Q: Will this need Unicode? UTF-8 seems safer
               world-system-bytes (.getBytes world-system-string "ASCII")
-              encoded (.encode (Base64/getEncoder) world-system-bytes)
-              ;; There's a discrepancy between this, the serialize
-              ;; function, and (recv-message! in core.cljs.
-              ;; The :cookie probably belongs in the body, the
-              ;; way we're handling here.
-              ;; But the action does not.
-              ack (serialize pid
-                             {:frereth/action :frereth/ack-forking
-                              :frereth/cookie encoded})]
-          (post-message! session-id ack))
+              encoded (.encode (Base64/getEncoder) world-system-bytes)]
+          (post-message! pid
+                         :frereth/ack-forking
+                         {:frereth/cookie encoded}))
         (println "Error: trying to re-fork pid" pid)))
     (println (str "Missing either/both of '"
                   command
@@ -301,7 +310,7 @@
 
 (defn post-message!
   "Forward value to the associated World"
-  [world-id value]
+  [world-id action value]
   (println "Trying to forward\n"
            value
            "\nto\n"
@@ -311,8 +320,11 @@
                        (get world-id))]
     (try
       (pprint connection)
-      (let [envelope (serialize world-id value)
-            success (strm/try-put! (::web-socket connection) envelope 500 ::timed-out)]
+      (let [envelope (serialize world-id action value)
+            success (strm/try-put! (::web-socket connection)
+                                   envelope
+                                   500
+                                   ::timed-out)]
         (dfrd/on-realized success
                           #(println value "forwarded:" %)
                           #(println value "Forwarding failed:" %)))
