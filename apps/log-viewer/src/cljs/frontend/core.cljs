@@ -15,8 +15,12 @@
 ;;;; Specs
 
 ;; FIXME: Define these
+(s/def ::async-chan any?)
+(s/def ::key-pair any?)
+(s/def ::public-key any?)
 (s/def ::session-id any?)
 (s/def ::web-socket any?)
+(s/def ::web-worker any?)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Globals
@@ -49,10 +53,13 @@
    89 87 -73 116
    66 43 39 -61])
 
+;;; Q: Put these globals into a single atom?
+
 (def shared-socket (atom nil))
 
-;; Map of world-keys to WebWorkers
-(def worlds (atom {}))
+;; Maps of world-keys to state
+(def worlds (atom {::active {}
+                   ::pending {}}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Internal Implementation
@@ -228,9 +235,13 @@
           _ (console.log "Trying to read" raw-envelope)
           envelope (transit/read reader raw-envelope)
           {:keys [:frereth/action
+                  :frereth/body
                   :frereth/world-id]
+           ;; Not all messages will be about a World's Worker.
+           ;; Q: Will they?
            remote-lamport :frereth/lamport
            :or [remote-lamport 0]} envelope]
+      (console.log "Read:" envelope)
       (swap! lamport
              (fn [current]
                (if (>= remote-lamport current)
@@ -243,24 +254,37 @@
       ;; cljs.
       (condp = action
         :frereth/forward
-        ;; Not all messages are intended for a World's Worker.
-        ;; Current prime case in point: the server's ::ack-forking.
-        ;; That's a signal to this layer to actually start the
-        ;; worker.
-        (let [worker (->> world-id
-                          (get @worlds)
-                          ::worker)]
+        (let [worker (-> worlds
+                         deref
+                         ::active
+                         (get world-id)
+                         ::worker)]
           (if worker
-            (let [body (:frereth/body envelope)]
-              (.postMessage worker body))
+            (.postMessage worker body)
             (console.error "Message for"
                            world-id
                            "in"
                            envelope
                            ". No match in"
                            (keys @worlds))))
-        :frereth/ack-forking (throw (ex-info "Not Implemented"
-                                             {::problem envelope})))))
+        :frereth/ack-forking
+        (try
+          (let [ack-chan (-> worlds
+                             deref
+                             ::pending
+                             (get world-id))]
+            (if ack-chan
+              (let [success (async/put! ack-chan body)]
+                ;; This acts like it works, but it doesn't.
+                ;; FIXME: Start back here.
+                (console.log (str "Message put onto " ack-chan
+                                  ": " success)))
+              (console.error "ACK about non-pending world"
+                             {::problem envelope
+                              ::pending (::pending @worlds)
+                              ::world-id world-id})))
+          (catch :default ex
+            (console.error "Failed to handle :frereth/ack-forking" ex body))))))
 
   (defn send-message!
     [socket
@@ -280,10 +304,27 @@
         (catch :default ex
           (console.error "Sending message failed:" ex))))))
 
-(defn build-actual-worker
-  [ch spawner session-id raw-key-pair full-pk]
+(s/fdef do-build-actual-worker
+  :args (s/cat :ch ::async-chan
+               :spawner (s/fspec :args (s/cat :session-id ::session-id
+                                              :public-key ::public-key)
+                                 :ret ::web-worker)
+               :session-id ::session-id
+               :raw-key-pair ::key-pair
+               :full-pk ::public-key)
+  :ret ::async-chan)
+(defn do-build-actual-worker
+  [response-ch spawner session-id raw-key-pair full-pk]
   (go
-    (let [response (async/<! ch)]
+    ;; FIXME: Use alts! with a timeout
+    ;; Don't care what the actual response was. The dispatcher should
+    ;; have filtered that before writing to this channel.
+    ;; Although, realistically, the response should include something
+    ;; like the public key for this World on the Client. Or at least on
+    ;; the web server.
+    (let [_ (async/<! response-ch)]
+      ;; Not getting here.
+      (console.log "Received signal to spawn worker")
       (if-let [worker (spawner session-id full-pk)]
         (do
           (comment
@@ -320,10 +361,16 @@
           ;; the public half to the web server for validation.
           ;; Possibly sign that request with the Session key.
           ;; Then use the public key to dispatch messages.
-          (swap! worlds assoc full-pk {::worker worker
-                                       ::key-pair raw-key-pair})
-          ;; TODO: Need to notify the Client that this World is ready to interact
-          (.log js/console "Shell spawned"))
+          (swap! worlds
+                 (fn [all]
+                   (let [no-longer-pending (update all ::pending
+                                                   #(dissoc % full-pk))]
+                     (assoc-in no-longer-pending
+                               [::active full-pk]
+                               {::key-pair raw-key-pair
+                                ::worker worker})))
+                 ;; TODO: Need to notify the Client that this World is ready to interact
+                 (.log js/console "Shell spawned")))
         (.warn js/console "Spawning shell failed")))))
 
 (s/fdef build-worker-from-exported-key
@@ -343,22 +390,29 @@
   (let [signing-key (atom nil)
         full-pk (js->clj public)
         ch (async/chan)
-        actual-work (build-actual-worker ch
+        ;; This seems out of order.
+        ;; We *do* want to set everything up to do the work,
+        ;; but we also don't want to spawn the WebWorker
+        ;; until we've received the ::forking-ack.
+        ;; At the same time, we do want to set up a placeholder
+        ;; to provide feedback that something is happening.
+        ;; But this returns a go block that's waiting for something
+        ;; to write to ch to trigger the creation of the WebWorker.
+        actual-work (do-build-actual-worker ch
                                          spawner
                                          session-id
                                          raw-key-pair
                                          full-pk)]
     (console.log "cljs JWK:" full-pk)
+    (swap! worlds
+           (fn [worlds]
+             (update worlds ::pending
+                     (fn [pending]
+                       (assoc pending full-pk (async/chan))))))
     (send-message! socket full-pk {:frereth/action :frereth/forking
-                                  :frereth/command 'shell
+                                   :frereth/command 'shell
                                    :frereth/pid full-pk})
-    ;; FIXME: Have to set up core.async to read the cookie
-    ;; that the server's going to send back so we can proceed.
-    ;; Actually, it gets twistier than that.
-    ;; We do need to set up a go block for that. And then do
-    ;; something like alter global state
-    (reset! signing-key full-pk)
-    ch))
+    (reset! signing-key full-pk)))
 
 (s/fdef fork-login!
   :args (s/cat :socket ::web-socket
@@ -389,6 +443,16 @@
   ;; that, really, gets authorized during login.
   (send-message! socket ::login session-id))
 
+(s/fdef export-key-and-build-worker!
+  ;; FIXME: Spec these args
+  :args (s/cat :socket any?
+               :session-id any?
+               :crypto any?
+               :key-pair any?)
+  ;; It's tempting to spec that this returns a future.
+  ;; But that's just an implementation detail. This is
+  ;; called for side-effects.
+  :ret any?)
 (defn export-key-and-build-worker!
   [socket session-id crypto key-pair]
   (let [secret (.-privateKey key-pair)

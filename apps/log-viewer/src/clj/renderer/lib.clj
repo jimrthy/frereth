@@ -14,6 +14,33 @@
            java.util.Base64))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; Specs
+
+;; It's tempting to make this a limited set.
+;; But it's not like specifying that here would
+;; make runtime callers any more reliable.
+;; That really gets into things like runtime
+;; message validation.
+;; Which, honestly, should be pretty strict and
+;; happen ASAP on both sides.
+(s/def :frereth/action keyword?)
+
+(s/def :frereth/body any?)
+
+(s/def :frereth/lamport integer?)
+
+;; These are really anything that's
+;; a) immutable (and thus suitable for use as a key in a map)
+;; and b) directly serializable via transit
+(s/def :frereth/session-id any?)
+(s/def :frereth/world-id any?)
+
+(s/def ::message-envelope (s/keys :req [:frereth/action
+                                        :frereth/body
+                                        :frereth/lamport
+                                        :frereth/world-id]))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Globals
 
 (def minute-key
@@ -71,32 +98,29 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Internal Implementation
 
+(s/fdef do-wrap-message
+  :args (s/cat :world-id :frereth/world-id
+               :action :frereth/action
+               :value :frereth/body)
+  :ret ::message-envelope)
+
+(let [lamport (atom 0)]
+  (defn do-wrap-message
+    [world-id action value]
+    (swap! lamport inc)
+    {:frereth/action action
+     :frereth/body value
+     :frereth/lamport @lamport
+     :frereth/world-id world-id}))
+
 ;; Need a lamport clock.
 ;; Honestly, this should be a Component in the System.
 (s/fdef serialize
-  :args (s/cat :world-id any?
-               ;; It's tempting to make this a limited set.
-               ;; But it's not like specifying that here would
-               ;; make runtime callers any more reliable.
-               ;; That really gets into things like runtime
-               ;; message validation.
-               ;; Which, honestly, should be pretty strict and
-               ;; happen ASAP on both sides.
-               :action keyword?
-               :value any?)
+  :args (s/cat :unwrapped-envelope ::message-envelope)
   :ret bytes?)
 (defn serialize
-  [world-id
-   action
-   value]
-  (let [unwrapped-envelope {:frereth/action action
-                            :frereth/body value
-                            ;; FIXME: Need a Lamport clock here.
-                            ;; Except that it doesn't fit at all.
-                            ;; FIXME: The envelope-building part
-                            ;; needs to be separate.
-                            :frereth/world-id world-id}
-        envelope (ByteArrayOutputStream. 4096)  ; Q: Useful size?
+  [unwrapped-envelope]
+  (let [envelope (ByteArrayOutputStream. 4096)  ; Q: Useful size?
         writer (transit/writer envelope :json)]
     (transit/write writer unwrapped-envelope)
     (.toByteArray envelope)))
@@ -186,7 +210,8 @@
               ;; Q: Will this need Unicode? UTF-8 seems safer
               world-system-bytes (.getBytes world-system-string "ASCII")
               encoded (.encode (Base64/getEncoder) world-system-bytes)]
-          (post-message! pid
+          (post-message! session-id
+                         pid
                          :frereth/ack-forking
                          {:frereth/cookie encoded}))
         (println "Error: trying to re-fork pid" pid)))
@@ -308,19 +333,28 @@
       (pprint ex)
       (.close websocket))))
 
+(s/fdef post-message!
+  :args (s/cat :session-id :frereth/session-id
+               :world-id :frereth/world-id
+               :action :frereth/action
+               :value :frereth/body)
+  :ret any?)
 (defn post-message!
   "Forward value to the associated World"
-  [world-id action value]
-  (println "Trying to forward\n"
-           value
-           "\nto\n"
-           world-id)
+  [session-id world-id action value]
+  (println (str "Trying to forward\n"
+                value
+                "\nto\n"
+                world-id
+                " in "
+                session-id))
   (if-let [connection (-> active-sessions
                        deref
-                       (get world-id))]
+                       (get session-id))]
     (try
       (pprint connection)
-      (let [envelope (serialize world-id action value)
+      (let [wrapper (do-wrap-message world-id action value)
+            envelope (serialize wrapper)
             success (strm/try-put! (::web-socket connection)
                                    envelope
                                    500
@@ -332,9 +366,9 @@
         (println "Message forwarding failed:" ex)))
     (do
       (println "No such world")
-      (throw (ex-info "Trying to POST to unconnected World"
+      (throw (ex-info "Trying to POST to unconnected Session"
                       {::pending @pending-sessions
-                       ::world-id world-id
+                       ::world-id session-id
                        ::connected @active-sessions})))))
 
 (comment
