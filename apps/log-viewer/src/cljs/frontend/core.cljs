@@ -408,7 +408,7 @@
            (fn [worlds]
              (update worlds ::pending
                      (fn [pending]
-                       (assoc pending full-pk (async/chan))))))
+                       (assoc pending full-pk ch)))))
     (send-message! socket full-pk {:frereth/action :frereth/forking
                                    :frereth/command 'shell
                                    :frereth/pid full-pk})
