@@ -321,7 +321,7 @@
     (pprint websocket)
     (let [first-response (strm/try-take! websocket ::drained 500 ::timed-out)]
       ;; TODO: Need the login exchange.
-      ;; Should probably do that before opening the websocket.
+      ;; Should probably do that before opening the websocket, using SRP.
       (dfrd/on-realized first-response
                         (partial login-realized websocket)
                         (fn [error]
