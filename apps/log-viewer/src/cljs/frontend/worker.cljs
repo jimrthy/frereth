@@ -79,6 +79,8 @@
                   (catch :default ex
                     (console.error ex)))))))))
 
+;; This needs to include the cooking that arrived with ::forking
+;; FIXME: Start back here
 (let [message {:frereth/action :frereth/forked}]
   (.postMessage js/self (transit/write (transit/writer :json) message)))
 

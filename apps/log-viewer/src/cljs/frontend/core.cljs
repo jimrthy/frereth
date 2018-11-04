@@ -1,7 +1,12 @@
 (ns frontend.core
   (:require-macros [cljs.core.async.macros :refer [go]]
                    [frontend.macro :refer [foobar]])
-  (:require [cognitect.transit :as transit]
+  ;; cemerick.url is very tempting, but it hasn't been updated
+  ;; in years. There are 2 or 3 "Is this project still active?"
+  ;; issues filed against it, and ~30 forks.
+  ;; Plus...does it really add all that much?
+  (:require [cemerick.url :as url]
+            [cognitect.transit :as transit]
             [foo.bar]
             ;; Start by at least partially supporting this, since it's
             ;; so popular
@@ -16,6 +21,10 @@
 
 ;; FIXME: Define these
 (s/def ::async-chan any?)
+;; Black box the web server sent as part of its forking-ack response.
+;; Right now, this is an Uint8Array.
+;; I'm dubious about this decision.
+(s/def ::cookie any?)
 (s/def ::key-pair any?)
 (s/def ::public-key any?)
 (s/def ::session-id any?)
@@ -63,164 +72,6 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Internal Implementation
-
-(defn array-buffer->string
-  [bs]
-  (let [data-view (js/DataView. bs)
-        ;; Q: What encoding is appropriate here?
-        decoder (js/TextDecoder. "utf-8")]
-    (.decode decoder data-view)))
-
-(defn event-forwarder
-  "Sanitize event and post it to Worker"
-  [worker ctrl-id tag]
-  ;; Q: Is it worth keeping these around long-term?
-  ;; Or better to just create/discard them on the fly as needed?
-  (let [writer (transit/writer :json)]
-    (fn [event]
-      ;; TODO: Window manager needs to set up something so events
-      ;; don't go to unfocused windows.
-      ;; Those really need some kind of extra styling to show an
-      ;; inactive overlay. The click (or mouse-over...whichever
-      ;; matches the end-user's preferences) should transfer
-      ;; focus.
-      (console.info "Posting" tag "to web worker for" ctrl-id)
-      (let [ks (.keys js/Object event)
-            ;; Q: Would this be worth using a transducer?
-            ;; Or possibly clojure.walk?
-            pairs (map (fn [k]
-                         (let [v (aget event k)]
-                           ;; Only transfer primitives
-                           (when (some #(% v)
-                                       #{not
-                                         boolean?
-                                         number?
-                                         string?
-                                         ;; clojurescript has issues with the
-                                         ;; js/Symbol primitive.
-                                         ;; e.g. https://dev.clojure.org/jira/browse/CLJS-1628
-                                         ;; For now, skip them.
-                                         })
-                             [k v])))
-                       ks)
-            pairs (filter identity pairs)
-            clone (into {} pairs)]
-        ;; Q: How do I indicate that this has been handled?
-        ;; In greater depth, how should the Worker indicate that it has
-        ;; handled the event, so this can do whatever's appropriate with
-        ;; it (whether that's cancelling it, stopping the bubbling, or
-        ;; whatever).
-        (.postMessage worker (transit/write writer
-                                            {:frereth/action :frereth/event
-                                             :frereth/body [tag ctrl-id clone]}))))))
-
-(defn on-*-replace
-  [worker ctrl-id acc [k v]]
-  (let [s (name k)
-        prefix (subs s 0 3)]
-    (assoc acc k
-           (if (= "on-" prefix)
-             (event-forwarder worker ctrl-id v)
-             v))))
-
-(defn sanitize-scripts
-  "Convert scripting events to messages that get posted back to worker"
-  [worker
-   [ctrl-id attributes & body :as raw-dom]]
-  ;; Need to walk the tree to find any/all scripting components
-  ;; This is fine for plain "Form-1" components (as defined in
-  ;; https://purelyfunctional.tv/guide/reagent) that just
-  ;; return plain Hiccup.
-  ;; It breaks down with "Form-2" functions that return functions.
-  ;; It completely falls apart for "Form-3" complex components.
-
-  ;; It's very tempting to just give up on any of the main
-  ;; react wrappers and either write my own (insanity!) or
-  ;; see if something like Matt-Esch/virtual-dom could possibly work.
-  (when ctrl-id
-    (let [prefix (into [ctrl-id]
-                       (when (map? attributes)
-                         [(reduce
-                           (partial on-*-replace worker ctrl-id)
-                            {}
-                            attributes)]))]
-      (into prefix
-            (let [body
-                  (if (map? attributes)
-                    body
-                    (into [attributes] body))]
-              (map (fn [content]
-                     (if (vector? content)
-                       (sanitize-scripts worker content)
-                       content))
-                   body))))))
-
-(s/fdef spawn-worker
-  ;; TODO: Need specs for these args
-  :args (s/cat :session-id any?
-               :public-key any?))
-(defn spawn-worker
-  [session-id public-key]
-  (when window.Worker
-    ;; This is missing a layer of indirection.
-    ;; The worker this spawns should return a shadow
-    ;; DOM that combines all the visible Worlds (like
-    ;; an X11 window manager). That worker, in turn,
-    ;; should spawn other workers that communicate
-    ;; with it to supply their shadow DOMs into its.
-    ;; In a lot of ways, this approach is like setting
-    ;; up X11 to run a single app rather than a window
-    ;; manager.
-    ;; That's fine as a first step for a demo, but don't
-    ;; get delusions of grandeur about it.
-    ;; Actually, there's another missing layer here:
-    ;; Each World should really be loaded into its
-    ;; own isolated self-hosted compiler environment.
-    ;; Then available workers should be able to pass them
-    ;; (along with details like window location) around
-    ;; as they have free CPU cycles.
-    ;; Q: Do web workers provide that degree of isolation?
-    ;; Q: Web Workers are designed to be relatively heavy-
-    ;; weight. Is it worth spawning a new one for each
-    ;; world (which are also supposed to be pretty hefty).
-    (let [encoded-key (js/encodeURIComponent public-key)
-          worker (new window.Worker
-                      (str "/js/worker.js?world-key=" encoded-key "&session-id=" session-id)
-                      #_(str "/shell?world-key=" encoded-key "&session-id=" session-id)
-                      ;; Currently redundant:
-                      ;; in Chrome, at least, module scripts are not
-                      ;; supported on DedicatedWorker
-                      #js{"type" "classic"})]
-      (set! (.-onmessage worker)
-            ;; This needs to be fleshed out.
-            ;; Sure, the worker can send us renderer events.
-            ;; But that's the tip of the iceberg.
-            ;; It also needs to send a notification to the server
-            ;; that it's ready to start doing work (:frereth/forked,
-            ;; so its ::state switches from ::pending to ::active).
-            ;; It might even be legal to have a full-blown message
-            ;; bus here so workers can communicate among each other,
-            ;; though that seems risky.
-            ;; FIXME: Start back here
-            (fn [event]
-              (let [data (.-data event)]
-                (try
-                  (let [{:keys [:frereth/action]
-                         :as raw-message} (transit/read (transit/reader :json)
-                                                        data)]
-                    (console.log "Message from worker:" action)
-                    (condp = action
-                      :frereth/render
-                      (let [dom (sanitize-scripts worker
-                                                  (:frereth/body raw-message))]
-                        (r/render-component [(constantly dom)]
-                                            (js/document.getElementById "app")))
-                      :frereth/forked (send-message! @shared-socket
-                                                     public-key
-                                                     data)))
-                  (catch :default ex
-                    (console.error ex "Trying to deserialize" data))))))
-      worker)))
 
 (s/fdef recv-message!
   ;; Q: What *is* event?
@@ -321,10 +172,197 @@
         (catch :default ex
           (console.error "Sending message failed:" ex))))))
 
+(defn array-buffer->string
+  [bs]
+  (let [data-view (js/DataView. bs)
+        ;; Q: What encoding is appropriate here?
+        decoder (js/TextDecoder. "utf-8")]
+    (.decode decoder data-view)))
+
+(defn event-forwarder
+  "Sanitize event and post it to Worker"
+  [worker ctrl-id tag]
+  ;; Q: Is it worth keeping these around long-term?
+  ;; Or better to just create/discard them on the fly as needed?
+  (let [writer (transit/writer :json)]
+    (fn [event]
+      ;; TODO: Window manager needs to set up something so events
+      ;; don't go to unfocused windows.
+      ;; Those really need some kind of extra styling to show an
+      ;; inactive overlay. The click (or mouse-over...whichever
+      ;; matches the end-user's preferences) should transfer
+      ;; focus.
+      (console.info "Posting" tag "to web worker for" ctrl-id)
+      (let [ks (.keys js/Object event)
+            ;; Q: Would this be worth using a transducer?
+            ;; Or possibly clojure.walk?
+            pairs (map (fn [k]
+                         (let [v (aget event k)]
+                           ;; Only transfer primitives
+                           (when (some #(% v)
+                                       #{not
+                                         boolean?
+                                         number?
+                                         string?
+                                         ;; clojurescript has issues with the
+                                         ;; js/Symbol primitive.
+                                         ;; e.g. https://dev.clojure.org/jira/browse/CLJS-1628
+                                         ;; For now, skip them.
+                                         })
+                             [k v])))
+                       ks)
+            pairs (filter identity pairs)
+            clone (into {} pairs)]
+        ;; Q: How do I indicate that this has been handled?
+        ;; In greater depth, how should the Worker indicate that it has
+        ;; handled the event, so this can do whatever's appropriate with
+        ;; it (whether that's cancelling it, stopping the bubbling, or
+        ;; whatever).
+        (.postMessage worker (transit/write writer
+                                            {:frereth/action :frereth/event
+                                             :frereth/body [tag ctrl-id clone]}))))))
+
+(defn on-*-replace
+  [worker ctrl-id acc [k v]]
+  (let [s (name k)
+        prefix (subs s 0 3)]
+    (assoc acc k
+           (if (= "on-" prefix)
+             (event-forwarder worker ctrl-id v)
+             v))))
+
+(defn sanitize-scripts
+  "Convert scripting events to messages that get posted back to worker"
+  [worker
+   [ctrl-id attributes & body :as raw-dom]]
+  ;; Need to walk the tree to find any/all scripting components
+  ;; This is fine for plain "Form-1" components (as defined in
+  ;; https://purelyfunctional.tv/guide/reagent) that just
+  ;; return plain Hiccup.
+  ;; It breaks down with "Form-2" functions that return functions.
+  ;; It completely falls apart for "Form-3" complex components.
+
+  ;; It's very tempting to just give up on any of the main
+  ;; react wrappers and either write my own (insanity!) or
+  ;; see if something like Matt-Esch/virtual-dom could possibly work.
+  (when ctrl-id
+    (let [prefix (into [ctrl-id]
+                       (when (map? attributes)
+                         [(reduce
+                           (partial on-*-replace worker ctrl-id)
+                            {}
+                            attributes)]))]
+      (into prefix
+            (let [body
+                  (if (map? attributes)
+                    body
+                    (into [attributes] body))]
+              (map (fn [content]
+                     (if (vector? content)
+                       (sanitize-scripts worker content)
+                       content))
+                   body))))))
+
+(s/fdef spawn-worker
+  :args (s/cat :session-id ::session-id
+               :public-key ::public-key
+               :cookie ::cookie)
+  :ret (s/nilable ::web-worker))
+(defn spawn-worker
+  [session-id public-key cookie]
+  (when window.Worker
+    (console.log "Constructing Worker fork URL based on" @base-url)
+    ;; This is missing a layer of indirection.
+    ;; The worker this spawns should return a shadow
+    ;; DOM that combines all the visible Worlds (like
+    ;; an X11 window manager). That worker, in turn,
+    ;; should spawn other workers that communicate
+    ;; with it to supply their shadow DOMs into its.
+    ;; In a lot of ways, this approach is like setting
+    ;; up X11 to run a single app rather than a window
+    ;; manager.
+    ;; That's fine as a first step for a demo, but don't
+    ;; get delusions of grandeur about it.
+    ;; Actually, there's another missing layer here:
+    ;; Each World should really be loaded into its
+    ;; own isolated self-hosted compiler environment.
+    ;; Then available workers should be able to pass them
+    ;; (along with details like window location) around
+    ;; as they have free CPU cycles.
+    ;; Q: Do web workers provide that degree of isolation?
+    ;; Q: Web Workers are designed to be relatively heavy-
+    ;; weight. Is it worth spawning a new one for each
+    ;; world (which are also supposed to be pretty hefty).
+    (let [encoded-cookie (url/url-encode cookie)
+          encoded-key (js/encodeURIComponent public-key)
+          encoded-session (url/url-encode session-id)
+          url (url/url (str @base-url "/api/fork"))
+          params {:frereth/cookie encoded-cookie
+                  :frereth/session-id encoded-session
+                  :frereth/world-key encoded-key}
+
+          worker (new window.Worker
+                      #_(str "/js/worker.js?world-key=" encoded-key "&session-id=" session-id)
+                      #_(str "/shell?world-key=" encoded-key "&session-id=" session-id)
+                      (str (assoc url :query params))
+                      ;; Currently redundant:
+                      ;; in Chrome, at least, module scripts are not
+                      ;; supported on DedicatedWorker
+                      #js{"type" "classic"})]
+      (set! (.-onmessage worker)
+            ;; This needs to be fleshed out.
+            ;; Sure, the worker can send us renderer events.
+            ;; But that's the tip of the iceberg.
+            ;; It also needs to send a notification to the server
+            ;; that it's ready to start doing work (:frereth/forked,
+            ;; so its ::state switches from ::pending to ::active).
+            ;; It might even be legal to have a full-blown message
+            ;; bus here so workers can communicate among each other,
+            ;; though that seems risky.
+            ;; FIXME: Start back here
+            (fn [event]
+              (let [data (.-data event)]
+                (try
+                  (let [{:keys [:frereth/action]
+                         :as raw-message} (transit/read (transit/reader :json)
+                                                        data)]
+                    (console.log "Message from worker:" action)
+                    (condp = action
+                      :frereth/render
+                      (let [dom (sanitize-scripts worker
+                                                  (:frereth/body raw-message))]
+                        (r/render-component [(constantly dom)]
+                                            (js/document.getElementById "app")))
+                      :frereth/forked (send-message! @shared-socket
+                                                     public-key
+                                                     ;; send-message! will
+                                                     ;; serialize this
+                                                     ;; again.
+                                                     ;; Which is wasteful.
+                                                     ;; Would be better to
+                                                     ;; just have this
+                                                     ;; :action as a tag,
+                                                     ;; followed by the
+                                                     ;; body.
+                                                     #_data
+                                                     ;; But that's premature
+                                                     ;; optimization.
+                                                     ;; Worry about that
+                                                     ;; detail later.
+                                                     ;; Even though this is
+                                                     ;; the boundary area
+                                                     ;; where it's probably
+                                                     ;; the most important.
+                                                     raw-message)))
+                  (catch :default ex
+                    (console.error ex "Trying to deserialize" data))))))
+      worker)))
+
 (s/fdef do-build-actual-worker
   :args (s/cat :ch ::async-chan
                :spawner (s/fspec :args (s/cat :session-id ::session-id
-                                              :public-key ::public-key)
+                                              :public-key ::public-key
+                                              :cookie any?)
                                  :ret ::web-worker)
                :session-id ::session-id
                :raw-key-pair ::key-pair
@@ -339,9 +377,12 @@
     ;; Although, realistically, the response should include something
     ;; like the public key for this World on the Client. Or at least on
     ;; the web server.
-    (let [_ (async/<! response-ch)]
-      (console.log "Received signal to spawn worker")
-      (if-let [worker (spawner session-id full-pk)]
+    (let [response (async/<! response-ch)
+          cookie (:frereth/cookie response)]
+      (console.log "Received signal to spawn worker:" response)
+      (if-let [worker (spawner session-id
+                               full-pk
+                               cookie)]
         (do
           (comment
             ;; The worker pool is getting ahead of myself.
@@ -435,7 +476,7 @@
                :session-id ::session-id)
   :ret any?)
 (defn fork-login!
-  "Returns "
+  "TODO: Auth. Probably using SRP."
   [socket session-id]
   ;; Probably reasonable to base this on something like the
   ;; CurveCP handshake.
@@ -460,14 +501,18 @@
   (send-message! socket ::login session-id))
 
 (s/fdef export-key-and-build-worker!
-  ;; FIXME: Spec these args
-  :args (s/cat :socket any?
-               :session-id any?
+
+  :args (s/cat :socket ::web-socket
+               :session-id ::session-id
+               ;; FIXME: Spec this
                :crypto any?
-               :key-pair any?)
+               :key-pair ::key-pair)
   ;; It's tempting to spec that this returns a future.
   ;; But that's just an implementation detail. This is
   ;; called for side-effects.
+  ;; Then again, having it return a promise (or whatever
+  ;; promesa does) would have probably been cleaner than
+  ;; dragging core.async into the mix.
   :ret any?)
 (defn export-key-and-build-worker!
   [socket session-id crypto key-pair]
@@ -515,17 +560,12 @@
           protocol (if (= \s
                           (clojure.string/lower-case (aget origin-protocol
                                                            (- protocol-length 2))))
-                     "wss"
-                     "ws")
-          local-base-url (str protocol "://" (.-host location))
-          url (str local-base-url  "/ws")
+                     "wss:"
+                     "ws:")
+          local-base-suffix (str "//" (.-host location))
+          url (str protocol local-base-suffix  "/ws")
           ws (js/WebSocket. url)]
-      ;; This actually isn't very useful.
-      ;; Although it might be worth saving a format string that lets us
-      ;; swap out the protocol. The websocket connection string really
-      ;; doesn't make any sense after we're done here. But we'll still
-      ;; need lots of XHR interaction for things like Web Workers.
-      (reset! base-url local-base-url)
+      (reset! base-url (str origin-protocol local-base-suffix))
       ;; A blob is really just a file handle. Have to jump through an
       ;; async op to convert it to an arraybuffer.
       (set! (.-binaryType ws) "arraybuffer")

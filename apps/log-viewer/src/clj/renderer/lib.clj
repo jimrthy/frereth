@@ -173,10 +173,6 @@
         ;; So need some sort of throttle on forks per second and/or pending
         ;; forks.
 
-        ;; TODO: Put this data into an encrypted cookie. It could be
-        ;; a real cookie (well, no it couldn't, unless we convert this
-        ;; to an HTTP request) or a GET parameter.
-        ;; Whichever.
         ;; Take a page from the CurveCP handshake. Use a
         ;; minute-cookie for encryption.
         ;; When the client notifies us that it has forked (and that
@@ -209,6 +205,8 @@
               world-system-string (pr-str dscr)
               ;; Q: Will this need Unicode? UTF-8 seems safer
               world-system-bytes (.getBytes world-system-string "ASCII")
+              ;; TODO: This actually needs to be encrypted by a minute
+              ;; key.
               encoded (.encode (Base64/getEncoder) world-system-bytes)]
           (post-message! session-id
                          pid
