@@ -25,11 +25,27 @@
 ;; Right now, this is an Uint8Array.
 ;; I'm dubious about this decision.
 (s/def ::cookie any?)
+
+;; Instance of ArrayBuffer
+(s/def ::array-buffer any?)
+(s/def ::jwk map?)
+;; Something like crypto/Key
+(s/def ::crypto-key any?)
+(s/def ::public-key ::crypto-key)
+(s/def ::public ::public-key)
+(s/def ::secret ::crypto-key)
+(s/def ::internal-key-pair (s/keys :required [::public ::secret]))
+;; Something like crypto/KeyPair
 (s/def ::key-pair any?)
-(s/def ::public-key any?)
+
 (s/def ::session-id any?)
+;; Instance of SubtleCrypto
+(s/def ::subtle-crypto any?)
 (s/def ::web-socket any?)
 (s/def ::web-worker any?)
+
+(s/def work-spawner (s/fspec :args (s/cat :cookie ::cookie)
+                             :ret ::web-worker))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Globals
@@ -154,6 +170,10 @@
           (catch :default ex
             (console.error "Failed to handle :frereth/ack-forking" ex body))))))
 
+  (defn serialize
+    [o]
+    (transit/write writer o))
+
   (defn send-message!
     [socket
      world-id
@@ -167,15 +187,34 @@
       ;; to send more
       (try
         (println "Trying to send-message!")
-        (.send socket (transit/write writer envelope))
+        (.send socket (serialize envelope))
         (println body "sent successfully")
         (catch :default ex
           (console.error "Sending message failed:" ex))))))
+
+(s/fdef str->array
+  :args (s/cat :s string?)
+  :ret ::array-buffer)
+(defn str->array
+  [s]
+  ;; Translated from https://gist.github.com/andreburgaud/6f73fd2d690b629346b8
+  ;; There's an inverse function there named arrayBufferToString which
+  ;; is worth contrasting with array-buffer->string in terms of
+  ;; performance.
+  ;; Javascript:
+  ;; String.fromCharCode.apply(null, new Uint16Array(buf));
+  (let [buf (js/ArrayBuffer. (* 2 (count s)))
+        buf-view (js/Uint16Array. buf)]
+    (dorun (map-indexed (fn [idx ch]
+                          (aset buf-view idx (.charCodeAt ch)))
+                        s))
+    buf))
 
 (defn array-buffer->string
   [bs]
   (let [data-view (js/DataView. bs)
         ;; Q: What encoding is appropriate here?
+        ;; (apparently javascript strings are utf-16)
         decoder (js/TextDecoder. "utf-8")]
     (.decode decoder data-view)))
 
@@ -252,6 +291,9 @@
                            (partial on-*-replace worker ctrl-id)
                             {}
                             attributes)]))]
+      ;; TODO: Also have to block iframes
+      ;; TODO: What other pieces could make life awful?
+      ;; Q: How do I want to handle CSS?
       (into prefix
             (let [body
                   (if (map? attributes)
@@ -263,15 +305,64 @@
                        content))
                    body))))))
 
+(defn on-worker-message
+  [socket worker event]
+  (let [data (.-data event)]
+    (try
+      (let [{:keys [:frereth/action]
+             :as raw-message} (transit/read (transit/reader :json)
+                                            data)]
+        (console.log "Message from worker:" action)
+        (condp = action
+          :frereth/render
+          (let [dom (sanitize-scripts worker
+                                      (:frereth/body raw-message))]
+            (r/render-component [(constantly dom)]
+                                (js/document.getElementById "app")))
+          :frereth/forked (send-message! socket
+                                         public-key
+                                         ;; send-message! will
+                                         ;; serialize this
+                                         ;; again.
+                                         ;; Which is wasteful.
+                                         ;; Would be better to
+                                         ;; just have this
+                                         ;; :action as a tag,
+                                         ;; followed by the
+                                         ;; body.
+                                         #_data
+                                         ;; But that's premature
+                                         ;; optimization.
+                                         ;; Worry about that
+                                         ;; detail later.
+                                         ;; Even though this is
+                                         ;; the boundary area
+                                         ;; where it's probably
+                                         ;; the most important.
+                                         ;; (Well, not here. But in general)
+                                         raw-message)))
+      (catch :default ex
+        (console.error ex "Trying to deserialize" data)))))
+
 (s/fdef spawn-worker
-  :args (s/cat :session-id ::session-id
-               :public-key ::public-key
+  :args (s/cat :crypto ::subtle-crypto
+               :socket ::web-socket
+               :session-id ::session-id
+               :key-pair ::internal-key-pair
+               ;; Actually, this is anything that transit can serialize
+               :public ::jwk
                :cookie ::cookie)
   :ret (s/nilable ::web-worker))
 (defn spawn-worker
-  [session-id public-key cookie]
+  [crypto
+   socket
+   session-id
+   {:keys [::secret]}
+   public
+   cookie]
   (when window.Worker
-    (console.log "Constructing Worker fork URL based on" @base-url)
+    (console.log "Constructing Worker fork URL based on" @base-url
+                 "signing with secret-key" secret)
     ;; This is missing a layer of indirection.
     ;; The worker this spawns should return a shadow
     ;; DOM that combines all the visible Worlds (like
@@ -293,83 +384,44 @@
     ;; Q: Web Workers are designed to be relatively heavy-
     ;; weight. Is it worth spawning a new one for each
     ;; world (which are also supposed to be pretty hefty).
-    (let [encoded-cookie (url/url-encode cookie)
-          encoded-key (js/encodeURIComponent public-key)
-          encoded-session (url/url-encode session-id)
-          url (url/url (str @base-url "/api/fork"))
-          params {:frereth/cookie encoded-cookie
-                  :frereth/session-id encoded-session
-                  :frereth/world-key encoded-key}
+    (let [url (url/url @base-url "/api/fork")
+          initiate {:frereth/cookie cookie
+                    :frereth/session-id session-id
+                    :frereth/world-key public}
+          packet-string (serialize initiate)
+          packet-bytes (str->array packet-string)
+          _ (console.log "Signing" packet-bytes)
+          signature-promise (.sign crypto
+                                   #js {:name "ECDSA"
+                                        :hash #js{:name "SHA-256"}}
+                                   secret
+                                   packet-bytes)]
+      ;; TODO: Look at the way promesa handles this
+      (.then signature-promise
+             (fn [signature]
+               (let [params {:frereth/initiate packet-string
+                             :frereth/signature (->  signature
+                                                     array-buffer->string
+                                                     serialize)}
 
-          worker (new window.Worker
-                      #_(str "/js/worker.js?world-key=" encoded-key "&session-id=" session-id)
-                      #_(str "/shell?world-key=" encoded-key "&session-id=" session-id)
-                      (str (assoc url :query params))
+                     worker (new window.Worker
+                                 (str (assoc url :query params))
                       ;; Currently redundant:
                       ;; in Chrome, at least, module scripts are not
                       ;; supported on DedicatedWorker
                       #js{"type" "classic"})]
-      (set! (.-onmessage worker)
-            ;; This needs to be fleshed out.
-            ;; Sure, the worker can send us renderer events.
-            ;; But that's the tip of the iceberg.
-            ;; It also needs to send a notification to the server
-            ;; that it's ready to start doing work (:frereth/forked,
-            ;; so its ::state switches from ::pending to ::active).
-            ;; It might even be legal to have a full-blown message
-            ;; bus here so workers can communicate among each other,
-            ;; though that seems risky.
-            ;; FIXME: Start back here
-            (fn [event]
-              (let [data (.-data event)]
-                (try
-                  (let [{:keys [:frereth/action]
-                         :as raw-message} (transit/read (transit/reader :json)
-                                                        data)]
-                    (console.log "Message from worker:" action)
-                    (condp = action
-                      :frereth/render
-                      (let [dom (sanitize-scripts worker
-                                                  (:frereth/body raw-message))]
-                        (r/render-component [(constantly dom)]
-                                            (js/document.getElementById "app")))
-                      :frereth/forked (send-message! @shared-socket
-                                                     public-key
-                                                     ;; send-message! will
-                                                     ;; serialize this
-                                                     ;; again.
-                                                     ;; Which is wasteful.
-                                                     ;; Would be better to
-                                                     ;; just have this
-                                                     ;; :action as a tag,
-                                                     ;; followed by the
-                                                     ;; body.
-                                                     #_data
-                                                     ;; But that's premature
-                                                     ;; optimization.
-                                                     ;; Worry about that
-                                                     ;; detail later.
-                                                     ;; Even though this is
-                                                     ;; the boundary area
-                                                     ;; where it's probably
-                                                     ;; the most important.
-                                                     raw-message)))
-                  (catch :default ex
-                    (console.error ex "Trying to deserialize" data))))))
-      worker)))
+                 (set! (.-onmessage worker)
+                       (partial on-worker-message socket worker))
+                 worker))))))
 
 (s/fdef do-build-actual-worker
   :args (s/cat :ch ::async-chan
-               :spawner (s/fspec :args (s/cat :session-id ::session-id
-                                              :public-key ::public-key
-                                              :cookie any?)
-                                 :ret ::web-worker)
-               :session-id ::session-id
+               :spawner ::work-spawner
                :raw-key-pair ::key-pair
                :full-pk ::public-key)
   :ret ::async-chan)
 (defn do-build-actual-worker
-  [response-ch spawner session-id raw-key-pair full-pk]
+  [response-ch spawner raw-key-pair full-pk]
   (go
     ;; FIXME: Use alts! with a timeout
     ;; Don't care what the actual response was. The dispatcher should
@@ -380,19 +432,8 @@
     (let [response (async/<! response-ch)
           cookie (:frereth/cookie response)]
       (console.log "Received signal to spawn worker:" response)
-      (if-let [worker (spawner session-id
-                               full-pk
-                               cookie)]
+      (if-let [worker (spawner cookie)]
         (do
-          (comment
-            ;; The worker pool is getting ahead of myself.
-            ;; Part of the missing Window Manager abstraction
-            ;; mentioned above. Assuming that it makes any sense
-            ;; at all.
-            ;; It seems like a good optimization, but breaking
-            ;; the isolation we get from web workers may not be
-            ;; worth any theoretical gain.
-            (swap! idle-worker-pool conj (partial spawn-worker session-id)))
           ;; Honestly, that should be something that gets
           ;; assigned here. It's independent of whatever key the
           ;; Worker might actually use.
@@ -431,41 +472,31 @@
         (.warn js/console "Spawning shell failed")))))
 
 (s/fdef build-worker-from-exported-key
-  ;; TODO: Specs!
-  :args (s/cat :socket any?  ; websocket
-               :session-id any?  ; Q: What is this?
-               :spawner (s/fspec :args (s/cat :session-id any?
-                                              :full-pk any?))
-               :raw-key-pair any? ; Something like crypto/KeyPair
-               ;; Something like crypto/Key
-               :public any?)
+  :args (s/cat :socket ::web-socket
+               :spawner ::work-spawner
+               :raw-key-pair ::key-pair)
   ;; Returns a core.async channel
   :ret any?)
 (defn build-worker-from-exported-key
   "Spawn worker based on newly exported public key."
-  [socket session-id spawner raw-key-pair public]
+  [socket spawner raw-key-pair public]
   (let [signing-key (atom nil)
         full-pk (js->clj public)
         ch (async/chan)
-        ;; This seems out of order.
-        ;; We *do* want to set everything up to do the work,
-        ;; but we also don't want to spawn the WebWorker
-        ;; until we've received the ::forking-ack.
-        ;; At the same time, we do want to set up a placeholder
-        ;; to provide feedback that something is happening.
-        ;; But this returns a go block that's waiting for something
+        ;; This seems like it's putting the cart before the horse, but
+        ;; it returns a go block that's waiting for something
         ;; to write to ch to trigger the creation of the WebWorker.
         actual-work (do-build-actual-worker ch
-                                         spawner
-                                         session-id
-                                         raw-key-pair
-                                         full-pk)]
+                                            spawner
+                                            raw-key-pair
+                                            full-pk)]
     (console.log "cljs JWK:" full-pk)
     (swap! worlds
            (fn [worlds]
              (update worlds ::pending
                      (fn [pending]
                        (assoc pending full-pk ch)))))
+    (console.log "Set up pending World. Notify about pending fork.")
     (send-message! socket full-pk {:frereth/action :frereth/forking
                                    :frereth/command 'shell
                                    :frereth/pid full-pk})
@@ -500,7 +531,7 @@
   ;; that, really, gets authorized during login.
   (send-message! socket ::login session-id))
 
-(s/fdef export-key-and-build-worker!
+(s/fdef export-public-key-and-build-worker!
 
   :args (s/cat :socket ::web-socket
                :session-id ::session-id
@@ -514,16 +545,24 @@
   ;; promesa does) would have probably been cleaner than
   ;; dragging core.async into the mix.
   :ret any?)
-(defn export-key-and-build-worker!
+(defn export-public-key-and-build-worker!
   [socket session-id crypto key-pair]
-  (let [secret (.-privateKey key-pair)
+  (let [raw-secret (.-privateKey key-pair)
         raw-public (.-publicKey key-pair)
         exported (.exportKey crypto "jwk" raw-public)]
-    (.then exported (partial build-worker-from-exported-key
-                             socket
-                             session-id
-                             spawn-worker
-                             key-pair))))
+    (.then exported
+           (fn [public]
+             (build-worker-from-exported-key
+              socket
+              (partial spawn-worker
+                       crypto
+                       socket
+                       session-id
+                       {::public raw-public
+                        ::secret raw-secret}
+                       (js->clj public))
+              key-pair
+              public)))))
 
 (defn fork-shell!
   [socket session-id]
@@ -545,7 +584,7 @@
                                           true
                                           #js ["sign"
                                                "verify"])]
-    (.then signing-key-promise (partial export-key-and-build-worker!
+    (.then signing-key-promise (partial export-public-key-and-build-worker!
                                         socket
                                         session-id
                                         crypto))))
@@ -565,7 +604,7 @@
           local-base-suffix (str "//" (.-host location))
           url (str protocol local-base-suffix  "/ws")
           ws (js/WebSocket. url)]
-      (reset! base-url (str origin-protocol local-base-suffix))
+      (reset! base-url (url/url (str origin-protocol local-base-suffix)))
       ;; A blob is really just a file handle. Have to jump through an
       ;; async op to convert it to an arraybuffer.
       (set! (.-binaryType ws) "arraybuffer")

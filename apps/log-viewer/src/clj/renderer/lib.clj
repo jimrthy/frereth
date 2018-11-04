@@ -4,9 +4,11 @@
             [clojure.pprint :refer [pprint]]
             [clojure.spec.alpha :as s]
             [frereth-cp.shared.crypto :as crypto]
+            [integrant.core :as ig]
             [manifold
              [deferred :as dfrd]
-             [stream :as strm]])
+             [stream :as strm]]
+            [clojure.java.io :as io])
   (:import clojure.lang.ExceptionInfo
            [java.io
             ByteArrayInputStream
@@ -29,11 +31,17 @@
 
 (s/def :frereth/lamport integer?)
 
+
 ;; These are really anything that's
 ;; a) immutable (and thus suitable for use as a key in a map)
 ;; and b) directly serializable via transit
+(s/def :frereth/pid any?)
 (s/def :frereth/session-id any?)
-(s/def :frereth/world-id any?)
+(s/def :frereth/world-id :frereth/pid)
+
+(s/def ::cookie (s/keys :req [:frereth/pid
+                              :frereth/state
+                              :frereth/system-description]))
 
 (s/def ::message-envelope (s/keys :req [:frereth/action
                                         :frereth/body
@@ -76,14 +84,15 @@
    89 87 -73 116
    66 43 39 -61])
 
-(def pending-sessions
-  "This really should be an atom. Or part of a bigger Universe-state atom"
-  ;; For now, just hard-code some arbitrary random key as a baby-step
-  (atom #{test-key}))
-
-(def active-sessions
-  "Connections to actual browser sessions"
-  (atom {}))
+;; TODO: Split this back up to active/pending.
+;; Combining them adds extra confusing nesting that just
+;; leads to pain.
+;; Might be interesting to track deactivated for historical
+;; comparisons.
+(def sessions
+  (atom {::active {}
+         ;; For now, just hard-code some arbitrary random key as a baby-step
+         ::pending #{test-key}}))
 
 (defmulti dispatch!
   "Send message to a World associated with session-id"
@@ -103,7 +112,8 @@
                :action :frereth/action
                :value :frereth/body)
   :ret ::message-envelope)
-
+;; Need a lamport clock.
+;; Honestly, this should be a Component in the System.
 (let [lamport (atom 0)]
   (defn do-wrap-message
     [world-id action value]
@@ -113,8 +123,6 @@
      :frereth/lamport @lamport
      :frereth/world-id world-id}))
 
-;; Need a lamport clock.
-;; Honestly, this should be a Component in the System.
 (s/fdef serialize
   :args (s/cat :unwrapped-envelope ::message-envelope)
   :ret bytes?)
@@ -135,6 +143,21 @@
         reader (transit/reader in :json)]
     (transit/read reader)))
 
+(s/fdef decode-cookie
+  :args (s/cat :cookie-bytes bytes?)
+  :ret ::cookie)
+(defn decode-cookie
+  ;; All these variants fail during JSON parsing with the error message
+  ;; "Unrecognized token 'B': was expecting ('true', 'false' or 'null')"
+  [cookie-bytes #_cookie-string]
+  (let [cookie-bytes (.decode (Base64/getDecoder) cookie-bytes)
+        cookie-string (String. cookie-bytes)]
+    (println "Trying to decode" cookie-string "a"
+             (class cookie-string)
+             "from"
+             cookie-bytes "a" (class cookie-bytes))
+    (deserialize cookie-string)))
+
 (defmethod dispatch! :default
   [session-id
    body]
@@ -153,66 +176,68 @@
   ;; :frereth/forking prepped.
   ;; In this specific case, the main piece of that is
   ;; :client.propagate/monitor
-  (throw (RuntimeException. "Not Implemented")))
+  (throw (ex-info "Not Implemented"
+                  {::unhandled ::forked})))
 
 (defmethod dispatch! :frereth/forking
   [session-id
    {:keys [:frereth/command
            :frereth/pid]}]
   (if (and command pid)
-    (let [session (get @active-sessions session-id)]
-      (if-not (contains? session pid)
-        ;; This is dangerous and easily exploited.
-        ;; Really do need something like this to tell the client the URL for loading.
-        ;; And update the routing table to be able to serve the javascript it's about
-        ;; to request.
-        ;; At the same time, it would be pretty trivial for a bunch of rogue clients to
-        ;; overload a server this naive.
-        ;; The fact that the client is authenticated helps with post-mortems, but
-        ;; we should try to avoid those.
-        ;; So need some sort of throttle on forks per second and/or pending
-        ;; forks.
+    (let [session (get-in @sessions [::active session-id])]
+      (if session
+        (let [worlds (::worlds session)]
+          (if (and (not (contains? (::pending worlds) pid))
+                   (not (contains? (::active worlds) pid)))
+            ;; This is dangerous and easily exploited.
+            ;; Really do need something like this to tell the client the URL for loading.
+            ;; And update the routing table to be able to serve the javascript it's about
+            ;; to request.
+            ;; At the same time, it would be pretty trivial for a bunch of rogue clients to
+            ;; overload a server this naive.
+            ;; The fact that the client is authenticated helps with post-mortems, but
+            ;; we should try to avoid those.
+            ;; So need some sort of throttle on forks per second and/or pending
+            ;; forks.
 
-        ;; Take a page from the CurveCP handshake. Use a
-        ;; minute-cookie for encryption.
-        ;; When the client notifies us that it has forked (and that
-        ;; notification must be signed with the PID...it should
-        ;; probably include the PID to match that part of the
-        ;; protocol), we can decrypt the cookie and mark this World
-        ;; active for the appropriate SESSION.
-        ;; Q: Would it be worthwhile to add another layer to this?
-        ;; Have the browser query for the worker code. We use this
-        ;; cookie to inject another short-term cookie key into that
-        ;; worker code.
-        ;; Then the ::forked handler could verify them all.
-        ;; It seems like we really have to do something along those
-        ;; lines, since we cannot possibly trust the browser and the
-        ;; HTTP request could come from anywhere.
-        ;; A malicious client could still share the client's private
-        ;; key and request a billion copies of the browser page.
-        ;; Then again, that seems like a weakness in CurveCP also.
-        (let [dscr {:frereth/pid pid
-                    :frereth/state :frereth/pending
-                    ;; We don't need to (require 'client.propagate) to be able
-                    ;; to declare the dependency structure here.
-                    ;; But we will need to do so once the browser side has
-                    ;; ::forked and we need to start the System this describes.
-                    ;; Of course, the system that gets created here depends
-                    ;; on the :frereth/command parameter.
-                    ;; Need to split this ns up to avoid the potential circular
-                    ;; dependency.
-                    :frereth/system-description {:client.propagate/monitor {}}}
-              world-system-string (pr-str dscr)
-              ;; Q: Will this need Unicode? UTF-8 seems safer
-              world-system-bytes (.getBytes world-system-string "ASCII")
-              ;; TODO: This actually needs to be encrypted by a minute
-              ;; key.
-              encoded (.encode (Base64/getEncoder) world-system-bytes)]
-          (post-message! session-id
-                         pid
-                         :frereth/ack-forking
-                         {:frereth/cookie encoded}))
-        (println "Error: trying to re-fork pid" pid)))
+            ;; Take a page from the CurveCP handshake. Use a
+            ;; minute-cookie for encryption.
+            ;; When the client notifies us that it has forked (and that
+            ;; notification must be signed with the PID...it should
+            ;; probably include the PID to match that part of the
+            ;; protocol), we can decrypt the cookie and mark this World
+            ;; active for the appropriate SESSION.
+            ;; Q: Would it be worthwhile to add another layer to this?
+            ;; Have the browser query for the worker code. We use this
+            ;; cookie to inject another short-term cookie key into that
+            ;; worker code.
+            ;; Then the ::forked handler could verify them all.
+            ;; It seems like we really have to do something along those
+            ;; lines, since we cannot possibly trust the browser and the
+            ;; HTTP request could come from anywhere.
+            ;; A malicious client could still share the client's private
+            ;; key and request a billion copies of the browser page.
+            ;; Then again, that seems like a weakness in CurveCP also.
+            (let [dscr {:frereth/pid pid
+                        :frereth/state :frereth/pending
+                        ;; We don't need to (require 'client.propagate) to be able
+                        ;; to declare the dependency structure here.
+                        ;; But we will need to do so once the browser side has
+                        ;; ::forked and we need to start the System this describes.
+                        ;; Of course, the system that gets created here depends
+                        ;; on the :frereth/command parameter.
+                        ;; Need to split this ns up to avoid the potential circular
+                        ;; dependency.
+                        :frereth/system-description {:client.propagate/monitor {}}}
+                  world-system-bytes (serialize dscr)
+                  ;; TODO: This needs to be encrypted by a minute
+                  ;; key before we encode it.
+                  cookie (.encode (Base64/getEncoder) world-system-bytes)]
+              (post-message! session-id
+                             pid
+                             :frereth/ack-forking
+                             {:frereth/cookie cookie}))
+            (println "Error: trying to re-fork pid" pid)))))
     (println (str "Missing either/both of '"
                   command
                   "' or/and '"
@@ -222,11 +247,14 @@
 (defn on-message
   "Deserialize and dispatch a raw message from browser"
   [session-id message-string]
+  ;; Q: Could I avoid a layer of indirection and just
+  ;; have this body be the dispactch function for the dispatch!
+  ;; multi?
   (println (str "Incoming message from "
                 session-id
                 ": "
                 message-string))
-  (if (get @active-sessions session-id)
+  (if (get-in @sessions [::active session-id])
     (try
       (let [{:keys [:frereth/body]
              :as wrapper} (deserialize message-string)]
@@ -243,63 +271,77 @@
              "No"
              session-id
              "\namong\n"
-             (keys @active-sessions)
+             (keys (::active @sessions))
              "\nPending:\n"
-             @pending-sessions)))
+             (::pending @sessions))))
 
 (defn login-realized
   "Client has finished its authentication"
   [websocket wrapper]
+  (println "Received initial websocket message:" wrapper)
   (if (and (not= ::drained wrapper)
            (not= ::timed-out wrapper))
     (let [envelope (deserialize wrapper)
           _ (println "Key pulled:" envelope)
-          public-key (:frereth/body envelope)]
-      (println "Trying to move\n" public-key "\nfrom\n"
-               @pending-sessions)
-      (if (@pending-sessions public-key)
+          session-key (:frereth/body envelope)]
+      (println "Trying to move\n" session-key
+               "a" (class session-key)
+               "\nfrom\n"
+               (::pending @sessions))
+      (if (get (::pending @sessions) session-key)
         (do
           (println "Swapping")
           ;; FIXME: Also need to dissoc public-key from the pending set.
-          ;; And send back the URL for the current user's shell.
-          ;; Or maybe that should be standardized, with this public key
-          ;; as a query parameter.
-          (swap! active-sessions
-                 assoc
-                 public-key {::web-socket websocket})
+          ;; (current approach is strictly debug-only
+          (swap! sessions
+                 assoc-in
+                 [::active session-key] {::web-socket websocket
+                                         ::worlds {::active {}
+                                                   ::pending #{}}})
           (println "Swapped:")
           (pprint websocket)
           ;; Set up the message handler
           (let [connection-closed
                 (strm/consume (partial on-message
-                                       public-key)
+                                       session-key)
                               websocket)]
             ;; Cope with it closing
             (dfrd/on-realized connection-closed
                               (fn [succeeded]
                                 (println (str "Socket closed cleanly"
                                           " for session "
-                                          public-key
+                                          session-key
                                           ": "
                                           succeeded))
-                                (swap! active-sessions
-                                       dissoc
-                                       public-key))
+                                (swap! sessions
+                                       #(update %
+                                                ::active
+                                                (dissoc
+                                                 session-key))))
                               (fn [failure]
                                 (println "Web socket failed for"
                                          "session"
-                                         public-key
+                                         session-key
                                          ":"
                                          failure)
-                                (swap! active-sessions
-                                       dissoc
-                                       public-key)))))
+                                (swap! sessions
+                                       (update
+                                        ::active
+                                        #(dissoc %
+                                                 session-key)))))))
         (do
           (println "Not found")
           (throw (ex-info "Client trying to complete non-pending connection"
-                          {::attempt public-key
-                           ::pending @pending-sessions
-                           ::connected @active-sessions})))))))
+                          {::attempt session-key
+                           ::sessions @sessions})))))
+    (println "Waiting for login completion failed:" wrapper)))
+
+(defn verify-cookie
+  [world-id
+   {:keys [frereth/pid]
+    :as cookie}]
+  ;; TODO: Need to verify the cookie plus its signature
+  (= pid world-id))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Public
@@ -308,15 +350,11 @@
   :args (s/cat :connection (s/and strm/sink?
                                   strm/source?)))
 (defn activate-session!
-  "This smells suspiciously like a step in a communictions/security protocol.
-
-  At the very least, we need a map of pending connections so we can mark this
-  one complete"
+  "Browser is trying to initiate a new Session"
   [websocket]
   (try
     ;; FIXME: Better handshake
     (println "Trying to pull the Renderer's key from new websocket")
-    (pprint websocket)
     (let [first-response (strm/try-take! websocket ::drained 500 ::timed-out)]
       ;; TODO: Need the login exchange.
       ;; Should probably do that before opening the websocket, using SRP.
@@ -330,6 +368,100 @@
       (println "Renderer connection completion failed")
       (pprint ex)
       (.close websocket))))
+
+(s/fdef handle-browser-forked!
+  :args (s/cat :session-id :frereth/session-id
+               :world-id :frereth/world-id
+               :cookie-bytes bytes?)
+  :ret any?)
+(defn handle-browser-forked!
+  [session-id world-id]
+  (let [system-description (get-in @sessions
+                                   [::active
+                                    session-id
+                                    ::worlds
+                                    ::pending
+                                    world-id])]
+    ;; This isn't just the system-description.
+    ;; Also need the short-term public key that we'll
+    ;; use to sign messages from the Client
+    ;; TODO: Add that
+    (if system-description
+      ;; Sadly, it can't be this simple.
+      ;; Have to resolve the namespaces involved in the system-description.
+      ;; And, really, it isn't fair to expect everyone to use
+      ;; integrant. Some will probably prefer Component, or rolling
+      ;; their own System.
+      ;; So this needs to just be a 0-arg ctor.
+      (let [system (ig/init system-description)]
+        (swap! sessions
+               (fn [values]
+                 (let [added
+                       (assoc-in values
+                                 [::active
+                                  session-id
+                                  ::worlds
+                                  ::active
+                                  world-id]
+                                 {::system system})]
+                   (update-in added [::active
+                                     session-id
+                                     ::worlds
+                                     ::passive]
+                              disj
+                              world-id))))))))
+
+(s/fdef get-code-for-world
+  :args (s/cat :session-id :frereth/session-id
+               :world-id :frereth/world-id
+               :cookie-bytes bytes?)
+  ;; Q: What makes sense for the real return value?
+  :ret bytes?)
+(defn get-code-for-world
+  [session-id world-id cookie-bytes]
+  (if-let [session (get-in @sessions [::active session-id])]
+    (let [{:keys [:frereth/pid
+                  :frereth/state
+                  :frereth/system-description]
+           :as cookie} (decode-cookie cookie-bytes)]
+      (if (and pid state system-description)
+        (if (verify-cookie world-id cookie)
+          (do
+            (println "Cookie verified")
+            (let [opener (if (.exists (io/file "dev-output/js"))
+                           io/file
+                           (fn [file-name]
+                             (io/file (io/resource (str "js/" file-name)))))
+                  raw (opener "dev-output/js/worker.js")]
+              (when-not (.exists raw)
+                (throw (ex-info "Missing worker file"
+                                {::problem opener})))
+              ;; I still need access to the actual worker .cljs so
+              ;; I can inject the public key that must be part of the cookie.
+              ;; This is really just the .js that loads up that .cljs.
+              ;; Though, honestly, this needs to adjust all the calls to
+              ;; require to place them under an API route that involves
+              ;; both the session and world IDs.
+              (println "Returning" raw "a" (class raw))
+              raw))
+          (do
+            (println "Bad Initiate packet.\n"
+                     cookie "!=" world-id)
+            (throw (ex-info "Invalid Cookie: probable hacking attempt"
+                            {:frereth/session-id session-id
+                             :frereth/world-id world-id
+                             :frereth/cookie cookie}))))))
+    (do
+      (println "Missing session key\n"
+               session-id "a" (class session-id)
+               "\namong")
+      (doseq [session-key (-> sessions deref ::active keys)]
+        (println session-key "a" (class session-key)))
+      (throw (ex-info "Trying to fork World for missing session"
+                      {::sessions @sessions
+                       ::session-id session-id
+                       ::world-id world-id
+                       ::cookie-bytes cookie-bytes})))))
 
 (s/fdef post-message!
   :args (s/cat :session-id :frereth/session-id
@@ -346,9 +478,10 @@
                 world-id
                 " in "
                 session-id))
-  (if-let [connection (-> active-sessions
-                       deref
-                       (get session-id))]
+  (if-let [connection (-> sessions
+                          deref
+                          ::active
+                          (get session-id))]
     (try
       (pprint connection)
       (let [wrapper (do-wrap-message world-id action value)
@@ -365,9 +498,16 @@
     (do
       (println "No such world")
       (throw (ex-info "Trying to POST to unconnected Session"
-                      {::pending @pending-sessions
+                      {::pending (::pending @sessions)
                        ::world-id session-id
-                       ::connected @active-sessions})))))
+                       ::connected (::active @sessions)})))))
+
+(defn register-pending-world!
+  [session-id world-key]
+  (swap! sessions
+         update-in
+         [::active session-id ::worlds ::pending]
+         #(conj % world-key)))
 
 (comment
   ;; cljs doesn't need to specify

@@ -4,6 +4,7 @@
    [bidi.bidi :as bidi]
    [bidi.ring :as ring]
    [cemerick.url :as url]
+   [clojure.edn :as edn]
    [clojure.java.io :as io]
    [clojure.pprint :refer [pprint]]
    [hiccup.core :refer [html]]
@@ -11,30 +12,31 @@
    [manifold.deferred :as dfrd]
    [manifold.stream :as strm]
    [renderer.lib :as lib]
-   [ring.util.response :as rsp]))
+   [ring.util.response :as rsp]
+   [clojure.edn :as edn])
+  (:import clojure.lang.ExceptionInfo))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; Internal Helpers
+
+(def non-websocket-request
+  (rsp/bad-request "Expected a websocket request"))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Handlers
 ;;;; These really belong in their own ns[es]
 
-(def non-websocket-request
-  (rsp/response {:status 400
-                 :headers {"content-type" "application/text"}
-                 :body "Expected a websocket request"}))
-
 (defn connect-renderer
   [request]
   (try
-    (println "connect-renderer Received keys\n"
-             (keys request)
-             "\namong")
+    (println "connect-renderer: Received keys\n"
+             (keys request))
     (catch Exception ex
       (println ex)))
-  (pprint request)
   (dfrd/let-flow [websocket (dfrd/catch
                                  (http/websocket-connection request)
                                  (fn [_] nil))]
-    (println "websocket upgrade: '" websocket "'")
+    (println "connect-renderer: websocket upgrade: '" websocket "'")
     (if websocket
       (lib/activate-session! websocket)
       non-websocket-request)))
@@ -53,22 +55,78 @@
   appropriate code from the Server."
   [{:keys [:query-params]
     :as request}]
-  (println "Received a request to fork a new World:")
-  (let [{cookie "cookie"
-         session-id "session-id"
-         world-key "world-key"} query-params]
-    (if (and cookie session-id world-key)
-      (let [cookie (url/url-decode cookie)
-            session-id (url/url-decode session-id)
-            world-key (url/url-decode world-key)]
-        (println "Decoded params:")
-        (pprint {::cookie cookie
-                 ::session-id session-id
-                 ::world-key world-key})
-        (throw (RuntimeException. "Keep going")))
-      (rsp/response {:status 400
-                     :headers {"content-type" "application/text"}
-                     :body "Missing required parameter"}))))
+  (try
+    (println "Received a request to fork a new World:")
+    ;; These parameters need to be serialized into a signed "initiate"
+    ;; param.
+    (let [{initiate-wrapper "initiate"
+           signature "signature"} query-params
+          {:keys [:frereth/cookie
+                  :frereth/session-id
+                  :frereth/world-key]
+           :as initiate} (lib/deserialize initiate-wrapper)]
+      (if (and cookie session-id world-key)
+        (do
+          (println "Trying to decode" cookie "a" (class cookie))
+          (let [#_[cookie (url/url-decode cookie)]
+                session-id (-> session-id
+                               url/url-decode
+                               edn/read-string)
+                world-key (-> world-key
+                              url/url-decode
+                              edn/read-string)]
+            (println "Decoded params:")
+            ;; There's a type mismatch between here and what the lib
+            ;; expects.
+            ;; These values are still JSON.
+            ;; That's expecting cookie as a byte array.
+            ;; session-id and world-key are supposed to be...whatever
+            ;; I'm using to represent keys (the map of JWK values would
+            ;; be most appropriate).
+            ;; So I need to finish deserializing these.
+            ;; At the same time, this should really have been sent as
+            ;; a single signed blob that extracts to these values.
+            (pprint {::cookie cookie
+                     ::session-id session-id
+                     ::world-key world-key
+                     ::signature signature})
+            (try
+              (let [body (lib/get-code-for-world session-id
+                                                 world-key
+                                                 cookie)]
+                (println "Response body:" body)
+                (try
+                  (lib/register-pending-world! session-id world-key)
+                  (println "Registration succeeded. Should be good to go")
+                  (catch Throwable ex
+                    (println "Registration failed:" ex)
+                    (throw ex)))
+                (rsp/content-type (rsp/response body)
+                                  ;; Q: What is the response type, really?
+                                  ;; It seems like it would be really nice
+                                  ;; to return a script that sets up an
+                                  ;; environment with its own
+                                  ;; clojurescript compiler and a basic script
+                                  ;; to kick off whatever the World needs to
+                                  ;; do.
+                                  ;; That would be extremely presumptuous and
+                                  ;; wasteful, even for a project as
+                                  ;; extravagant as this one.
+                                  "application/ecmascript"))
+              (catch ExceptionInfo ex
+                (println "Error retrieving code for World\n" ex)
+                (pprint (ex-data ex))
+                (rsp/bad-request "Malformed Request"))
+              (catch Exception ex
+                (println "Unhandled exception:" ex)
+                (throw ex)))))
+        (do
+          (println "Missing parameter in")
+          (pprint initiate)
+          (rsp/bad-request "Missing required parameter"))))
+    (catch Throwable ex
+      (println "Unhandled low-level outer exception:" ex)
+      (throw ex))))
 
 (defn echo-page
   [request]
