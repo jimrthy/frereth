@@ -96,7 +96,7 @@
                                                  cookie)]
                 (println "Response body:" body)
                 (try
-                  (lib/register-pending-world! session-id world-key)
+                  (lib/register-pending-world! session-id world-key cookie)
                   (println "Registration succeeded. Should be good to go")
                   (catch Throwable ex
                     (println "Registration failed:" ex)

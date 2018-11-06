@@ -143,6 +143,30 @@
         reader (transit/reader in :json)]
     (transit/read reader)))
 
+(defn get-world-in-active-session
+  [session-id world-key which]
+  (get-in @sessions [::active ::worlds which world-key]))
+
+(defn get-active-world
+  [session-id world-key]
+  (get-world-in-active-session session-id world-key ::active))
+
+(defn get-pending-world
+  [session-id world-key]
+  (get-world-in-active-session session-id world-key ::pending))
+
+(defn activate-pending-world!
+  [session-id world-key]
+  (if-let [world (get-pending-world session-id world-key)]
+    (swap! @sessions
+           (fn [browser-sessions]
+             (-> browser-sessions
+                 (assoc-in [::active ::worlds ::active world-key]
+                           world)
+                 (update-in [::active ::worlds ::pending]
+                            dissoc
+                            world-key))))))
+
 (s/fdef decode-cookie
   :args (s/cat :cookie-bytes bytes?)
   :ret ::cookie)
@@ -165,7 +189,8 @@
 
 (defmethod dispatch! :frereth/forked
   [session-id
-   {:keys [:frereth/pid]}]
+   {world-key :frereth/pid
+    :as params}]
   ;; Once the browser has its worker up and running, we need to start
   ;; interacting.
   ;; Actually, there's an entire lifecycle here.
@@ -176,8 +201,29 @@
   ;; :frereth/forking prepped.
   ;; In this specific case, the main piece of that is
   ;; :client.propagate/monitor
-  (throw (ex-info "Not Implemented"
-                  {::unhandled ::forked})))
+  (if-let [world (get-pending-world session-id world-key)]
+    (do
+      (activate-pending-world! session-id world-key)
+      ;; This is where we truly need the cookie that describes which
+      ;; start function to run.
+      ;; TODO: Start back here.
+      ;; I'm making this too complicated. Add an extra cycle at the
+      ;; browser level. Web Worker starts and sends a query for its
+      ;; Cookie. core posts that back. Then Web Worker can include
+      ;; that in the body of ::forked.
+      ;; It still leaves things a bit complicated here, but at least
+      ;; I won't have to manually update whichever script actually
+      ;; needs that info.
+      (throw (ex-info "Need to trigger its start function"
+                      {::unhandled ::forked})))
+    (throw (ex-info (str "Need to make world lookup simpler. Could not find")
+                    {::active-session (-> sessions
+                                          deref
+                                          ::active
+                                          (get session-id))
+                     ::among params
+                     ::world-key world-key
+                     ::world-key-class (class world-key)}))))
 
 (defmethod dispatch! :frereth/forking
   [session-id
@@ -189,24 +235,18 @@
         (let [worlds (::worlds session)]
           (if (and (not (contains? (::pending worlds) pid))
                    (not (contains? (::active worlds) pid)))
-            ;; This is dangerous and easily exploited.
-            ;; Really do need something like this to tell the client the URL for loading.
-            ;; And update the routing table to be able to serve the javascript it's about
-            ;; to request.
-            ;; At the same time, it would be pretty trivial for a bunch of rogue clients to
-            ;; overload a server this naive.
+            ;; This seems overly complex, but setting up more state
+            ;; is dangerous and easily exploited.
             ;; The fact that the client is authenticated helps with post-mortems, but
             ;; we should try to avoid those.
-            ;; So need some sort of throttle on forks per second and/or pending
+            ;; We also need some sort of throttle on forks per second and/or pending
             ;; forks.
 
             ;; Take a page from the CurveCP handshake. Use a
             ;; minute-cookie for encryption.
-            ;; When the client notifies us that it has forked (and that
-            ;; notification must be signed with the PID...it should
-            ;; probably include the PID to match that part of the
-            ;; protocol), we can decrypt the cookie and mark this World
-            ;; active for the appropriate SESSION.
+            ;; When the client notifies us that it has forked, we can
+            ;; decrypt the cookie and mark this World active for the
+            ;; appropriate SESSION.
             ;; Q: Would it be worthwhile to add another layer to this?
             ;; Have the browser query for the worker code. We use this
             ;; cookie to inject another short-term cookie key into that
@@ -375,13 +415,10 @@
                :cookie-bytes bytes?)
   :ret any?)
 (defn handle-browser-forked!
-  [session-id world-id]
-  (let [system-description (get-in @sessions
-                                   [::active
-                                    session-id
-                                    ::worlds
-                                    ::pending
-                                    world-id])]
+  [session-id world-key]
+  (throw (RuntimeException. "obsolete: this arrives from websocket"))
+  (let [system-description (get-pending-world session-id
+                                              world-key)]
     ;; This isn't just the system-description.
     ;; Also need the short-term public key that we'll
     ;; use to sign messages from the Client
@@ -402,14 +439,14 @@
                                   session-id
                                   ::worlds
                                   ::active
-                                  world-id]
+                                  world-key]
                                  {::system system})]
                    (update-in added [::active
                                      session-id
                                      ::worlds
                                      ::passive]
                               disj
-                              world-id))))))))
+                              world-key))))))))
 
 (s/fdef get-code-for-world
   :args (s/cat :session-id :frereth/session-id
@@ -503,11 +540,11 @@
                        ::connected (::active @sessions)})))))
 
 (defn register-pending-world!
-  [session-id world-key]
+  [session-id world-key cookie]
   (swap! sessions
          update-in
          [::active session-id ::worlds ::pending]
-         #(conj % world-key)))
+         #(conj % world-key cookie)))
 
 (comment
   ;; cljs doesn't need to specify

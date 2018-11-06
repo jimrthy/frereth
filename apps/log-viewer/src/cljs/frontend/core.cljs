@@ -36,6 +36,7 @@
 (s/def ::secret ::crypto-key)
 (s/def ::internal-key-pair (s/keys :required [::public ::secret]))
 ;; Something like crypto/KeyPair
+;; i.e. the native javascript equivalent of ::internal-key-pair
 (s/def ::key-pair any?)
 
 (s/def ::session-id any?)
@@ -43,6 +44,14 @@
 (s/def ::subtle-crypto any?)
 (s/def ::web-socket any?)
 (s/def ::web-worker any?)
+
+;; This is some sort of human-readable/transit-serializable
+;; representation of a World's public key
+(s/def ::world-key map?)
+(s/def ::world-state-keys #{::active ::forked ::forking ::pending})
+;; FIXME: The legal values here are pretty interesting.
+;; And, honestly, specific to each state-key
+(s/def ::world-state any?)
 
 (s/def work-spawner (s/fspec :args (s/cat :cookie ::cookie)
                              :ret ::web-worker))
@@ -83,11 +92,50 @@
 (def shared-socket (atom nil))
 
 ;; Maps of world-keys to state
-(def worlds (atom {::active {}
-                   ::pending {}}))
+(def worlds
+  "pending worlds have notified the web server that they want to fork.
+  forking worlds have received the keys to do so and are in the process
+  of setting up the Web Worker.
+  forked worlds have sent the notification from the Web Worker and are
+  ready to begin interacting.
+  active worlds have received a message from the web server."
+  ;; It's very interesting to write/find a real FSM manager
+  ;; to cope with these transitions.
+  (atom {::active {}
+         ::forked {}
+         ::forking {}
+         ::pending {}}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Internal Implementation
+
+(defn adjust-world-state!
+  "This is really an FSM update"
+  ([world-key from to additional]
+   (if-let [current (get-in all [from world-key])]
+     (swap! worlds
+            (fn [all]
+              (let [duplicated (assoc-in all
+                                         [to world-key]
+                                         (into current additional))]
+                (update duplicated
+                        from
+                        dissoc
+                        world-key))))
+     (throw (ex-info "Missing current world"
+                     {::actual @worlds
+                      ::expected-state from
+                      ::world-key world-key}))))
+  ([world-key from to]
+   (adjust-world-state! world-key from to nil)))
+
+(s/fdef do-get-world
+  :args (s/cat :world-key ::world-key
+               :state ::world-state)
+  :ret any?)
+(defn do-get-world
+  [world-key state]
+  (-> worlds deref state (get world-key)))
 
 (s/fdef recv-message!
   ;; Q: What *is* event?
@@ -114,7 +162,7 @@
     (console.log (str "Incoming at "
                       (.now js/Date)
                       ": "
-                      event))
+                      (js->clj event)))
     (let [raw-envelope (array-buffer->string (.-data event))
           _ (console.log "Trying to read" raw-envelope)
           envelope (transit/read reader raw-envelope)
@@ -138,35 +186,33 @@
       ;; cljs.
       (condp = action
         :frereth/forward
-        (let [worker (-> worlds
-                         deref
-                         ::active
-                         (get world-id)
-                         ::worker)]
-          (if worker
-            (.postMessage worker body)
-            (console.error "Message for"
-                           world-id
-                           "in"
-                           envelope
-                           ". No match in"
-                           (keys @worlds))))
+        (if-let [worker (::worker (do-get-world world-id ::active))]
+          (.postMessage worker body)
+          (console.error "Message for"
+                         world-id
+                         "in"
+                         envelope
+                         ". No match in"
+                         (keys @worlds)))
+
+        :frereth/ack-forked
+        (if-let [{:keys [::worker]} (do-get-world world-id ::forked)]
+          (adjust-world-state! world-id ::forked ::active))
+
+
         :frereth/ack-forking
         (try
-          (let [ack-chan (-> worlds
+          (if-let [ack-chan (-> worlds
                              deref
                              ::pending
                              (get world-id))]
-            (if ack-chan
-              (let [success (async/put! ack-chan body)]
-                ;; This acts like it works, but it doesn't.
-                ;; FIXME: Start back here.
-                (console.log (str "Message put onto " ack-chan
-                                  ": " success)))
-              (console.error "ACK about non-pending world"
-                             {::problem envelope
-                              ::pending (::pending @worlds)
-                              ::world-id world-id})))
+            (let [success (async/put! ack-chan body)]
+              (console.log (str "Message put onto " (js->clj ack-chan)
+                                ": " success)))
+            (console.error "ACK about non-pending world"
+                           {::problem envelope
+                            ::pending (::pending @worlds)
+                            ::world-id world-id}))
           (catch :default ex
             (console.error "Failed to handle :frereth/ack-forking" ex body))))))
 
@@ -306,41 +352,54 @@
                    body))))))
 
 (defn on-worker-message
-  [socket worker event]
+  [socket world-key worker event]
   (let [data (.-data event)]
     (try
       (let [{:keys [:frereth/action]
              :as raw-message} (transit/read (transit/reader :json)
                                             data)]
-        (console.log "Message from worker:" action)
+        (console.log "Message from" worker ":" action)
         (condp = action
           :frereth/render
           (let [dom (sanitize-scripts worker
                                       (:frereth/body raw-message))]
             (r/render-component [(constantly dom)]
                                 (js/document.getElementById "app")))
-          :frereth/forked (send-message! socket
-                                         public-key
-                                         ;; send-message! will
-                                         ;; serialize this
-                                         ;; again.
-                                         ;; Which is wasteful.
-                                         ;; Would be better to
-                                         ;; just have this
-                                         ;; :action as a tag,
-                                         ;; followed by the
-                                         ;; body.
-                                         #_data
-                                         ;; But that's premature
-                                         ;; optimization.
-                                         ;; Worry about that
-                                         ;; detail later.
-                                         ;; Even though this is
-                                         ;; the boundary area
-                                         ;; where it's probably
-                                         ;; the most important.
-                                         ;; (Well, not here. But in general)
-                                         raw-message)))
+          :frereth/forked
+          (let [cookie (-> worlds
+                           deref
+                           ::forking
+                           world-key)
+                decorated (assoc raw-message
+                                 :frereth/cookie cookie
+                                 :frereth/pid world-key)]
+            (send-message! socket
+                           public-key
+                           ;; send-message! will
+                           ;; serialize this
+                           ;; again.
+                           ;; Which is wasteful.
+                           ;; Would be better to
+                           ;; just have this
+                           ;; :action as a tag,
+                           ;; followed by the
+                           ;; body.
+                           #_data
+                           ;; But that's premature
+                           ;; optimization.
+                           ;; Worry about that
+                           ;; detail later.
+                           ;; Even though this is
+                           ;; the boundary area
+                           ;; where it's probably
+                           ;; the most important.
+                           ;; (Well, not here. But in general)
+                           decorated)
+            (adjust-world-state! world-key
+                                 ::forking
+                                 ::forked
+                                 {::cookie cookie
+                                  ::worker worker}))))
       (catch :default ex
         (console.error ex "Trying to deserialize" data)))))
 
@@ -400,9 +459,9 @@
       (.then signature-promise
              (fn [signature]
                (let [params {:frereth/initiate packet-string
-                             :frereth/signature (->  signature
-                                                     array-buffer->string
-                                                     serialize)}
+                             :frereth/signature (-> signature
+                                                    array-buffer->string
+                                                    serialize)}
 
                      worker (new window.Worker
                                  (str (assoc url :query params))
@@ -411,7 +470,7 @@
                       ;; supported on DedicatedWorker
                       #js{"type" "classic"})]
                  (set! (.-onmessage worker)
-                       (partial on-worker-message socket worker))
+                       (partial on-worker-message socket public worker))
                  worker))))))
 
 (s/fdef do-build-actual-worker
@@ -431,7 +490,7 @@
     ;; the web server.
     (let [response (async/<! response-ch)
           cookie (:frereth/cookie response)]
-      (console.log "Received signal to spawn worker:" response)
+      (console.log "Received signal to fork worker:" response)
       (if-let [worker (spawner cookie)]
         (do
           ;; Honestly, that should be something that gets
@@ -464,7 +523,7 @@
                    (let [no-longer-pending (update all ::pending
                                                    #(dissoc % full-pk))]
                      (assoc-in no-longer-pending
-                               [::active full-pk]
+                               [::forking full-pk]
                                {::key-pair raw-key-pair
                                 ::worker worker})))
                  ;; TODO: Need to notify the Client that this World is ready to interact
