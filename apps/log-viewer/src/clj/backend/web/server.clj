@@ -12,6 +12,8 @@
   [_ {:keys [:port]
       :as opts}]
   (let [port (or port 10555)
+        ;; FIXME: Switch to pedestal. It's supported aleph as a backend
+        ;; since 0.5.0.
         handler (ring/make-handler routes/routes)
         ;; TODO: Switch to something more like Pedestal's Interceptor
         ;; model.

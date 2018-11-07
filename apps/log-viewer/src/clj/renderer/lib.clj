@@ -84,7 +84,7 @@
    89 87 -73 116
    66 43 39 -61])
 
-;; TODO: Split this back up to active/pending.
+;; TODO: Just track the state with each session.
 ;; Combining them adds extra confusing nesting that just
 ;; leads to pain.
 ;; Might be interesting to track deactivated for historical
@@ -145,7 +145,7 @@
 
 (defn get-world-in-active-session
   [session-id world-key which]
-  (get-in @sessions [::active ::worlds which world-key]))
+  (get-in @sessions [::active session-id ::worlds which world-key]))
 
 (defn get-active-world
   [session-id world-key]
@@ -158,7 +158,7 @@
 (defn activate-pending-world!
   [session-id world-key]
   (if-let [world (get-pending-world session-id world-key)]
-    (swap! @sessions
+    (swap! sessions
            (fn [browser-sessions]
              (-> browser-sessions
                  (assoc-in [::active ::worlds ::active world-key]
@@ -215,7 +215,8 @@
       ;; I won't have to manually update whichever script actually
       ;; needs that info.
       (throw (ex-info "Need to trigger its start function"
-                      {::unhandled ::forked})))
+                      {::unhandled ::forked
+                       ::parameters params})))
     (throw (ex-info (str "Need to make world lookup simpler. Could not find")
                     {::active-session (-> sessions
                                           deref
@@ -224,6 +225,48 @@
                      ::among params
                      ::world-key world-key
                      ::world-key-class (class world-key)}))))
+
+(defn build-cookie
+  [session-id
+   world-key]
+  ;; This approach seems overly complex, but setting up more state
+  ;; is dangerous and easily exploited.
+  ;; The fact that the client is authenticated helps with post-mortems, but
+  ;; we should try to avoid those.
+  ;; We also need some sort of throttle on forks per second and/or pending
+  ;; forks.
+
+  ;; Take a page from the CurveCP handshake. Use a
+  ;; minute-cookie for encryption.
+  ;; When the client notifies us that it has forked, we can
+  ;; decrypt the cookie and mark this World active for the
+  ;; appropriate SESSION.
+  ;; Q: Would it be worthwhile to add another layer to this?
+  ;; Have the browser query for the worker code. We use this
+  ;; cookie to inject another short-term cookie key into that
+  ;; worker code.
+  ;; Then the ::forked handler could verify them all.
+  ;; It seems like we really have to do something along those
+  ;; lines, since we cannot possibly trust the browser and the
+  ;; HTTP request could come from anywhere.
+  ;; A malicious client could still share the client's private
+  ;; key and request a billion copies of the browser page.
+  ;; Then again, that seems like a weakness in CurveCP also.
+  (let [dscr {:frereth/pid world-key
+              :frereth/session-id session-id
+              ;; We don't need to (require 'client.propagate) to be able
+              ;; to declare the dependency structure here.
+              ;; But we will need to do so once the browser side has
+              ;; ::forked and we need to start the System this describes.
+              ;; Of course, the system that gets created here depends
+              ;; on the :frereth/command parameter.
+              ;; Need to split this ns up to avoid the potential circular
+              ;; dependency.
+              :frereth/system-description {:client.propagate/monitor {}}}
+        world-system-bytes (serialize dscr)]
+    ;; TODO: This needs to be encrypted by the current minute
+    ;; key before we encode it.
+    (.encode (Base64/getEncoder) world-system-bytes)))
 
 (defmethod dispatch! :frereth/forking
   [session-id
@@ -235,44 +278,7 @@
         (let [worlds (::worlds session)]
           (if (and (not (contains? (::pending worlds) pid))
                    (not (contains? (::active worlds) pid)))
-            ;; This seems overly complex, but setting up more state
-            ;; is dangerous and easily exploited.
-            ;; The fact that the client is authenticated helps with post-mortems, but
-            ;; we should try to avoid those.
-            ;; We also need some sort of throttle on forks per second and/or pending
-            ;; forks.
-
-            ;; Take a page from the CurveCP handshake. Use a
-            ;; minute-cookie for encryption.
-            ;; When the client notifies us that it has forked, we can
-            ;; decrypt the cookie and mark this World active for the
-            ;; appropriate SESSION.
-            ;; Q: Would it be worthwhile to add another layer to this?
-            ;; Have the browser query for the worker code. We use this
-            ;; cookie to inject another short-term cookie key into that
-            ;; worker code.
-            ;; Then the ::forked handler could verify them all.
-            ;; It seems like we really have to do something along those
-            ;; lines, since we cannot possibly trust the browser and the
-            ;; HTTP request could come from anywhere.
-            ;; A malicious client could still share the client's private
-            ;; key and request a billion copies of the browser page.
-            ;; Then again, that seems like a weakness in CurveCP also.
-            (let [dscr {:frereth/pid pid
-                        :frereth/state :frereth/pending
-                        ;; We don't need to (require 'client.propagate) to be able
-                        ;; to declare the dependency structure here.
-                        ;; But we will need to do so once the browser side has
-                        ;; ::forked and we need to start the System this describes.
-                        ;; Of course, the system that gets created here depends
-                        ;; on the :frereth/command parameter.
-                        ;; Need to split this ns up to avoid the potential circular
-                        ;; dependency.
-                        :frereth/system-description {:client.propagate/monitor {}}}
-                  world-system-bytes (serialize dscr)
-                  ;; TODO: This needs to be encrypted by a minute
-                  ;; key before we encode it.
-                  cookie (.encode (Base64/getEncoder) world-system-bytes)]
+            (let [cookie (build-cookie session-id pid)]
               (post-message! session-id
                              pid
                              :frereth/ack-forking
@@ -318,19 +324,19 @@
 (defn login-realized
   "Client has finished its authentication"
   [websocket wrapper]
-  (println "Received initial websocket message:" wrapper)
+  (println ::login-realized "Received initial websocket message:" wrapper)
   (if (and (not= ::drained wrapper)
            (not= ::timed-out wrapper))
     (let [envelope (deserialize wrapper)
-          _ (println "Key pulled:" envelope)
+          _ (println ::login-realized "Key pulled:" envelope)
           session-key (:frereth/body envelope)]
-      (println "Trying to move\n" session-key
+      (println ::login-realized "Trying to move\n" session-key
                "a" (class session-key)
                "\nfrom\n"
                (::pending @sessions))
       (if (get (::pending @sessions) session-key)
         (do
-          (println "Swapping")
+          (println ::login-realized "Swapping")
           ;; FIXME: Also need to dissoc public-key from the pending set.
           ;; (current approach is strictly debug-only
           (swap! sessions
@@ -338,7 +344,7 @@
                  [::active session-key] {::web-socket websocket
                                          ::worlds {::active {}
                                                    ::pending #{}}})
-          (println "Swapped:")
+          (println ::login-realized "Swapped:")
           (pprint websocket)
           ;; Set up the message handler
           (let [connection-closed
@@ -348,19 +354,20 @@
             ;; Cope with it closing
             (dfrd/on-realized connection-closed
                               (fn [succeeded]
-                                (println (str "Socket closed cleanly"
-                                          " for session "
-                                          session-key
-                                          ": "
-                                          succeeded))
+                                (println (str ::login-realized
+                                              " Socket closed cleanly"
+                                              " for session "
+                                              session-key
+                                              ": "
+                                              succeeded))
                                 (swap! sessions
                                        #(update %
                                                 ::active
                                                 (dissoc
                                                  session-key))))
                               (fn [failure]
-                                (println "Web socket failed for"
-                                         "session"
+                                (println ::login-realized
+                                         "Web socket failed for session"
                                          session-key
                                          ":"
                                          failure)
@@ -370,18 +377,27 @@
                                         #(dissoc %
                                                  session-key)))))))
         (do
-          (println "Not found")
+          (println ::login-realized "Not found")
           (throw (ex-info "Client trying to complete non-pending connection"
                           {::attempt session-key
                            ::sessions @sessions})))))
-    (println "Waiting for login completion failed:" wrapper)))
+    (println ::login-realized
+             "Waiting for login completion failed:"
+             wrapper)))
 
+(s/fdef verify-cookie
+  :args (s/cat :session-id :frereth/session-id
+               :world-id :frereth/world-key)
+  :ret boolean?)
 (defn verify-cookie
-  [world-id
-   {:keys [frereth/pid]
+  [actual-session-id
+   world-id
+   {:keys [:frereth/pid
+           :frereth/session-id]
     :as cookie}]
   ;; TODO: Need to verify the cookie plus its signature
-  (= pid world-id))
+  (and (= pid world-id)
+       (= session-id actual-session-id)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Public
@@ -394,75 +410,39 @@
   [websocket]
   (try
     ;; FIXME: Better handshake
-    (println "Trying to pull the Renderer's key from new websocket")
+    (println ::activate-session!
+             "Trying to pull the Renderer's key from new websocket")
     (let [first-response (strm/try-take! websocket ::drained 500 ::timed-out)]
       ;; TODO: Need the login exchange.
       ;; Should probably do that before opening the websocket, using SRP.
       (dfrd/on-realized first-response
                         (partial login-realized websocket)
                         (fn [error]
-                          (println "Failed pulling initial key:" error))))
+                          (println ::activate-session!
+                                   "Failed pulling initial key:" error))))
     (catch ExceptionInfo ex
       ;; FIXME: Better error handling via tap>
       ;; As ironic as that seems
-      (println "Renderer connection completion failed")
+      (println ::activate-session!
+               "Renderer connection completion failed")
       (pprint ex)
       (.close websocket))))
-
-(s/fdef handle-browser-forked!
-  :args (s/cat :session-id :frereth/session-id
-               :world-id :frereth/world-id
-               :cookie-bytes bytes?)
-  :ret any?)
-(defn handle-browser-forked!
-  [session-id world-key]
-  (throw (RuntimeException. "obsolete: this arrives from websocket"))
-  (let [system-description (get-pending-world session-id
-                                              world-key)]
-    ;; This isn't just the system-description.
-    ;; Also need the short-term public key that we'll
-    ;; use to sign messages from the Client
-    ;; TODO: Add that
-    (if system-description
-      ;; Sadly, it can't be this simple.
-      ;; Have to resolve the namespaces involved in the system-description.
-      ;; And, really, it isn't fair to expect everyone to use
-      ;; integrant. Some will probably prefer Component, or rolling
-      ;; their own System.
-      ;; So this needs to just be a 0-arg ctor.
-      (let [system (ig/init system-description)]
-        (swap! sessions
-               (fn [values]
-                 (let [added
-                       (assoc-in values
-                                 [::active
-                                  session-id
-                                  ::worlds
-                                  ::active
-                                  world-key]
-                                 {::system system})]
-                   (update-in added [::active
-                                     session-id
-                                     ::worlds
-                                     ::passive]
-                              disj
-                              world-key))))))))
 
 (s/fdef get-code-for-world
   :args (s/cat :session-id :frereth/session-id
                :world-id :frereth/world-id
                :cookie-bytes bytes?)
   ;; Q: What makes sense for the real return value?
-  :ret bytes?)
+  :ret (s/nilable bytes?))
 (defn get-code-for-world
-  [session-id world-id cookie-bytes]
-  (if-let [session (get-in @sessions [::active session-id])]
+  [actual-session-id world-id cookie-bytes]
+  (if-let [session (get-in @sessions [::active actual-session-id])]
     (let [{:keys [:frereth/pid
-                  :frereth/state
+                  :frereth/session-id
                   :frereth/system-description]
            :as cookie} (decode-cookie cookie-bytes)]
-      (if (and pid state system-description)
-        (if (verify-cookie world-id cookie)
+      (if (and pid session-id system-description)
+        (if (verify-cookie actual-session-id world-id cookie)
           (do
             (println "Cookie verified")
             (let [opener (if (.exists (io/file "dev-output/js"))
@@ -483,20 +463,22 @@
               raw))
           (do
             (println "Bad Initiate packet.\n"
-                     cookie "!=" world-id)
+                     cookie "!=" world-id
+                     "\nor"
+                     actual-session-id "!=" session-id)
             (throw (ex-info "Invalid Cookie: probable hacking attempt"
-                            {:frereth/session-id session-id
+                            {:frereth/session-id actual-session-id
                              :frereth/world-id world-id
                              :frereth/cookie cookie}))))))
     (do
       (println "Missing session key\n"
-               session-id "a" (class session-id)
+               actual-session-id "a" (class actual-session-id)
                "\namong")
       (doseq [session-key (-> sessions deref ::active keys)]
         (println session-key "a" (class session-key)))
       (throw (ex-info "Trying to fork World for missing session"
                       {::sessions @sessions
-                       ::session-id session-id
+                       ::session-id actual-session-id
                        ::world-id world-id
                        ::cookie-bytes cookie-bytes})))))
 
@@ -540,6 +522,7 @@
                        ::connected (::active @sessions)})))))
 
 (defn register-pending-world!
+  "Browser has requested a World's Code. Time to take things seriously"
   [session-id world-key cookie]
   (swap! sessions
          update-in

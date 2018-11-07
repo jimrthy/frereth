@@ -92,6 +92,12 @@
 (def shared-socket (atom nil))
 
 ;; Maps of world-keys to state
+;; TODO: Move this somewhere less accessible. Then pass that through
+;; to all event handlers which need access.
+;; Note that, in the case of messages from a World, the handler should
+;; really only have access to that World.
+;; Although there will probably be exceptions, like debuggers in
+;; developer mode.
 (def worlds
   "pending worlds have notified the web server that they want to fork.
   forking worlds have received the keys to do so and are in the process
@@ -101,6 +107,7 @@
   active worlds have received a message from the web server."
   ;; It's very interesting to write/find a real FSM manager
   ;; to cope with these transitions.
+  ;; TODO: Merge these. Just track the state with each World.
   (atom {::active {}
          ::forked {}
          ::forking {}
@@ -109,19 +116,33 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Internal Implementation
 
+(s/fdef adjust-world-state!
+  :args (s/cat :world-key ::world-key
+               :from ::world-state-keys
+               :to ::world-state-keys
+               :additional (s/or :to-merge map?
+                                 :to-update (s/fspec
+                                             :args (s/cat :current map?)
+                                             :ret map?))))
 (defn adjust-world-state!
   "This is really an FSM update"
   ([world-key from to additional]
-   (if-let [current (get-in all [from world-key])]
-     (swap! worlds
-            (fn [all]
-              (let [duplicated (assoc-in all
-                                         [to world-key]
-                                         (into current additional))]
-                (update duplicated
-                        from
-                        dissoc
-                        world-key))))
+   (if-let [current (get-in @worlds [from world-key])]
+     (let [updated (cond
+                     (map? additional) (into current additional)
+                     (fn? additional) (additional current))]
+       (swap! worlds
+              (fn [all]
+                ;; Add it to the new state
+                (let [duplicated (assoc-in all
+                                           [to world-key]
+                                           updated)]
+                  ;; Remove it from the old.
+                  ;; This approach is ridiculous.
+                  (update duplicated
+                          from
+                          dissoc
+                          world-key)))))
      (throw (ex-info "Missing current world"
                      {::actual @worlds
                       ::expected-state from
@@ -136,6 +157,34 @@
 (defn do-get-world
   [world-key state]
   (-> worlds deref state (get world-key)))
+
+(s/fdef str->array
+  :args (s/cat :s string?)
+  :ret ::array-buffer)
+(defn str->array
+  "Convert a string to a js/ArrayBuffer"
+  [s]
+  ;; Translated from https://gist.github.com/andreburgaud/6f73fd2d690b629346b8
+  ;; There's an inverse function there named arrayBufferToString which
+  ;; is worth contrasting with array-buffer->string in terms of
+  ;; performance.
+  ;; Javascript:
+  ;; String.fromCharCode.apply(null, new Uint16Array(buf));
+  (let [buf (js/ArrayBuffer. (* 2 (count s)))
+        buf-view (js/Uint16Array. buf)]
+    (dorun (map-indexed (fn [idx ch]
+                          (aset buf-view idx (.charCodeAt ch)))
+                        s))
+    buf))
+
+(defn array-buffer->string
+  "Convert a js/ArrayBuffer to a string"
+  [bs]
+  (let [data-view (js/DataView. bs)
+        ;; Q: What encoding is appropriate here?
+        ;; (apparently javascript strings are utf-16)
+        decoder (js/TextDecoder. "utf-8")]
+    (.decode decoder data-view)))
 
 (s/fdef recv-message!
   ;; Q: What *is* event?
@@ -217,10 +266,12 @@
             (console.error "Failed to handle :frereth/ack-forking" ex body))))))
 
   (defn serialize
+    "Encode using transit"
     [o]
     (transit/write writer o))
 
   (defn send-message!
+    "Send `body` over `socket` for `world-id`"
     [socket
      world-id
      body]
@@ -237,32 +288,6 @@
         (println body "sent successfully")
         (catch :default ex
           (console.error "Sending message failed:" ex))))))
-
-(s/fdef str->array
-  :args (s/cat :s string?)
-  :ret ::array-buffer)
-(defn str->array
-  [s]
-  ;; Translated from https://gist.github.com/andreburgaud/6f73fd2d690b629346b8
-  ;; There's an inverse function there named arrayBufferToString which
-  ;; is worth contrasting with array-buffer->string in terms of
-  ;; performance.
-  ;; Javascript:
-  ;; String.fromCharCode.apply(null, new Uint16Array(buf));
-  (let [buf (js/ArrayBuffer. (* 2 (count s)))
-        buf-view (js/Uint16Array. buf)]
-    (dorun (map-indexed (fn [idx ch]
-                          (aset buf-view idx (.charCodeAt ch)))
-                        s))
-    buf))
-
-(defn array-buffer->string
-  [bs]
-  (let [data-view (js/DataView. bs)
-        ;; Q: What encoding is appropriate here?
-        ;; (apparently javascript strings are utf-16)
-        decoder (js/TextDecoder. "utf-8")]
-    (.decode decoder data-view)))
 
 (defn event-forwarder
   "Sanitize event and post it to Worker"
@@ -352,6 +377,7 @@
                    body))))))
 
 (defn on-worker-message
+  "Cope with message from Worker"
   [socket world-key worker event]
   (let [data (.-data event)]
     (try
@@ -366,44 +392,45 @@
             (r/render-component [(constantly dom)]
                                 (js/document.getElementById "app")))
           :frereth/forked
-          (let [cookie (-> worlds
-                           deref
-                           ::forking
-                           world-key)
+          (let [{:keys [::cookie]
+                 :as world-state} (do-get-world world-key ::forking)
                 decorated (assoc raw-message
                                  :frereth/cookie cookie
                                  :frereth/pid world-key)]
-            (send-message! socket
-                           public-key
-                           ;; send-message! will
-                           ;; serialize this
-                           ;; again.
-                           ;; Which is wasteful.
-                           ;; Would be better to
-                           ;; just have this
-                           ;; :action as a tag,
-                           ;; followed by the
-                           ;; body.
-                           #_data
-                           ;; But that's premature
-                           ;; optimization.
-                           ;; Worry about that
-                           ;; detail later.
-                           ;; Even though this is
-                           ;; the boundary area
-                           ;; where it's probably
-                           ;; the most important.
-                           ;; (Well, not here. But in general)
-                           decorated)
-            (adjust-world-state! world-key
-                                 ::forking
-                                 ::forked
-                                 {::cookie cookie
-                                  ::worker worker}))))
+            (if cookie
+              (do
+                (send-message! socket
+                               world-key
+                               ;; send-message! will
+                               ;; serialize this
+                               ;; again.
+                               ;; Which is wasteful.
+                               ;; Would be better to
+                               ;; just have this
+                               ;; :action as a tag,
+                               ;; followed by the
+                               ;; body.
+                               #_data
+                               ;; But that's premature
+                               ;; optimization.
+                               ;; Worry about that
+                               ;; detail later.
+                               ;; Even though this is
+                               ;; the boundary area
+                               ;; where it's probably
+                               ;; the most important.
+                               ;; (Well, not here. But in general)
+                               decorated)
+                (adjust-world-state! world-key
+                                     ::forking
+                                     ::forked
+                                     {::cookie cookie
+                                      ::worker worker}))
+              (console.error "Missing ::cookie among" world-state)))))
       (catch :default ex
         (console.error ex "Trying to deserialize" data)))))
 
-(s/fdef spawn-worker
+(s/fdef spawn-worker!
   :args (s/cat :crypto ::subtle-crypto
                :socket ::web-socket
                :session-id ::session-id
@@ -412,12 +439,13 @@
                :public ::jwk
                :cookie ::cookie)
   :ret (s/nilable ::web-worker))
-(defn spawn-worker
+(defn spawn-worker!
+  "Begin promise chain that leads to an ::active World"
   [crypto
    socket
    session-id
    {:keys [::secret]}
-   public
+   world-key
    cookie]
   (when window.Worker
     (console.log "Constructing Worker fork URL based on" @base-url
@@ -446,7 +474,7 @@
     (let [url (url/url @base-url "/api/fork")
           initiate {:frereth/cookie cookie
                     :frereth/session-id session-id
-                    :frereth/world-key public}
+                    :frereth/world-key world-key}
           packet-string (serialize initiate)
           packet-bytes (str->array packet-string)
           _ (console.log "Signing" packet-bytes)
@@ -462,7 +490,8 @@
                              :frereth/signature (-> signature
                                                     array-buffer->string
                                                     serialize)}
-
+                     ;; Web server uses the cookie to verify that
+                     ;; the request comes from the correct World.
                      worker (new window.Worker
                                  (str (assoc url :query params))
                       ;; Currently redundant:
@@ -470,7 +499,13 @@
                       ;; supported on DedicatedWorker
                       #js{"type" "classic"})]
                  (set! (.-onmessage worker)
-                       (partial on-worker-message socket public worker))
+                       (partial on-worker-message socket world-key worker))
+                 (set! (.-onerror worker)
+                       (fn [problem]
+                         (console.error "FIXME: Need to handle"
+                                        problem
+                                        "from World"
+                                        world-key)))
                  worker))))))
 
 (s/fdef do-build-actual-worker
@@ -491,43 +526,42 @@
     (let [response (async/<! response-ch)
           cookie (:frereth/cookie response)]
       (console.log "Received signal to fork worker:" response)
-      (if-let [worker (spawner cookie)]
-        (do
-          ;; Honestly, that should be something that gets
-          ;; assigned here. It's independent of whatever key the
-          ;; Worker might actually use.
-          ;; It's really just for routing messages to/from that
-          ;; Worker.
-          ;; Q: How about this approach?
-          ;; We query the web server for a shell URL. Include our
-          ;; version of the worker ID as a query param.
-          ;; Q: Worth using the websocket for that? (it doesn't
-          ;; seem likely).
-          ;; The web server creates a pending-world (keyed to
-          ;; our worker-id), and
-          ;; its response includes the actual URL to load that
-          ;; Worker.
-          ;; Then each Worker could be responsible for tracking
-          ;; its own signing key.
-          ;; Except that sharing the responsibility would be
-          ;; silly.
-          ;; Want the signing key out here at this level, so we
-          ;; don't have to duplicate the signing code
-          ;; everywhere.
-          ;; So, generate the short-term key pair here. Send
-          ;; the public half to the web server for validation.
-          ;; Possibly sign that request with the Session key.
-          ;; Then use the public key to dispatch messages.
-          (swap! worlds
-                 (fn [all]
-                   (let [no-longer-pending (update all ::pending
-                                                   #(dissoc % full-pk))]
-                     (assoc-in no-longer-pending
-                               [::forking full-pk]
-                               {::key-pair raw-key-pair
-                                ::worker worker})))
-                 ;; TODO: Need to notify the Client that this World is ready to interact
-                 (.log js/console "Shell spawned")))
+      (if-let [worker-promise (spawner cookie)]
+        (.then worker-promise
+               ;; The comment below is mostly speculation from when I was
+               ;; designing this on the fly.
+               ;; TODO: Clean it up and move it into documentation
+               (fn [worker]
+                 ;; Honestly, that should be something that gets
+                 ;; assigned here. It's independent of whatever key the
+                 ;; Worker might actually use.
+                 ;; It's really just for routing messages to/from that
+                 ;; Worker.
+                 ;; Q: How about this approach?
+                 ;; We query the web server for a shell URL. Include our
+                 ;; version of the worker ID as a query param.
+                 ;; Q: Worth using the websocket for that? (it doesn't
+                 ;; seem likely).
+                 ;; The web server creates a pending-world (keyed to
+                 ;; our worker-id), and
+                 ;; its response includes the actual URL to load that
+                 ;; Worker.
+                 ;; Then each Worker could be responsible for tracking
+                 ;; its own signing key.
+                 ;; Except that sharing the responsibility would be
+                 ;; silly.
+                 ;; Want the signing key out here at this level, so we
+                 ;; don't have to duplicate the signing code
+                 ;; everywhere.
+                 ;; So, generate the short-term key pair here. Send
+                 ;; the public half to the web server for validation.
+                 ;; Possibly sign that request with the Session key.
+                 ;; Then use the public key to dispatch messages.
+                 (adjust-world-state! full-pk
+                                      ::pending
+                                      ::forking
+                                      {::key-pair raw-key-pair
+                                       ::worker worker})))
         (.warn js/console "Spawning shell failed")))))
 
 (s/fdef build-worker-from-exported-key
@@ -672,7 +706,11 @@
       (set! (.-onopen ws)
             (fn [event]
               (console.log "Websocket opened:" event ws)
-              (reset! shared-socket ws)
+              (swap! shared-socket
+                     (fn [existing]
+                       (when existing
+                         (.close existing))
+                       ws))
 
               (fork-login! ws session-id)
               ;; This is where things like deferreds, core.async,
@@ -691,6 +729,9 @@
     (catch :default ex
       (console.error ex))))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; Public
+
 (defn start! []
   (js/console.log "Starting the app")
 
@@ -698,9 +739,6 @@
     (repl/connect "ws://localhost:9001"))
 
   (connect-web-socket! fork-shell! session-id-from-server))
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;; Public
 
 (when js/window
   (start!))

@@ -29,8 +29,8 @@
 (defn connect-renderer
   [request]
   (try
-    (println "connect-renderer: Received keys\n"
-             (keys request))
+    (println "connect-renderer: Request from\n"
+             (:remote-addr request))
     (catch Exception ex
       (println ex)))
   (dfrd/let-flow [websocket (dfrd/catch
@@ -56,26 +56,33 @@
   [{:keys [:query-params]
     :as request}]
   (try
-    (println "Received a request to fork a new World:")
+    (println ::create-world "Received a request to fork a new World:")
     ;; These parameters need to be serialized into a signed "initiate"
     ;; param.
     (let [{initiate-wrapper "initiate"
            signature "signature"} query-params
+          ;; It's tempting to think that we don't need/want the
+          ;; Cookie here.
+          ;; But we don't want some rogue World just randomly
+          ;; sending requests to try to interfere with legitimate
+          ;; ones.
+          ;; So the Cookie *is* needed to validate the Session
+          ;; and World keys.
           {:keys [:frereth/cookie
                   :frereth/session-id
                   :frereth/world-key]
            :as initiate} (lib/deserialize initiate-wrapper)]
       (if (and cookie session-id world-key)
         (do
-          (println "Trying to decode" cookie "a" (class cookie))
-          (let [#_[cookie (url/url-decode cookie)]
-                session-id (-> session-id
+          (println ::create-world "Trying to decode" cookie
+                   "a" (class cookie))
+          (let [session-id (-> session-id
                                url/url-decode
                                edn/read-string)
                 world-key (-> world-key
                               url/url-decode
                               edn/read-string)]
-            (println "Decoded params:")
+            (println ::create-world "Decoded params:")
             ;; There's a type mismatch between here and what the lib
             ;; expects.
             ;; These values are still JSON.
@@ -91,28 +98,36 @@
                      ::world-key world-key
                      ::signature signature})
             (try
-              (let [body (lib/get-code-for-world session-id
-                                                 world-key
-                                                 cookie)]
-                (println "Response body:" body)
-                (try
-                  (lib/register-pending-world! session-id world-key cookie)
-                  (println "Registration succeeded. Should be good to go")
-                  (catch Throwable ex
-                    (println "Registration failed:" ex)
-                    (throw ex)))
-                (rsp/content-type (rsp/response body)
-                                  ;; Q: What is the response type, really?
-                                  ;; It seems like it would be really nice
-                                  ;; to return a script that sets up an
-                                  ;; environment with its own
-                                  ;; clojurescript compiler and a basic script
-                                  ;; to kick off whatever the World needs to
-                                  ;; do.
-                                  ;; That would be extremely presumptuous and
-                                  ;; wasteful, even for a project as
-                                  ;; extravagant as this one.
-                                  "application/ecmascript"))
+              (if-let [body (lib/get-code-for-world session-id
+                                                    world-key
+                                                    cookie)]
+                (do
+                  (println ::create-world "Response body:" body)
+                  (try
+                    (lib/register-pending-world! session-id world-key cookie)
+                    (println ::create-world
+                             "Registration succeeded. Should be good to go")
+                    (catch Throwable ex
+                      (println ::create-world "Registration failed:" ex)
+                      (throw ex)))
+                  (rsp/content-type (rsp/response body)
+                                    ;; Q: What is the response type, really?
+                                    ;; It seems like it would be really nice
+                                    ;; to return a script that sets up an
+                                    ;; environment with its own
+                                    ;; clojurescript compiler and a basic script
+                                    ;; to kick off whatever the World needs to
+                                    ;; do.
+                                    ;; That would be extremely presumptuous and
+                                    ;; wasteful, even for a project as
+                                    ;; extravagant as this one.
+                                    "application/ecmascript"))
+                (do
+                  (println ::create-world "Missing")
+                  (pprint {:frereth/session-id session-id
+                           :frereth/world-key world-key
+                           })
+                  (rsp/not-found "Unknown World")))
               (catch ExceptionInfo ex
                 (println "Error retrieving code for World\n" ex)
                 (pprint (ex-data ex))
