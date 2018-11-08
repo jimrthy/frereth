@@ -251,10 +251,8 @@
 
         :frereth/ack-forking
         (try
-          (if-let [ack-chan (-> worlds
-                             deref
-                             ::pending
-                             (get world-id))]
+          (if-let [ack-chan (::waiting-ack (do-get-world world-id
+                                                         ::pending))]
             (let [success (async/put! ack-chan body)]
               (console.log (str "Message put onto " (js->clj ack-chan)
                                 ": " success)))
@@ -283,7 +281,7 @@
       ;; TODO: Check that bufferedAmount is low enough
       ;; to send more
       (try
-        (println "Trying to send-message!")
+        (println "Trying to send-message!" envelope)
         (.send socket (serialize envelope))
         (println body "sent successfully")
         (catch :default ex
@@ -560,8 +558,11 @@
                  (adjust-world-state! full-pk
                                       ::pending
                                       ::forking
-                                      {::key-pair raw-key-pair
-                                       ::worker worker})))
+                                      (fn [current]
+                                        (into (dissoc current ::waiting-ack)
+                                              {::cookie cookie
+                                               ::key-pair raw-key-pair
+                                               ::worker worker})))))
         (.warn js/console "Spawning shell failed")))))
 
 (s/fdef build-worker-from-exported-key
@@ -585,10 +586,9 @@
                                             full-pk)]
     (console.log "cljs JWK:" full-pk)
     (swap! worlds
-           (fn [worlds]
-             (update worlds ::pending
-                     (fn [pending]
-                       (assoc pending full-pk ch)))))
+           assoc-in
+           [::pending full-pk]
+           {::waiting-ack ch})
     (console.log "Set up pending World. Notify about pending fork.")
     (send-message! socket full-pk {:frereth/action :frereth/forking
                                    :frereth/command 'shell
@@ -647,7 +647,7 @@
            (fn [public]
              (build-worker-from-exported-key
               socket
-              (partial spawn-worker
+              (partial spawn-worker!
                        crypto
                        socket
                        session-id
