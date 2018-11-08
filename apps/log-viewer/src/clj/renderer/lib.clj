@@ -124,22 +124,29 @@
      :frereth/world-id world-id}))
 
 (s/fdef serialize
-  :args (s/cat :unwrapped-envelope ::message-envelope)
+  ;; body isn't *really* anything. It has to be something that's
+  ;; directly serializable via transit.
+  :args (s/cat :body any?)
   :ret bytes?)
 (defn serialize
-  [unwrapped-envelope]
-  (let [envelope (ByteArrayOutputStream. 4096)  ; Q: Useful size?
-        writer (transit/writer envelope :json)]
-    (transit/write writer unwrapped-envelope)
-    (.toByteArray envelope)))
+  [body]
+  ;; Q: Useful size?
+  (let [result (ByteArrayOutputStream. 4096)
+        writer (transit/writer result :json)]
+    (transit/write writer body)
+    (.toByteArray result)))
 
 (comment
   (String. (serialize "12345" {:a 1 :b 2 :c 3}))
   )
 
+(s/fdef deserialize
+  :args (s/cat :message-string string?)
+  :ret bytes?)
 (defn deserialize
   [message-string]
-  (let [in (ByteArrayInputStream. (.getBytes message-string))
+  (let [message-bytes (.getBytes message-string)
+        in (ByteArrayInputStream. message-bytes)
         reader (transit/reader in :json)]
     (transit/read reader)))
 
@@ -171,9 +178,7 @@
   :args (s/cat :cookie-bytes bytes?)
   :ret ::cookie)
 (defn decode-cookie
-  ;; All these variants fail during JSON parsing with the error message
-  ;; "Unrecognized token 'B': was expecting ('true', 'false' or 'null')"
-  [cookie-bytes #_cookie-string]
+  [cookie-bytes]
   (let [cookie-bytes (.decode (Base64/getDecoder) cookie-bytes)
         cookie-string (String. cookie-bytes)]
     (println "Trying to decode" cookie-string "a"
@@ -190,6 +195,7 @@
 (defmethod dispatch! :frereth/forked
   [session-id
    {world-key :frereth/pid
+    :keys [:frereth/cookie]
     :as params}]
   ;; Once the browser has its worker up and running, we need to start
   ;; interacting.
@@ -202,21 +208,36 @@
   ;; In this specific case, the main piece of that is
   ;; :client.propagate/monitor
   (if-let [world (get-pending-world session-id world-key)]
-    (do
-      (activate-pending-world! session-id world-key)
-      ;; This is where we truly need the cookie that describes which
-      ;; start function to run.
-      ;; TODO: Start back here.
-      ;; I'm making this too complicated. Add an extra cycle at the
-      ;; browser level. Web Worker starts and sends a query for its
-      ;; Cookie. core posts that back. Then Web Worker can include
-      ;; that in the body of ::forked.
-      ;; It still leaves things a bit complicated here, but at least
-      ;; I won't have to manually update whichever script actually
-      ;; needs that info.
-      (throw (ex-info "Need to trigger its start function"
-                      {::unhandled ::forked
-                       ::parameters params})))
+    (let [{expected-pid :frereth/pid
+           expected-session :frereth/session
+           constructor :frereth/system-description
+           :as decrypted} (decode-cookie cookie)]
+      (if (and (= session-id expected-session)
+               (= world-key expected-pid))
+        (do
+          (activate-pending-world! session-id world-key)
+          ;; This is where we truly need the cookie that describes which
+          ;; start function to run.
+          ;; TODO: Start back here.
+          ;; I'm making this too complicated. Add an extra cycle at the
+          ;; browser level. Web Worker starts and sends a query for its
+          ;; Cookie. core posts that back. Then Web Worker can include
+          ;; that in the body of ::forked.
+          ;; It still leaves things a bit complicated here, but at least
+          ;; I won't have to manually update whichever script actually
+          ;; needs that info.
+          (throw (ex-info "Need to trigger its start function"
+                          {::unhandled ::forked
+                           ::parameters params})))
+        ;; This could be a misbehaving World.
+        ;; Or it could be a nasty bug in the rendering code.
+        ;; Well, it would have to be a nasty bug for a World to misbehave
+        ;; this way.
+        ;; At this point, we should probably assume that the browser is
+        ;; completely compromised and take drastic measures.
+        ;; Notifying the user and closing the websocket to end the session
+        ;; might be a reasonable start.
+        (throw (RuntimeException. "Q: notify browser?"))))
     (throw (ex-info (str "Need to make world lookup simpler. Could not find")
                     {::active-session (-> sessions
                                           deref
@@ -262,10 +283,20 @@
               ;; on the :frereth/command parameter.
               ;; Need to split this ns up to avoid the potential circular
               ;; dependency.
+
+              ;; FIXME: Start back here.
+              ;; Q: What should this do/be?
+              ;; A: A lookup key into a registry of available apps for
+              ;; this user to run.
+              ;; Note that this registry is highly dynamic and depends
+              ;; on connected Servers.
+              ;; Which is YAGNI for the log viewer, but something important
+              ;; to keep in mind for the future.
               :frereth/system-description {:client.propagate/monitor {}}}
         world-system-bytes (serialize dscr)]
     ;; TODO: This needs to be encrypted by the current minute
     ;; key before we encode it.
+    ;; Q: Is it worth keeping a copy of the encoder around persistently?
     (.encode (Base64/getEncoder) world-system-bytes)))
 
 (defmethod dispatch! :frereth/forking
