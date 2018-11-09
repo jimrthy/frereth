@@ -36,6 +36,7 @@
 ;; a) immutable (and thus suitable for use as a key in a map)
 ;; and b) directly serializable via transit
 (s/def :frereth/pid any?)
+;; FIXME: This needs to me universally available
 (s/def :frereth/session-id any?)
 (s/def :frereth/world-id :frereth/pid)
 
@@ -47,6 +48,8 @@
                                         :frereth/body
                                         :frereth/lamport
                                         :frereth/world-id]))
+
+(s/def ::world map?)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Globals
@@ -91,7 +94,16 @@
 ;; comparisons.
 (def sessions
   (atom {::active {}
-         ;; For now, just hard-code some arbitrary random key as a baby-step
+         ;; For now, just hard-code some arbitrary random key as a baby-step.
+         ;; This really needs to be injected here at login.
+         ;; And it also needs to be a map that includes the time added so
+         ;; we can time out the oldest if/when we get overloaded.
+         ;; Although that isn't a great algorithm. Should also track
+         ;; session sources so we can prune back ones that are being
+         ;; too aggressive and trying to open too many world at the
+         ;; same time.
+         ;; (Then again, that's probably exactly what I'll do when I
+         ;; recreate a session, so there are nuances to consider).
          ::pending #{test-key}}))
 
 (defmulti dispatch!
@@ -150,9 +162,24 @@
         reader (transit/reader in :json)]
     (transit/read reader)))
 
+(s/fdef get-world-in-active-session
+  :args (s/cat :session-id :frereth/session-id
+               :world-key :frereth/world-key
+               :which #{::active ::pending})
+  :ret ::world)
 (defn get-world-in-active-session
   [session-id world-key which]
   (get-in @sessions [::active session-id ::worlds which world-key]))
+
+(defn assoc-active-world
+  "Add a key/value pair to an active world"
+  [session-id world-key k v]
+  (let [key-chain [::active session-id ::worlds ::active world-key]
+        result-holder (swap! sessions
+                             #(assoc-in %
+                                        (conj key-chain k)
+                                        v))]
+    (get-in result-holder key-chain)))
 
 (defn get-active-world
   [session-id world-key]
@@ -173,6 +200,47 @@
                  (update-in [::active ::worlds ::pending]
                             dissoc
                             world-key))))))
+
+(s/fdef build-cookie
+  :args (s/cat :session-id ::session-id
+               :world-key ::world-key
+               :command :frereth/command)
+  :ret bytes?)
+(defn build-cookie
+  [session-id
+   world-key
+   command]
+  ;; This approach seems overly complex, but setting up more state
+  ;; is dangerous and easily exploited.
+  ;; The fact that the client is authenticated helps with post-mortems, but
+  ;; we should try to avoid those.
+  ;; We also need some sort of throttle on forks per second and/or pending
+  ;; forks.
+
+  ;; Take a page from the CurveCP handshake. Use a
+  ;; minute-cookie for encryption.
+  ;; When the client notifies us that it has forked, we can
+  ;; decrypt the cookie and mark this World active for the
+  ;; appropriate SESSION.
+  ;; Q: Would it be worthwhile to add another layer to this?
+  ;; Have the browser query for the worker code. We use this
+  ;; cookie to inject another short-term cookie key into that
+  ;; worker code.
+  ;; Then the ::forked handler could verify them all.
+  ;; It seems like we really have to do something along those
+  ;; lines, since we cannot possibly trust the browser and the
+  ;; HTTP request could come from anywhere.
+  ;; A malicious client could still share the client's private
+  ;; key and request a billion copies of the browser page.
+  ;; Then again, that seems like a weakness in CurveCP also.
+  (let [dscr {:frereth/pid world-key
+              :frereth/session-id session-id
+              :frereth/world-ctor command}
+        world-system-bytes (serialize dscr)]
+    ;; TODO: This needs to be encrypted by the current minute
+    ;; key before we encode it.
+    ;; Q: Is it worth keeping a copy of the encoder around persistently?
+    (.encode (Base64/getEncoder) world-system-bytes)))
 
 (s/fdef decode-cookie
   :args (s/cat :cookie-bytes bytes?)
@@ -210,25 +278,14 @@
   (if-let [world (get-pending-world session-id world-key)]
     (let [{expected-pid :frereth/pid
            expected-session :frereth/session
-           constructor :frereth/system-description
+           constructor-key :frereth/world-ctor
            :as decrypted} (decode-cookie cookie)]
       (if (and (= session-id expected-session)
                (= world-key expected-pid))
-        (do
+        (let [world-ctor (throw (RuntimeException. "Look this up in Client registry by constructor-key and session-id"))]
           (activate-pending-world! session-id world-key)
-          ;; This is where we truly need the cookie that describes which
-          ;; start function to run.
-          ;; TODO: Start back here.
-          ;; I'm making this too complicated. Add an extra cycle at the
-          ;; browser level. Web Worker starts and sends a query for its
-          ;; Cookie. core posts that back. Then Web Worker can include
-          ;; that in the body of ::forked.
-          ;; It still leaves things a bit complicated here, but at least
-          ;; I won't have to manually update whichever script actually
-          ;; needs that info.
-          (throw (ex-info "Need to trigger its start function"
-                          {::unhandled ::forked
-                           ::parameters params})))
+          (assoc-active-world session-id world-key
+                              ::client (world-ctor)))
         ;; This could be a misbehaving World.
         ;; Or it could be a nasty bug in the rendering code.
         ;; Well, it would have to be a nasty bug for a World to misbehave
@@ -247,58 +304,6 @@
                      ::world-key world-key
                      ::world-key-class (class world-key)}))))
 
-(defn build-cookie
-  [session-id
-   world-key]
-  ;; This approach seems overly complex, but setting up more state
-  ;; is dangerous and easily exploited.
-  ;; The fact that the client is authenticated helps with post-mortems, but
-  ;; we should try to avoid those.
-  ;; We also need some sort of throttle on forks per second and/or pending
-  ;; forks.
-
-  ;; Take a page from the CurveCP handshake. Use a
-  ;; minute-cookie for encryption.
-  ;; When the client notifies us that it has forked, we can
-  ;; decrypt the cookie and mark this World active for the
-  ;; appropriate SESSION.
-  ;; Q: Would it be worthwhile to add another layer to this?
-  ;; Have the browser query for the worker code. We use this
-  ;; cookie to inject another short-term cookie key into that
-  ;; worker code.
-  ;; Then the ::forked handler could verify them all.
-  ;; It seems like we really have to do something along those
-  ;; lines, since we cannot possibly trust the browser and the
-  ;; HTTP request could come from anywhere.
-  ;; A malicious client could still share the client's private
-  ;; key and request a billion copies of the browser page.
-  ;; Then again, that seems like a weakness in CurveCP also.
-  (let [dscr {:frereth/pid world-key
-              :frereth/session-id session-id
-              ;; We don't need to (require 'client.propagate) to be able
-              ;; to declare the dependency structure here.
-              ;; But we will need to do so once the browser side has
-              ;; ::forked and we need to start the System this describes.
-              ;; Of course, the system that gets created here depends
-              ;; on the :frereth/command parameter.
-              ;; Need to split this ns up to avoid the potential circular
-              ;; dependency.
-
-              ;; FIXME: Start back here.
-              ;; Q: What should this do/be?
-              ;; A: A lookup key into a registry of available apps for
-              ;; this user to run.
-              ;; Note that this registry is highly dynamic and depends
-              ;; on connected Servers.
-              ;; Which is YAGNI for the log viewer, but something important
-              ;; to keep in mind for the future.
-              :frereth/system-description {:client.propagate/monitor {}}}
-        world-system-bytes (serialize dscr)]
-    ;; TODO: This needs to be encrypted by the current minute
-    ;; key before we encode it.
-    ;; Q: Is it worth keeping a copy of the encoder around persistently?
-    (.encode (Base64/getEncoder) world-system-bytes)))
-
 (defmethod dispatch! :frereth/forking
   [session-id
    {:keys [:frereth/command
@@ -309,7 +314,10 @@
         (let [worlds (::worlds session)]
           (if (and (not (contains? (::pending worlds) pid))
                    (not (contains? (::active worlds) pid)))
-            (let [cookie (build-cookie session-id pid)]
+            ;; TODO: Need to check with the Client registry
+            ;; to verify that command is legal for the current
+            ;; session.
+            (let [cookie (build-cookie session-id pid command)]
               (post-message! session-id
                              pid
                              :frereth/ack-forking
@@ -369,7 +377,7 @@
         (do
           (println ::login-realized "Swapping")
           ;; FIXME: Also need to dissoc public-key from the pending set.
-          ;; (current approach is strictly debug-only
+          ;; (current approach is strictly debug-only)
           (swap! sessions
                  assoc-in
                  [::active session-key] {::web-socket websocket
@@ -445,7 +453,17 @@
              "Trying to pull the Renderer's key from new websocket")
     (let [first-response (strm/try-take! websocket ::drained 500 ::timed-out)]
       ;; TODO: Need the login exchange.
-      ;; Should probably do that before opening the websocket, using SRP.
+      ;; Do that before opening the websocket, using SRP.
+      ;; That should add the Session's short-term key to the ::pending
+      ;; session map.
+      ;; In order to authenticate, it had to already contact its Server.
+      ;; So it should also have its view of what's going on with this
+      ;; Session.
+      ;; Honestly, this is mostly a FSM manager for the initial handshake.
+      ;; Though passing messages back and forth over the web socket later
+      ;; should/will be a much bigger drain on system resources.
+      ;; TODO: Check this FSM handshake with stack overflow's security
+      ;; board.
       (dfrd/on-realized first-response
                         (partial login-realized websocket)
                         (fn [error]
@@ -559,8 +577,3 @@
          update-in
          [::active session-id ::worlds ::pending]
          #(conj % world-key cookie)))
-
-(comment
-  ;; cljs doesn't need to specify
-  (transit/writer :json)
-  )
