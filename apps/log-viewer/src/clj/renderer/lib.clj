@@ -1,6 +1,7 @@
 (ns renderer.lib
   "Library functions specific for the web renderer"
   (:require [cognitect.transit :as transit]
+            [client.registrar :as registrar]
             [clojure.pprint :refer [pprint]]
             [clojure.spec.alpha :as s]
             [frereth-cp.shared.crypto :as crypto]
@@ -42,7 +43,7 @@
 
 (s/def ::cookie (s/keys :req [:frereth/pid
                               :frereth/state
-                              :frereth/system-description]))
+                              :frereth/world-ctor]))
 
 (s/def ::message-envelope (s/keys :req [:frereth/action
                                         :frereth/body
@@ -119,12 +120,21 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Internal Implementation
 
+(s/fdef deserialize
+  :args (s/cat :message-string string?)
+  :ret bytes?)
+(defn deserialize
+  [message-string]
+  (let [message-bytes (.getBytes message-string)
+        in (ByteArrayInputStream. message-bytes)
+        reader (transit/reader in :json)]
+    (transit/read reader)))
+
 (s/fdef do-wrap-message
   :args (s/cat :world-id :frereth/world-id
                :action :frereth/action
                :value :frereth/body)
   :ret ::message-envelope)
-;; Need a lamport clock.
 ;; Honestly, this should be a Component in the System.
 (let [lamport (atom 0)]
   (defn do-wrap-message
@@ -133,7 +143,44 @@
     {:frereth/action action
      :frereth/body value
      :frereth/lamport @lamport
-     :frereth/world-id world-id}))
+     :frereth/world-id world-id})
+
+  (defn on-message
+    "Deserialize and dispatch a raw message from browser"
+    [session-id message-string]
+    ;; Q: Could I avoid a layer of indirection and just
+    ;; have this body be the dispactch function for the dispatch!
+    ;; multi?
+    (let [local-clock (swap! lamport inc)]
+      (println (str "Incoming message from "
+                    session-id
+                    ": "
+                    message-string
+                    " at " local-clock))
+      (if (get-in @sessions [::active session-id])
+        (try
+          (let [{:keys [:frereth/body]
+                 remote-clock :frereth/lamport
+                 :as wrapper} (deserialize message-string)]
+            (when (> remote-clock local-clock)
+              (println "Remote clock is ahead. Skip past to " remote-clock)
+              (reset! lamport (inc remote-clock)))
+            ;; The actual point.
+            ;; It's easy to miss this in the middle of the error handling.
+            ;; Which is one reason this is worth keeping separate from the
+            ;; dispatching code.
+            (dispatch! session-id body))
+          (catch Exception ex
+            (println ex "trying to deserialize/dispatch" message-string)))
+        ;; This consumes messages from the websocket associated
+        ;; with public-key until that websocket closes.
+        (println "This should be impossible\n"
+                 "No"
+                 session-id
+                 "\namong\n"
+                 (keys (::active @sessions))
+                 "\nPending:\n"
+                 (::pending @sessions))))))
 
 (s/fdef serialize
   ;; body isn't *really* anything. It has to be something that's
@@ -152,16 +199,6 @@
   (String. (serialize "12345" {:a 1 :b 2 :c 3}))
   )
 
-(s/fdef deserialize
-  :args (s/cat :message-string string?)
-  :ret bytes?)
-(defn deserialize
-  [message-string]
-  (let [message-bytes (.getBytes message-string)
-        in (ByteArrayInputStream. message-bytes)
-        reader (transit/reader in :json)]
-    (transit/read reader)))
-
 (s/fdef get-world-in-active-session
   :args (s/cat :session-id :frereth/session-id
                :world-key :frereth/world-key
@@ -170,6 +207,15 @@
 (defn get-world-in-active-session
   [session-id world-key which]
   (get-in @sessions [::active session-id ::worlds which world-key]))
+
+(defn deactivate-world!
+  [session-id world-key]
+  ;; This would be significantly easier if I just tracked the state in
+  ;; the world rather than different parts of this tree.
+  (swap! sessions
+         #(update-in % [::active session-id ::worlds ::active]
+                     dissoc
+                     world-key)))
 
 (defn assoc-active-world
   "Add a key/value pair to an active world"
@@ -277,15 +323,23 @@
   ;; :client.propagate/monitor
   (if-let [world (get-pending-world session-id world-key)]
     (let [{expected-pid :frereth/pid
-           expected-session :frereth/session
+           expected-session :frereth/session-id
            constructor-key :frereth/world-ctor
            :as decrypted} (decode-cookie cookie)]
       (if (and (= session-id expected-session)
                (= world-key expected-pid))
-        (let [world-ctor (throw (RuntimeException. "Look this up in Client registry by constructor-key and session-id"))]
+        (let [connector (registrar/lookup session-id constructor-key)
+              world-stop-signal (gensym "frereth.stop.")
+              client (connector world-stop-signal
+                                (fn [raw-message]
+                                  (if (not= raw-message world-stop-signal)
+                                    (post-message! session-id world-key :frereth/forward raw-message)
+                                    (do
+                                      (deactivate-world! session-id world-key)
+                                      (post-message! session-id world-key :frereth/disconnect true)))))]
           (activate-pending-world! session-id world-key)
           (assoc-active-world session-id world-key
-                              ::client (world-ctor)))
+                              ::client ))
         ;; This could be a misbehaving World.
         ;; Or it could be a nasty bug in the rendering code.
         ;; Well, it would have to be a nasty bug for a World to misbehave
@@ -294,7 +348,25 @@
         ;; completely compromised and take drastic measures.
         ;; Notifying the user and closing the websocket to end the session
         ;; might be a reasonable start.
-        (throw (RuntimeException. "Q: notify browser?"))))
+        (do
+          (let [error-message
+                (str "session/world mismatch\n"
+                 (cond
+                   (not= session-id expected-session) (str session-id
+                                                           ", a "
+                                                           (class session-id)
+                                                           " != "
+                                                           expected-session
+                                                           ", a "
+                                                           (class expected-session))
+                   :else (str world-key ", a " (class world-key)
+                              " != "
+                              expected-pid ", a " (class expected-pid)))
+                 "\nQ: notify browser?")]
+            (throw (ex-info error-message
+                            {::actual decrypted
+                             ::expected {:frereth/session session-id
+                                         :frereth/world-key world-key}}))))))
     (throw (ex-info (str "Need to make world lookup simpler. Could not find")
                     {::active-session (-> sessions
                                           deref
@@ -328,37 +400,6 @@
                   "' or/and '"
                   pid
                   "'"))))
-
-(defn on-message
-  "Deserialize and dispatch a raw message from browser"
-  [session-id message-string]
-  ;; Q: Could I avoid a layer of indirection and just
-  ;; have this body be the dispactch function for the dispatch!
-  ;; multi?
-  (println (str "Incoming message from "
-                session-id
-                ": "
-                message-string))
-  (if (get-in @sessions [::active session-id])
-    (try
-      (let [{:keys [:frereth/body]
-             :as wrapper} (deserialize message-string)]
-        ;; The actual point.
-        ;; It's easy to miss this in the middle of the error handling.
-        ;; Which is one reason this is worth keeping separate from the
-        ;; dispatching code.
-        (dispatch! session-id body))
-      (catch Exception ex
-        (println ex "trying to deserialize/dispatch" message-string)))
-    ;; This consumes messages from the websocket associated
-    ;; with public-key until that websocket closes.
-    (println "This should be impossible\n"
-             "No"
-             session-id
-             "\namong\n"
-             (keys (::active @sessions))
-             "\nPending:\n"
-             (::pending @sessions))))
 
 (defn login-realized
   "Client has finished its authentication"
@@ -479,19 +520,20 @@
 
 (s/fdef get-code-for-world
   :args (s/cat :session-id :frereth/session-id
-               :world-id :frereth/world-id
+               :world-key :frereth/world-id
                :cookie-bytes bytes?)
   ;; Q: What makes sense for the real return value?
   :ret (s/nilable bytes?))
 (defn get-code-for-world
-  [actual-session-id world-id cookie-bytes]
+  [actual-session-id world-key cookie-bytes]
   (if-let [session (get-in @sessions [::active actual-session-id])]
     (let [{:keys [:frereth/pid
                   :frereth/session-id
-                  :frereth/system-description]
+                  :frereth/world-ctor]
            :as cookie} (decode-cookie cookie-bytes)]
-      (if (and pid session-id system-description)
-        (if (verify-cookie actual-session-id world-id cookie)
+      (println ::get-code-for-world "Have a session. Decoded cookie")
+      (if (and pid session-id world-ctor)
+        (if (verify-cookie actual-session-id world-key cookie)
           (do
             (println "Cookie verified")
             (let [opener (if (.exists (io/file "dev-output/js"))
@@ -512,13 +554,23 @@
               raw))
           (do
             (println "Bad Initiate packet.\n"
-                     cookie "!=" world-id
+                     cookie "!=" world-key
                      "\nor"
                      actual-session-id "!=" session-id)
             (throw (ex-info "Invalid Cookie: probable hacking attempt"
                             {:frereth/session-id actual-session-id
-                             :frereth/world-id world-id
-                             :frereth/cookie cookie}))))))
+                             :frereth/world-id world-key
+                             :frereth/cookie cookie}))))
+        (do
+          (println (str "Incoming cookie has issue with either '"
+                        pid
+                        "', '"
+                        session-id
+                        "', or '"
+                        world-ctor
+                        "'"))
+          (throw (ex-info "Bad cookie"
+                          cookie)))))
     (do
       (println "Missing session key\n"
                actual-session-id "a" (class actual-session-id)
@@ -527,8 +579,8 @@
         (println session-key "a" (class session-key)))
       (throw (ex-info "Trying to fork World for missing session"
                       {::sessions @sessions
-                       ::session-id actual-session-id
-                       ::world-id world-id
+                       :frereth/session-id actual-session-id
+                       :frereth/world-id world-key
                        ::cookie-bytes cookie-bytes})))))
 
 (s/fdef post-message!

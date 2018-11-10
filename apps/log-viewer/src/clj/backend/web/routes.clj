@@ -203,10 +203,10 @@
                   "css/" (if (.exists (io/file "dev-output/css"))
                            (ring/->Files {:dir "dev-output/js"})
                            (ring/->Resources {:prefix "css"}))
-                  #{"" "index" "index.html"} (-> index-page (bidi/tag ::index))
-                  "api/" {"fork" (-> create-world (bidi/tag ::connect-world))}
-                  "echo" (-> echo-page (bidi/tag ::echo))
-                  "test" (-> test-page (bidi/tag ::test))
-                  "ws" (-> connect-renderer (bidi/tag ::renderer-ws))}])
+                  #{"" "index" "index.html"} (bidi/tag index-page ::index)
+                  "api/" {"fork" (bidi/tag create-world ::connect-world)}
+                  "echo" (bidi/tag echo-page ::echo)
+                  "test" (bidi/tag test-page ::test)
+                  "ws" (bidi/tag connect-renderer ::renderer-ws)}])
 (comment
   (bidi/match-route routes "/"))

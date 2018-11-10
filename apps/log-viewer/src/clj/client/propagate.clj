@@ -1,32 +1,28 @@
 (ns client.propagate
   "Forward tap objects to the log viewer web socket"
-  (:require [integrant.core :as ig]
-            [renderer.lib :as lib]))
+  (:require [clojure.spec.alpha :as s]
+            [integrant.core :as ig]
+            [renderer.lib :as lib]
+            [client.registrar :as registrar]))
 
-(defn do-it
-  "Propagate an object sent to a log-stream to the log-viewer front-end"
-  [uuid o]
-  ;; FIXME: This really needs to send the message to web sockets
-  ;; attached to the front-end worker(s)
-  (prn o)
-  (try
-    (lib/post-message! uuid o)
-    (catch Exception ex
-      (println "Posting message failed:" ex))))
+(def connections (atom {}))
+
+(s/fdef connector
+  :args (s/cat :world-stop-signal :frereth/world-stop-signal
+               :send-message! :frereth/message-sender!)
+  :ret :frereth/renderer->client)
+(defn connector
+  [world-stop-signal send-message!]
+  (swap! connections assoc world-stop-signal send-message!)
+  (add-tap send-message!))
 
 (defmethod ig/init-key ::monitor
   [_ _]
-  ;; FIXME: This should really start when a browser signals
-  ;; that a log-viewer World is ready to begin.
-  ;; Realistically, that's part of an internal Component System for
-  ;; those World(s).
-  (let [func (partial do-it lib/test-key)]
-    ;; TODO: Need non-global log streams.
-    ;; Don't want to just allow any client to peek at *all* the
-    ;; debugging logs.
-    (add-tap func)
-    func))
+  (registrar/do-register-world ::log-viewer connector))
 
 (defmethod ig/halt-key! ::monitor
   [_ func]
-  (remove-tap func))
+  (doseq [[stop-signal send-message!] @connections]
+    (remove-tap send-message!)
+    (send-message! stop-signal))
+  (reset! connections {}))
