@@ -49,9 +49,11 @@
 ;; representation of a World's public key
 (s/def ::world-key map?)
 (s/def ::world-state-keys #{::active ::forked ::forking ::pending})
+(s/def ::state ::world-state-keys)
 ;; FIXME: The legal values here are pretty interesting.
 ;; And, honestly, specific to each state-key
-(s/def ::world-state any?)
+(s/def ::world-state (s/or :pending (s/keys :req [::waiting-ack
+                                                  ::state])))
 
 (s/def work-spawner (s/fspec :args (s/cat :cookie ::cookie)
                              :ret ::web-worker))
@@ -108,41 +110,45 @@
   ;; It's very interesting to write/find a real FSM manager
   ;; to cope with these transitions.
   ;; TODO: Merge these. Just track the state with each World.
-  (atom {::active {}
-         ::forked {}
-         ::forking {}
-         ::pending {}}))
+  (atom {}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Internal Implementation
 
 (s/fdef adjust-world-state!
-  :args (s/cat :world-key ::world-key
-               :from ::world-state-keys
-               :to ::world-state-keys
-               :additional (s/or :to-merge map?
-                                 :to-update (s/fspec
-                                             :args (s/cat :current map?)
-                                             :ret map?))))
+  :args (s/or :modify-state (s/cat :world-key ::world-key
+                                   :from ::world-state-keys
+                                   :to ::world-state-keys
+                                   :additional (s/or :to-merge map?
+                                                     :to-update (s/fspec
+                                                                 :args (s/cat :current map?)
+                                                                 :ret map?)))
+              :retain-state (s/cat :world-key ::world-key
+                                   :from ::world-state-keys
+                                   :to ::world-state-keys)))
 (defn adjust-world-state!
   "This is really an FSM update"
   ([world-key from to additional]
-   (if-let [current (get-in @worlds [from world-key])]
-     (let [updated (cond
-                     (map? additional) (into current additional)
-                     (fn? additional) (additional current))]
-       (swap! worlds
-              (fn [all]
-                ;; Add it to the new state
-                (let [duplicated (assoc-in all
-                                           [to world-key]
-                                           updated)]
-                  ;; Remove it from the old.
-                  ;; This approach is ridiculous.
-                  (update duplicated
-                          from
-                          dissoc
-                          world-key)))))
+   (if-let [current (get @worlds world-key)]
+     (do
+       (console.log "Planning to switch" current
+                    "state from" from
+                    "to" to
+                    "and adjust state by" additional)
+       (if (= (::state current) from)
+         (let [added (condp (fn [test-expr expr]
+                              (test-expr expr))
+                         additional
+                       map? (into current additional)
+                       fn? (additional current)
+                       nil? current)
+               updated (assoc added ::state to)]
+           (swap! worlds
+                  #(assoc % world-key updated)))
+         (throw (ex-info "Mismatched state"
+                         {::expected from
+                          ::actual (::state current)
+                          ::world current}))))
      (throw (ex-info "Missing current world"
                      {::actual @worlds
                       ::expected-state from
@@ -151,12 +157,32 @@
    (adjust-world-state! world-key from to nil)))
 
 (s/fdef do-get-world
-  :args (s/cat :world-key ::world-key
-               :state ::world-state)
-  :ret any?)
+  :args (s/or :stateful (s/cat :world-key ::world-key
+                               :state ::world-state-keys)
+              :stateless (s/cat :world-key ::world-key))
+  :ret (s/nilable ::world-state))
 (defn do-get-world
-  [world-key state]
-  (-> worlds deref state (get world-key)))
+  ([world-key]
+   (-> worlds deref (get world-key)))
+  ([world-key state]
+   (if-let [world (do-get-world world-key)]
+     (let [world-state (::state world)]
+       (if (= world-state state)
+         world
+         (throw (ex-info "Request for world in the wrong state"
+                         {::requested state
+                          ::actual world-state
+                          ::world world}))))
+     (throw (ex-info "Missing requested world"
+                     {::world-key world-key
+                      ::worlds @worlds})))))
+
+(s/fdef get-worlds-by-state
+  :args (s/cat :state ::world-state-keys)
+  :ret (s/coll-of ::world-state))
+(defn get-worlds-by-state
+  [state]
+  (filter #(= (::state %) state) @worlds))
 
 (s/fdef str->array
   :args (s/cat :s string?)
@@ -206,28 +232,33 @@
       reader (transit/reader :json)
       writer (transit/writer :json)]
 
+  (defn serialize
+    "Encode using transit"
+    [o]
+    (transit/write writer o))
+
   (defn recv-message!
     [event]
     (console.log (str "Incoming at "
                       (.now js/Date)
+                      " clock tick "
+                      @lamport
                       ": "
                       (js->clj event)))
+    (swap! lamport
+           (fn [current]
+             (if (>= remote-lamport current)
+               (inc remote-lamport)
+               (inc current))))
     (let [raw-envelope (array-buffer->string (.-data event))
           _ (console.log "Trying to read" raw-envelope)
           envelope (transit/read reader raw-envelope)
           {:keys [:frereth/action
                   :frereth/body  ; Not all messages have a meaningful body
                   :frereth/world-id]
-           ;; Not all messages will be about a World's Worker.
-           ;; Q: Will they?
            remote-lamport :frereth/lamport
            :or [remote-lamport 0]} envelope]
       (console.log "Read:" envelope)
-      (swap! lamport
-             (fn [current]
-               (if (>= remote-lamport current)
-                 (inc remote-lamport)
-                 (inc current))))
       ;; Using condp for this is weak. Should probably use a defmethod,
       ;; at least. Or possibly even something like bidi.
       ;; What I remember about core.match seems like overkill, but it
@@ -236,10 +267,13 @@
       (condp = action
         :frereth/ack-forked
         (if-let [{:keys [::worker]} (do-get-world world-id ::forked)]
-          (adjust-world-state! world-id ::forked ::active)
+          (try
+            (adjust-world-state! world-id ::forked ::active)
+            (catch :default ex
+              (console.error "Forked ACK failed to adjust world state:" ex)))
           (console.error "Missing forked worker"
                          {::problem envelope
-                          ::pending (::pending @worlds)
+                          ::forked (get-worlds-by-state ::forked)
                           ::world-id world-id}))
 
 
@@ -252,13 +286,13 @@
                                 ": " success)))
             (console.error "ACK about non-pending world"
                            {::problem envelope
-                            ::pending (::pending @worlds)
+                            ::pending (get-worlds-by-state ::pending)
                             ::world-id world-id}))
           (catch :default ex
             (console.error "Failed to handle :frereth/ack-forking" ex body)))
 
         :frereth/disconnect
-        (if-let [worker (::worker (do-get-world world-id ::active))]
+        (if-let [worker (::worker (do-get-world world-id))]
           (.postMessage worker raw-envelope)
           (console.error "Disconnect message for"
                          world-id
@@ -268,20 +302,18 @@
                          @worlds))
 
         :frereth/forward
-        (if-let [worker (::worker (do-get-world world-id ::active))]
-          (.postMessage worker body)
-          (console.error "Message for"
-                         world-id
-                         "in"
-                         envelope
-                         ". No match in"
-                         (keys (::active @worlds))
-                         "inside" @worlds)))))
-
-  (defn serialize
-    "Encode using transit"
-    [o]
-    (transit/write writer o))
+        (if-let [world (do-get-world world-id ::active)]
+          (if-let [worker (::worker world)]
+            (.postMessage worker (serialize body))
+            (console.error "Message for"
+                           world-id
+                           "in"
+                           envelope
+                           ". Missing worker"
+                           (keys world)
+                           "among" world))
+          ;; This is impossible: it will throw an exception
+          (console.error "Missing world" world-id "inside" worlds)))))
 
   (defn send-message!
     "Send `body` over `socket` for `world-id`"
@@ -600,10 +632,12 @@
                                             raw-key-pair
                                             full-pk)]
     (console.log "cljs JWK:" full-pk)
+    ;; Q: Is this worth a standalone function?
     (swap! worlds
-           assoc-in
-           [::pending full-pk]
-           {::waiting-ack ch})
+           assoc
+           full-pk
+           {::waiting-ack ch
+            ::state ::pending})
     (console.log "Set up pending World. Notify about pending fork.")
     (send-message! socket full-pk {:frereth/action :frereth/forking
                                    :frereth/command 'shell
