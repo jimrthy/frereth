@@ -131,19 +131,27 @@
     (transit/read reader)))
 
 (s/fdef do-wrap-message
-  :args (s/cat :world-id :frereth/world-id
-               :action :frereth/action
-               :value :frereth/body)
+  :args (s/or :with-body (s/cat :world-key :frereth/world-id
+                                :action :frereth/action
+                                :value :frereth/body)
+              :sans-body (s/cat :world-key :frereth/world-id
+                                :action :frereth/action))
   :ret ::message-envelope)
 ;; Honestly, this should be a Component in the System.
 (let [lamport (atom 0)]
   (defn do-wrap-message
-    [world-id action value]
-    (swap! lamport inc)
-    {:frereth/action action
-     :frereth/body value
-     :frereth/lamport @lamport
-     :frereth/world-id world-id})
+    ([world-key action]
+     (println "Building a" action "message")
+     (swap! lamport inc)
+     {:frereth/action action
+      :frereth/lamport @lamport
+      :frereth/world-id world-key})
+    ([world-key action value]
+     (let [result
+           (assoc (do-wrap-message world-key action)
+                  :frereth/body value)]
+       (println "Adding" value "to message")
+       result)))
 
   (defn on-message
     "Deserialize and dispatch a raw message from browser"
@@ -319,15 +327,13 @@
   ;; Main point:
   ;; This needs to start up a new System of Component(s) that
   ;; :frereth/forking prepped.
-  ;; In this specific case, the main piece of that is
-  ;; :client.propagate/monitor
   (if-let [world (get-pending-world session-id world-key)]
-    (let [{expected-pid :frereth/pid
-           expected-session :frereth/session-id
+    (let [{actual-pid :frereth/pid
+           actual-session :frereth/session-id
            constructor-key :frereth/world-ctor
            :as decrypted} (decode-cookie cookie)]
-      (if (and (= session-id expected-session)
-               (= world-key expected-pid))
+      (if (and (= session-id actual-session)
+               (= world-key actual-pid))
         (let [connector (registrar/lookup session-id constructor-key)
               world-stop-signal (gensym "frereth.stop.")
               client (connector world-stop-signal
@@ -337,9 +343,10 @@
                                     (do
                                       (deactivate-world! session-id world-key)
                                       (post-message! session-id world-key :frereth/disconnect true)))))]
+          (post-message! session-id world-key :frereth/ack-forked)
           (activate-pending-world! session-id world-key)
           (assoc-active-world session-id world-key
-                              ::client ))
+                              ::client client))
         ;; This could be a misbehaving World.
         ;; Or it could be a nasty bug in the rendering code.
         ;; Well, it would have to be a nasty bug for a World to misbehave
@@ -348,25 +355,24 @@
         ;; completely compromised and take drastic measures.
         ;; Notifying the user and closing the websocket to end the session
         ;; might be a reasonable start.
-        (do
-          (let [error-message
-                (str "session/world mismatch\n"
-                 (cond
-                   (not= session-id expected-session) (str session-id
+        (let [error-message
+              (str "session/world mismatch\n"
+                   (cond
+                     (not= session-id actual-session) (str session-id
                                                            ", a "
                                                            (class session-id)
                                                            " != "
-                                                           expected-session
+                                                           actual-session
                                                            ", a "
-                                                           (class expected-session))
-                   :else (str world-key ", a " (class world-key)
-                              " != "
-                              expected-pid ", a " (class expected-pid)))
-                 "\nQ: notify browser?")]
-            (throw (ex-info error-message
-                            {::actual decrypted
-                             ::expected {:frereth/session session-id
-                                         :frereth/world-key world-key}}))))))
+                                                           (class actual-session))
+                     :else (str world-key ", a " (class world-key)
+                                " != "
+                                actual-pid ", a " (class actual-pid)))
+                   "\nQ: notify browser?")]
+          (throw (ex-info error-message
+                          {::actual decrypted
+                           ::expected {:frereth/session session-id
+                                       :frereth/world-key world-key}})))))
     (throw (ex-info (str "Need to make world lookup simpler. Could not find")
                     {::active-session (-> sessions
                                           deref
@@ -381,20 +387,20 @@
    {:keys [:frereth/command
            :frereth/pid]}]
   (if (and command pid)
-    (let [session (get-in @sessions [::active session-id])]
-      (if session
-        (let [worlds (::worlds session)]
-          (if (and (not (contains? (::pending worlds) pid))
-                   (not (contains? (::active worlds) pid)))
-            ;; TODO: Need to check with the Client registry
-            ;; to verify that command is legal for the current
-            ;; session.
-            (let [cookie (build-cookie session-id pid command)]
-              (post-message! session-id
-                             pid
-                             :frereth/ack-forking
-                             {:frereth/cookie cookie}))
-            (println "Error: trying to re-fork pid" pid)))))
+    (when-let [session (get-in @sessions [::active session-id])]
+      (let [worlds (::worlds session)]
+        (if (and worlds
+                 (not (contains? (::pending worlds) pid))
+                 (not (contains? (::active worlds) pid)))
+          ;; TODO: Need to check with the Client registry
+          ;; to verify that command is legal for the current
+          ;; session.
+          (let [cookie (build-cookie session-id pid command)]
+            (post-message! session-id
+                           pid
+                           :frereth/ack-forking
+                           {:frereth/cookie cookie}))
+          (println "Error: trying to re-fork pid" pid))))
     (println (str "Missing either/both of '"
                   command
                   "' or/and '"
@@ -478,6 +484,36 @@
   ;; TODO: Need to verify the cookie plus its signature
   (and (= pid world-id)
        (= session-id actual-session-id)))
+
+(defn post-real-message!
+  [session-id world-key wrapper]
+  (println (str "Trying to send "
+                wrapper
+                "\nto "
+                world-key
+                "\nin\n"
+                session-id))
+  (if-let [connection (-> sessions
+                          deref
+                          ::active
+                          (get session-id))]
+    (try
+      (let [envelope (serialize wrapper)
+            success (strm/try-put! (::web-socket connection)
+                                   envelope
+                                   500
+                                   ::timed-out)]
+        (dfrd/on-realized success
+                          #(println "forwarded:" %)
+                          #(println "Forwarding failed:" %)))
+      (catch Exception ex
+        (println "Message forwarding failed:" ex)))
+    (do
+      (println "No such world")
+      (throw (ex-info "Trying to POST to unconnected Session"
+                      {::pending (::pending @sessions)
+                       ::world-id session-id
+                       ::connected (::active @sessions)})))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Public
@@ -584,43 +620,24 @@
                        ::cookie-bytes cookie-bytes})))))
 
 (s/fdef post-message!
-  :args (s/cat :session-id :frereth/session-id
-               :world-id :frereth/world-id
-               :action :frereth/action
-               :value :frereth/body)
+  :args (s/or :with-value (s/cat :session-id :frereth/session-id
+                                 :world-key :frereth/world-id
+                                 :action :frereth/action
+                                 :value :frereth/body)
+              :sans-value (s/cat :session-id :frereth/session-id
+                                 :world-key :frereth/world-id
+                                 :action :frereth/action))
   :ret any?)
 (defn post-message!
   "Forward value to the associated World"
-  [session-id world-id action value]
-  (println (str "Trying to forward\n"
-                value
-                "\nto\n"
-                world-id
-                " in "
-                session-id))
-  (if-let [connection (-> sessions
-                          deref
-                          ::active
-                          (get session-id))]
-    (try
-      (pprint connection)
-      (let [wrapper (do-wrap-message world-id action value)
-            envelope (serialize wrapper)
-            success (strm/try-put! (::web-socket connection)
-                                   envelope
-                                   500
-                                   ::timed-out)]
-        (dfrd/on-realized success
-                          #(println value "forwarded:" %)
-                          #(println value "Forwarding failed:" %)))
-      (catch Exception ex
-        (println "Message forwarding failed:" ex)))
-    (do
-      (println "No such world")
-      (throw (ex-info "Trying to POST to unconnected Session"
-                      {::pending (::pending @sessions)
-                       ::world-id session-id
-                       ::connected (::active @sessions)})))))
+  ([session-id world-key action value]
+   (println "post-message! with value" value)
+   (let [wrapper (do-wrap-message world-key action value)]
+     (post-real-message! session-id world-key wrapper)))
+  ([session-id world-key action]
+   (println "post-message! without value")
+   (let [wrapper (do-wrap-message world-key action)]
+     (post-real-message! session-id world-key wrapper))))
 
 (defn register-pending-world!
   "Browser has requested a World's Code. Time to take things seriously"

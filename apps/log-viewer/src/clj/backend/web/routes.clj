@@ -56,7 +56,8 @@
   [{:keys [:query-params]
     :as request}]
   (try
-    (println ::create-world "Received a request to fork a new World:")
+    (println ::create-world
+             "Received a request for code to fork a new World:")
     ;; These parameters need to be serialized into a signed "initiate"
     ;; param.
     (let [{initiate-wrapper "initiate"

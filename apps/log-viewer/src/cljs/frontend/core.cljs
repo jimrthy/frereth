@@ -216,7 +216,7 @@
           _ (console.log "Trying to read" raw-envelope)
           envelope (transit/read reader raw-envelope)
           {:keys [:frereth/action
-                  :frereth/body
+                  :frereth/body  ; Not all messages have a meaningful body
                   :frereth/world-id]
            ;; Not all messages will be about a World's Worker.
            ;; Q: Will they?
@@ -234,6 +234,39 @@
       ;; also seems tailor-made for this. Assuming it is available in
       ;; cljs.
       (condp = action
+        :frereth/ack-forked
+        (if-let [{:keys [::worker]} (do-get-world world-id ::forked)]
+          (adjust-world-state! world-id ::forked ::active)
+          (console.error "Missing forked worker"
+                         {::problem envelope
+                          ::pending (::pending @worlds)
+                          ::world-id world-id}))
+
+
+        :frereth/ack-forking
+        (try
+          (if-let [ack-chan (::waiting-ack (do-get-world world-id
+                                                         ::pending))]
+            (let [success (async/put! ack-chan body)]
+              (console.log (str "Message put onto " ack-chan
+                                ": " success)))
+            (console.error "ACK about non-pending world"
+                           {::problem envelope
+                            ::pending (::pending @worlds)
+                            ::world-id world-id}))
+          (catch :default ex
+            (console.error "Failed to handle :frereth/ack-forking" ex body)))
+
+        :frereth/disconnect
+        (if-let [worker (::worker (do-get-world world-id ::active))]
+          (.postMessage worker raw-envelope)
+          (console.error "Disconnect message for"
+                         world-id
+                         "in"
+                         envelope
+                         ". No match in"
+                         @worlds))
+
         :frereth/forward
         (if-let [worker (::worker (do-get-world world-id ::active))]
           (.postMessage worker body)
@@ -242,26 +275,8 @@
                          "in"
                          envelope
                          ". No match in"
-                         (keys @worlds)))
-
-        :frereth/ack-forked
-        (if-let [{:keys [::worker]} (do-get-world world-id ::forked)]
-          (adjust-world-state! world-id ::forked ::active))
-
-
-        :frereth/ack-forking
-        (try
-          (if-let [ack-chan (::waiting-ack (do-get-world world-id
-                                                         ::pending))]
-            (let [success (async/put! ack-chan body)]
-              (console.log (str "Message put onto " (js->clj ack-chan)
-                                ": " success)))
-            (console.error "ACK about non-pending world"
-                           {::problem envelope
-                            ::pending (::pending @worlds)
-                            ::world-id world-id}))
-          (catch :default ex
-            (console.error "Failed to handle :frereth/ack-forking" ex body))))))
+                         (keys (::active @worlds))
+                         "inside" @worlds)))))
 
   (defn serialize
     "Encode using transit"
