@@ -11,9 +11,8 @@
 
 ;; Reagent application state
 ;; Defonce used so that the state is kept between reloads
-(defonce app-state (r/atom {:y 2017}))
-
-(def log-entries (r/atom []))
+(defonce app-state (r/atom {:y 2017
+                            ::log-entries []}))
 
 (let [writer (transit/writer :json)]
   (defn render []
@@ -22,15 +21,15 @@
       (let [dom [:div
                  [:h1 (foo-cljc (:y @app-state))]
                  [:table
-                  [:tr [:th Number] [:th Time Received] [:th Body]]
-                  ;; This approach doesn't work.
-                  ;; Get an "Error: Cannot write Function"
-                  ;; The nesting would have been wrong anyway.
-                  (map-indexed (fn [index log-entry]
-                                 [:tr
-                                  [:td index]
-                                  [:td (::time-stamp log-entry)]
-                                  [:td (::body log-entry)]]))]
+                  [:thead
+                   [:tr [:th "Number"] [:th "Time Received"] [:th "Body"]]]
+                  [:tbody
+                   (map-indexed (fn [index log-entry]
+                                  [:tr {:key index}
+                                   [:td index]
+                                   [:td (::time-stamp log-entry)]
+                                   [:td (pr-str (::body log-entry))]])
+                                (::log-entries @app-state))]]
                  [:div.btn-toolbar
                   [:button.btn.btn-danger
                    {:type "button"
@@ -91,8 +90,12 @@
               :frereth/disconnect (do
                                     (console.log "World disconnected. Exiting.")
                                     (.close js/self))
-              (swap! log-entries conj {::body data
-                                       ::time-stamp (.now js/Date)}))))))
+              (do
+                (swap! app-state
+                       #(update % ::log-entries
+                                conj {::body data
+                                      ::time-stamp (.now js/Date)}))
+                (render)))))))
 
 ;; This needs to include the cooking that arrived with ::forking
 ;; FIXME: Start back here
