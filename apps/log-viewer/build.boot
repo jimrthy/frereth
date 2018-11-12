@@ -42,18 +42,18 @@
 (def project 'com.frereth/log-viewer)
 (def version #_"0.1.0-SNAPSHOT" (deduce-version-from-git))
 
-(set-env! :dependencies   '[[adzerk/boot-cljs "2.1.4" :scope "test"]
+(set-env! :dependencies   '[[adzerk/boot-cljs "2.1.5" :scope "test"]
                             [adzerk/boot-cljs-repl "0.4.0" :scope "test"]
                             [adzerk/boot-reload "0.6.0" :scope "test"]
                             [bidi "2.1.4"]
                             [boot/core "2.8.2" :scope "provided"]
-                            [cider/piggieback "0.3.9" :scope "test" :exclusions [com.google.guava/guava
-                                                                                 com.google.javascript/closure-compiler-externs
-                                                                                 com.google.javascript/closure-compiler-unshaded
-                                                                                 nrepl
-                                                                                 org.clojure/clojure
-                                                                                 org.clojure/clojurescript
-                                                                                 org.clojure/tools.reader]]
+                            [cider/piggieback "0.3.10" :scope "test" :exclusions [com.google.guava/guava
+                                                                                  com.google.javascript/closure-compiler-externs
+                                                                                  com.google.javascript/closure-compiler-unshaded
+                                                                                  nrepl
+                                                                                  org.clojure/clojure
+                                                                                  org.clojure/clojurescript
+                                                                                  org.clojure/tools.reader]]
                             [com.cemerick/pomegranate
                              "1.1.0"
                              :exclusions [com.google.guava/guava
@@ -66,7 +66,7 @@
                             [com.cemerick/url "0.1.1"]
                             [com.cognitect/transit-clj "0.8.313" :exclusions [commons-codec]]
                             [com.cognitect/transit-cljs "0.8.256"]
-                            [com.nimbusds/nimbus-jose-jwt "6.0"]
+                            [com.nimbusds/nimbus-jose-jwt "6.3"]
                             [com.nimbusds/srp6a "2.0.2"]
                             [crisptrutski/boot-cljs-test "0.3.4" :scope "test"]
                             [deraen/boot-sass "0.3.1" :scope "test"]
@@ -89,8 +89,8 @@
                             [metosin/boot-alt-test "0.3.2" :scope "test"]
                             [metosin/boot-deps-size "0.1.0" :scope "test"]
                             [nrepl "0.4.5" :exclusions [org.clojure/clojure]]
-                            [org.clojure/clojure "1.10.0-beta4"]
-                            [org.clojure/clojurescript "1.10.339" :scope "test" :exclusions [commons-codec
+                            [org.clojure/clojure "1.10.0-beta5"]
+                            [org.clojure/clojurescript "1.10.439" :scope "test" :exclusions [commons-codec
                                                                                              com.cognitect/transit-clj
                                                                                              com.cognitect/transit-java
                                                                                              org.clojure/clojure]]
@@ -117,16 +117,16 @@
 
                             ;; Backend
                             [frereth-cp "0.0.1-SNAPSHOT"]
-                            [integrant "0.7.0" :exclusions [org.clojure/clojure
-                                                            org.clojure/core.specs.alpha
-                                                            org.clojure/spec.alpha]]
+                            [integrant "0.8.0-alpha2" :exclusions [org.clojure/clojure
+                                                                   org.clojure/core.specs.alpha
+                                                                   org.clojure/spec.alpha]]
                             [integrant/repl "0.3.1" :exclusions [integrant
                                                                  org.clojure/clojure
                                                                  org.clojure/core.specs.alpha
                                                                  org.clojure/spec.alpha
                                                                  org.clojure/tools.namespace]]
                             [javax.servlet/servlet-api "3.0-alpha-1"]  ; for ring multipart middleware
-                            [metosin/ring-http-response "0.9.0" :exclusions [clj-time
+                            [metosin/ring-http-response "0.9.1" :exclusions [clj-time
                                                                              commons-codec
                                                                              commons-fileupload
                                                                              commons-io
@@ -136,7 +136,7 @@
                                                                              ring/ring-core]]
                             [org.clojure/tools.namespace "0.3.0-alpha4" :exclusions [org.clojure/clojure
                                                                                      org.clojure/tools.reader]]
-                            [ring/ring-core "1.7.0" :exclusions [org.clojure/clojure]]
+                            [ring/ring-core "1.7.1" :exclusions [org.clojure/clojure]]
 
                             ;; Frontend
                             [reagent "0.8.1" :scope "test" :exclusions [org.clojure/clojure
@@ -150,7 +150,7 @@
                             ;; LESS
                             [org.webjars/bootstrap "3.3.7-1"]
                             ;; SASS
-                            [org.webjars.bower/bootstrap "4.1.1" :exclusions [org.webjars.bower/jquery]]]
+                            [org.webjars.bower/bootstrap "4.1.3" :exclusions [org.webjars.bower/jquery]]]
           :project project
           :resource-paths #{"src/clj" "src/cljc"}
           ;; Test path can be included here as source-files are not included in JAR
