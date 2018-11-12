@@ -1,5 +1,5 @@
 (ns backend.web.server
-  "This really should be renamed to backend.web.server"
+  "Manage the web server Component"
   (:require [aleph.http.server :as http]
             [backend.web.routes :as routes]
             [bidi.ring :as ring]
@@ -18,8 +18,7 @@
         ;; TODO: Switch to something more like Pedestal's Interceptor
         ;; model.
         ;; Q: Could I just use that part of their library?
-        with-middleware (-> handler
-                            wrap-params)]
+        with-middleware (wrap-params handler)]
     (println "Starting web server on http://localhost:" port "from" opts)
     (http/start-server with-middleware {:port port})))
 

@@ -10,7 +10,6 @@
 ;; Not quite `any?`.
 ;; But anything that can be serialized to transit.
 ;; TODO: Find a spec for this
-;; TODO: Need some magic
 (s/def :frereth/message any?)
 
 (s/def :frereth/message-sender!
@@ -44,6 +43,8 @@
 ;;;; Public
 
 (s/fdef do-register-world
+  ;; FIXME: All things considered, this also needs to register a
+  ;; function for acquiring the source code.
   :args (s/cat :command-key :frereth/command
                :ctor :frereth/world-connector)
   :ret boolean?)
