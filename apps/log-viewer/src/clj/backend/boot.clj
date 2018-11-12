@@ -10,12 +10,11 @@
 (b/deftask start-app
   [p port   PORT int  "Port"]
   (println "Trying to start the app")
-  (let [x (atom nil)]
+  (let [x (atom nil)]  ; Q: What's the point?
     (b/cleanup (halt))
     (b/with-pre-wrap fileset
       (swap! x (fn [x]
-                  (if x
-                    x
+                  (or x
                     (do (setup-app! {:port port})
                         (go)))))
       fileset)))

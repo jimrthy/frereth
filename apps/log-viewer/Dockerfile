@@ -35,13 +35,21 @@ COPY src/clj/backend/ ./src/clj/backend/
 # Pull in extras that go with day-to-day dev work.
 RUN boot cider repl -s less
 
+# Honestly, this should probably happen in multiple steps.
+# Copy over the *.clj and *.cljc files, do something to cache
+# their dependencies. Then the *.cljs and cache theirs.
+# Or maybe vice versa. Since the server portions seem likely
+# to change more often than the front-end, after the churn
+# settles down and the applications change to something served
+# by the Server.
 COPY . .
 
 RUN chmod u+x boot.sh
 
 # These don't seem to cache all the dependencies from maven.
 # Q: Why not?
-RUN boot cljs --ids js/main target
+RUN boot less cljs --ids js/main target && \
+    boot lint
 
 # Want to run local boot.sh to pick up local overrides.
 # So override base image entrypoint to nothing.
