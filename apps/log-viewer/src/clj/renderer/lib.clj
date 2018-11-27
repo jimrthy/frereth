@@ -447,10 +447,11 @@
                                               ": "
                                               succeeded))
                                 (swap! sessions
-                                       #(update %
-                                                ::active
-                                                (dissoc
-                                                 session-key))))
+                                       (fn [current]
+                                         (update current
+                                                 ::active
+                                                 #(dissoc %
+                                                          session-key)))))
                               (fn [failure]
                                 (println ::login-realized
                                          "Web socket failed for session"
@@ -458,10 +459,11 @@
                                          ":"
                                          failure)
                                 (swap! sessions
-                                       (update
-                                        ::active
-                                        #(dissoc %
-                                                 session-key)))))))
+                                       (fn [current]
+                                         (update current
+                                                 ::active
+                                                 #(dissoc %
+                                                          session-key))))))))
         (do
           (println ::login-realized "Not found")
           (throw (ex-info "Client trying to complete non-pending connection"

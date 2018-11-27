@@ -89,7 +89,7 @@
                             [metosin/boot-alt-test "0.3.2" :scope "test"]
                             [metosin/boot-deps-size "0.1.0" :scope "test"]
                             [nrepl "0.4.5" :exclusions [org.clojure/clojure]]
-                            [org.clojure/clojure "1.10.0-beta5"]
+                            [org.clojure/clojure "1.10.0-beta8"]
                             [org.clojure/clojurescript "1.10.439" :scope "test" :exclusions [commons-codec
                                                                                              com.cognitect/transit-clj
                                                                                              com.cognitect/transit-java
@@ -116,7 +116,7 @@
                                                                        org.clojure/tools.reader]]
 
                             ;; Backend
-                            [frereth-cp "0.0.1-SNAPSHOT"]
+                            [frereth/cp "0.0.1-SNAPSHOT"]
                             [integrant "0.8.0-alpha2" :exclusions [org.clojure/clojure
                                                                    org.clojure/core.specs.alpha
                                                                    org.clojure/spec.alpha]]
