@@ -13,30 +13,31 @@
              [specs :as shared-specs]]
             [frereth.weald.logging :as log]
             [frereth.weald.specs :as weald]
-            [frereth-cp.shared.specs :as shared-specs])
+            [frereth-cp.shared.specs :as shared-specs]
+            [manifold.stream :as strm])
   (:import java.net.InetAddress))
 
 (s/fdef connect-to-server
   :args (s/cat :my-long-key-pair ::shared/long-pair
                :log-state ::weald/state
                :logger-init (s/fspec :args nil :ret ::weald/logger)
+               :socket-source strm/source?  ; Client will read from this to get messages for Child
                :server-name string?
                :server-extension-vector (s/and vector?
                                                #(= (count %) K/extension-length))
                :server-long-term-public-key ::shared-specs/public-long
                ;; Q: Do I have a spec already defined for this?
                :hosts (s/coll-of (s/tuple int? int? int? int?))
-               :my-port ::shared-specs/port
-               :->child ::msg-specs/->child
+               :->child ::msg-specs/->child  ; child calls this with byte-arrays
                :child-spawner! ::msg-specs/child-spawner!)
   :ret ::client-state/state)
 (defn connect-to-server
   "This really belongs in CurveCP"
   [message-loop-name
    my-long-key-pair
-   my-port
    log-state
-   logger-init
+   logger-init  ; Passing this instead of a logger feels odd
+   socket-source
    server-name
    server-long-term-public-key
    server-extension-vector
@@ -44,7 +45,6 @@
    server-port
    ->child
    child-spawner!]
-  ;; Doing the deref directly here isn't exactly clean
   (let [log-state (log/info log-state
                             ::connect-to-server
                             "Starting a CurveCP client")
@@ -57,13 +57,11 @@
 
     (let [server-extension (byte-array server-extension-vector)
           server-binary-name (shared/encode-server-name server-name)
-          socket @(udp/socket :port my-port
-                              :broadcast? false)
-          result (client/ctor {::client-state/chan<-server socket
+          result (client/ctor {::client-state/chan<-server socket-source
                                ::weald/state log-state
                                ::msg-specs/->child ->child
                                ::msg-specs/child-spawner! child-spawner!
-                                                             ::msg-specs/message-loop-name message-loop-name
+                               ::msg-specs/message-loop-name message-loop-name
                                ::shared/my-keys {::shared/keydir key-dir
                                                  ::shared/long-pair my-long-key-pair
                                                  ::shared-specs/srvr-name server-binary-name}

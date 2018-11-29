@@ -1,5 +1,5 @@
 (ns server.log-gen
-  "Simulate a frereth server that generates some logs"
+  "Deprecated: use networking and a client to generate the real thing"
   (:require [integrant.core :as ig]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -17,6 +17,7 @@
 
 (defmethod ig/init-key ::samples
   [_ _]
+  (throw (RuntimeException. "Obsolete"))
   (let [halted (promise)]
     {::halted halted
      ::next (future (send-log-eventually halted 0))}))
