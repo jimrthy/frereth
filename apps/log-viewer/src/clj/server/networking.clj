@@ -10,6 +10,7 @@
             [frereth.weald
              [logging :as log]
              [specs :as weald]]
+            [integrant.core :as ig]
             [manifold
              [executor :as exec]
              [stream :as strm]])
@@ -83,10 +84,28 @@
       (throw ex))))
 
 (defmethod ig/init-key ::server
-  [_ inited]
-  (println ::init "based on keys" (keys inited))
-  (update inited ::cp-server server/start!))
+  [_ {:keys [::weald/logger
+             ::msg-specs/->child
+             ::extension-vector
+             ::my-name
+             ::socket]
+      :as opts}]
+  (let [inited (build-server (::weald/logger logger)
+                             (log/init ::component)
+                             ->child
+                             extension-vector
+                             my-name
+                             socket
+                             socket)]
+    (println ::init "based on keys" (keys inited))
+    (assoc opts
+           ::cp-server (server/start! inited))))
 
 (defmethod ig/halt-key! ::server
   [_ started]
+  ;; Q: Better to leave the previous server around for post-mortems?
+  ;; Or just remove that key completely so it's obvious that this
+  ;; has been stopped?
+  ;; The latter option just means we need to grab the state before
+  ;; calling halt, which is probably a better idea anyway.
   (update started ::cp-server server/stop!))

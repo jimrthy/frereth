@@ -245,11 +245,6 @@
                       @lamport
                       ": "
                       (js->clj event)))
-    (swap! lamport
-           (fn [current]
-             (if (>= remote-lamport current)
-               (inc remote-lamport)
-               (inc current))))
     (let [raw-envelope (array-buffer->string (.-data event))
           _ (console.log "Trying to read" raw-envelope)
           envelope (transit/read reader raw-envelope)
@@ -259,6 +254,11 @@
            remote-lamport :frereth/lamport
            :or [remote-lamport 0]} envelope]
       (console.log "Read:" envelope)
+      (swap! lamport
+             (fn [current]
+               (if (>= remote-lamport current)
+                 (inc remote-lamport)
+                 (inc current))))
       ;; Using condp for this is weak. Should probably use a defmethod,
       ;; at least. Or possibly even something like bidi.
       ;; What I remember about core.match seems like overkill, but it

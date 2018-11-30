@@ -6,7 +6,8 @@
             [frereth.weald
              [logging :as log]
              [specs :as weald]]
-            [integrant.core :as ig]))
+            [integrant.core :as ig]
+            [frereth-cp.message.specs :as msg-specs]))
 
 (defmethod ig/init-key ::log-chan
   [_ _]
@@ -36,6 +37,12 @@
 ;; TODO: Change that.
 ;; And decide which is the chicken vs. the egg.
 
+(defn server-child-handler
+  "Doesn't belong in here. But it's a start"
+  [incoming]
+  (println (str "Server child received:" (vec incoming)
+                ", a " (class incoming))))
+
 (defn ctor [opts]
   ;; Changes in here don't really show up through a simple
   ;; call to reset.
@@ -45,11 +52,22 @@
    ::log-chan (::log-chan opts)
    ::logger (into {::chan (ig/ref ::log-chan)}
                   (::logger opts))
+   ;; Note that this is really propagating the Server logs.
+   ;; The Client logs are really quite different...though it probably
+   ;; makes sense to also send those here, at least for an initial
+   ;; implementation.
    ::propagate/monitor (into {::propagate/log-chan (ig/ref ::log-chan)}
                              (::monitor opts))
    ;; FIXME: This pretty much needs to call frereth-cp.server/ctor
    ;; to set up the method to call server.networking/start! to trigger
    ;; the side-effects.
-   :server.networking/handler (into {:server.networking/port 32154
-                                     ::weald/logger (ig/ref ::logger)}
-                                    (::server opts))})
+   ;; FIXME: This needs a UDP socket.
+   ;; FIXME: Connecting a new World Renderer needs to create a new
+   ;; UDP socket along with its own CurveCP Client that tries to
+   ;; connect to this.
+   :server.networking/server (into {::msg-specs/->child server-child-handler
+                                    :server.networking/extension-vector (range 16)
+                                    ::weald/logger (ig/ref ::logger)
+                                    :server.networking/my-name "log-viewer.test.frereth.com"
+                                    :server.networking/port 32154}
+                                   (::server opts))})

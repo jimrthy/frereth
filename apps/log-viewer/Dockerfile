@@ -46,8 +46,10 @@ COPY . .
 
 RUN chmod u+x boot.sh
 
-# These don't seem to cache all the dependencies from maven.
+# These still don't seem to cache all the dependencies from maven.
 # Q: Why not?
+# TODO: Copy just the front-end pieces, run `boot less cljs`,
+# then copy the rest and run `boot lint`.
 RUN boot less cljs --ids js/main target && \
     boot lint
 
