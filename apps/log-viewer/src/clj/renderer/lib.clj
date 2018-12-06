@@ -4,7 +4,7 @@
             [client.registrar :as registrar]
             [clojure.pprint :refer [pprint]]
             [clojure.spec.alpha :as s]
-            [frereth-cp.shared.crypto :as crypto]
+            [frereth.cp.shared.crypto :as crypto]
             ;; Q: Do something interesting with this?
             [integrant.core :as ig]
             [manifold

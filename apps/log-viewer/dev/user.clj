@@ -25,12 +25,11 @@
              [generators :as lo-gen]]
             ;; These are moderately useless under boot.
             [clojure.tools.namespace.repl :refer (refresh refresh-all)]
-            ;; Both this and bit-twiddling rely on byte-streams
-            #_[frereth-cp.message :as msg]
-            [frereth-cp.shared
-             #_[bit-twiddling :as b-t]
-             [specs :as shared-specs]]
-            [frereth-cp.util :as utils]
+            [frereth.cp.message :as msg]
+            [frereth.cp.shared
+             [bit-twiddling :as b-t]
+             [specs :as shared-specs]
+             [util :as utils]]
             [frereth.weald.logging :as log]
             [integrant.repl :refer [clear go halt prep init reset reset-all] :as ig-repl]
             [integrant.repl.state :as ig-state]

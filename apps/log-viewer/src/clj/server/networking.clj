@@ -1,10 +1,12 @@
 (ns server.networking
-  (:require [clojure.spec.alpha :as s]
-            [frereth-cp.message.specs :as msg-specs]
-            [frereth-cp.server :as server]
-            [frereth-cp.server.state :as srvr-state]
-            [frereth-cp.shared :as shared]
-            [frereth-cp.shared
+  (:require [clojure.pprint :refer [pprint]]
+            [clojure.spec.alpha :as s]
+            [frereth.cp.message.specs :as msg-specs]
+            [frereth.cp
+             [server :as server]
+             [shared :as shared]]
+            [frereth.cp.server.state :as srvr-state]
+            [frereth.cp.shared
              [constants :as K]
              [specs :as shared-specs]]
             [frereth.weald
@@ -69,6 +71,7 @@
 (defn build-server
   [logger log-state ->child server-extension-vector server-name socket-source socket-sink]
   (try
+    (println "Trying to construct a server around" logger)
     (let [server (server/ctor (into (::cp-server (server-options logger
                                                                  log-state
                                                                  ->child
@@ -78,9 +81,18 @@
                                      ::srvr-state/client-write-chan {::srvr-state/chan socket-sink}}))]
       {::cp-server server})
     (catch ExceptionInfo ex
-      (log/flush-logs! logger (log/exception log-state
-                                             ex
-                                             ::build-server))
+      (try
+        (log/flush-logs! logger (log/exception log-state
+                                               ex
+                                               ::build-server))
+        (catch Exception ex1
+          (println "Nasty failure:\n"
+                   ex1
+                   "\ntrying to flush-logs! to report\n"
+                   ex
+                   "\nto"
+                   logger)
+          (throw ex1)))
       (throw ex))))
 
 (defmethod ig/init-key ::server
@@ -90,6 +102,8 @@
              ::my-name
              ::socket]
       :as opts}]
+  (println ::server "init-key:" logger)
+  (pprint opts)
   (let [inited (build-server (::weald/logger logger)
                              (log/init ::component)
                              ->child

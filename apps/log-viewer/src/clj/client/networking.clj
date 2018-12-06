@@ -2,18 +2,18 @@
   (:require [aleph.udp :as udp]
             [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
-            [frereth-cp
+            [frereth.cp
              [client :as client]
              [shared :as shared]]
-            [frereth-cp.client.state :as client-state]
-            [frereth-cp.message.specs :as msg-specs]
-            [frereth-cp.shared
+            [frereth.cp.client.state :as client-state]
+            [frereth.cp.message.specs :as msg-specs]
+            [frereth.cp.shared
              [constants :as K]
              [crypto :as crypto]
              [specs :as shared-specs]]
-            [frereth.weald.logging :as log]
-            [frereth.weald.specs :as weald]
-            [frereth-cp.shared.specs :as shared-specs]
+            [frereth.weald
+             [logging :as log]
+             [specs :as weald]]
             [manifold.stream :as strm])
   (:import java.net.InetAddress))
 
