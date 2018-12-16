@@ -66,12 +66,12 @@
                             [com.cemerick/url "0.1.1"]
                             [com.cognitect/transit-clj "0.8.313" :exclusions [commons-codec]]
                             [com.cognitect/transit-cljs "0.8.256"]
-                            [com.nimbusds/nimbus-jose-jwt "6.3"]
+                            [com.nimbusds/nimbus-jose-jwt "6.5"]
                             [com.nimbusds/srp6a "2.0.2"]
                             [crisptrutski/boot-cljs-test "0.3.4" :scope "test"]
                             [deraen/boot-sass "0.3.1" :scope "test"]
                             [deraen/boot-less "0.6.2" :scope "test"]
-                            [doo "0.1.10" :scope "test" :exclusions [args4j
+                            [doo "0.1.11" :scope "test" :exclusions [args4j
                                                                      com.google.code.findbugs/jsr305
                                                                      com.google.code.gson/gson
                                                                      com.google.guava/guava
@@ -88,19 +88,19 @@
                             [funcool/promesa "1.9.0"]
                             [metosin/boot-alt-test "0.3.2" :scope "test"]
                             [metosin/boot-deps-size "0.1.0" :scope "test"]
-                            [nrepl "0.4.5" :exclusions [org.clojure/clojure]]
-                            [org.clojure/clojure "1.10.0-RC3"]
+                            [nrepl "0.5.3" :exclusions [org.clojure/clojure]]
+                            [org.clojure/clojure "1.10.0-RC5"]
                             [org.clojure/clojurescript "1.10.439" :scope "test" :exclusions [commons-codec
                                                                                              com.cognitect/transit-clj
                                                                                              com.cognitect/transit-java
                                                                                              org.clojure/clojure]]
-                            [org.clojure/core.async "0.4.474"]
+                            [org.clojure/core.async "0.4.490"]
                             [org.clojure/spec.alpha "0.2.176" :exclusions [org.clojure/clojure]]
                             [org.clojure/test.check "0.10.0-alpha3" :scope "test" :exclusions [org.clojure/clojure]]
-                            ;; For boot-less
+                            ;; Required by boot-less
                             [org.slf4j/slf4j-nop "1.7.25" :scope "test"]
                             ;; This is the task that combines all the linters
-                            [tolitius/boot-check "0.1.11" :scope "test" :exclusions [boot/core
+                            [tolitius/boot-check "0.1.12" :scope "test" :exclusions [boot/core
                                                                                      org.clojure/clojure
                                                                                      org.tcrawley/dynapath]]
                             [weasel "0.7.0" :scope "test" :exclusions [args4j
@@ -116,7 +116,7 @@
                                                                        org.clojure/tools.reader]]
 
                             ;; Backend
-                            [com.frereth/cp "0.0.3-gb1f84db-dirty"]
+                            [com.frereth/cp "0.0.5-g1ab2285"]
                             [integrant "0.8.0-alpha2" :exclusions [org.clojure/clojure
                                                                    org.clojure/core.specs.alpha
                                                                    org.clojure/spec.alpha]]
@@ -141,17 +141,22 @@
                             ;; Frontend
                             [reagent "0.8.1" :scope "test" :exclusions [org.clojure/clojure
                                                                         org.clojure/spec.alpha]]
+                            ;; Ironically, this really is for the sake of the front-end.
+                            ;; It has something to do with the clojurescript watcher.
+                            [http-kit "2.3.0" :scope "test"]
                             [binaryage/devtools "0.9.10" :scope "test" :exclusions [org.clojure/tools.reader]]
                             ;; Q: Why?
                             [cljsjs/babel-standalone "6.18.1-3" :scope "test" :exclusions [org.clojure/clojure]]
-
-                            ;; These next 2 have updated to 4.1.3.
-                            ;; TODO: See how well that works
-                            ;; LESS
+                            ;; This has been upgraded to 4.1.3, but that version doesn't work
+                            ;; (the file bootstrap/less/bootstrap.less no longer exists).
+                            ;; TODO: Consider changing this.
                             [org.webjars/bootstrap "3.3.7-1"]
                             ;; SASS
                             [org.webjars.bower/bootstrap "4.1.3" :exclusions [org.webjars.bower/jquery]]]
           :project project
+          ;; Q: Do I want to add "resources" to this?
+          ;; Both it and target seem to have gone dormant in October.
+          ;; Which might or might not mean anything.
           :resource-paths #{"src/clj" "src/cljc"}
           ;; Test path can be included here as source-files are not included in JAR
           ;; Just be careful to not AOT them
@@ -162,7 +167,7 @@
  '[adzerk.boot-cljs-repl :refer [cljs-repl start-repl repl-env]]
  '[adzerk.boot-reload :refer [reload]]
  ;; This one's defined under src/clj/
- '[backend.boot :refer [start-app]]
+ #_'[backend.boot :refer [start-app]]
  '[boot.pod :as pod]
  '[crisptrutski.boot-cljs-test :refer [test-cljs]]
  '[deraen.boot-less :refer [less]]
@@ -226,6 +231,9 @@
            :port 43140)
    (if use-sass
      (sass)
+     ;; This fails because bootstrap/less/bootstrap.less does not exist.
+     ;; That's new, and annoying.
+     ;; Q: What did I mess up?
      (less))
    ;; This starts a repl server with piggieback middleware
    (cljs-repl :ids #{"js/main"} :ip "0.0.0.0")
@@ -237,7 +245,7 @@
    (target :dir #{"dev-output"})
    ;; TODO: Experiment with this when I get web workers to compile correctly
    #_(repl :server true)
-   (start-app :port port)
+   #_(start-app :port port)
    (if speak
      (boot.task.built-in/speak)
      identity)))
@@ -247,7 +255,7 @@
   []
   ;; This belongs in here even less than it does under
   ;; the CurveCP translation. At least that one has a java
-  ;; compilation step to make this a little easier to remember
+  ;; compilation step to make this a little tougher to remember
   (comp (cider) (repl)))
 
 (deftask lint

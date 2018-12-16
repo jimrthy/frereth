@@ -25,7 +25,10 @@ COPY .boot-jvm-options boot.properties profile.boot build.boot ./
 # Need this because build.boot requires backend.boot at the
 # top level, and its start-app task depends on backend.main,
 # which depends on everything else in the web's "backend."
-COPY src/clj/backend/ ./src/clj/backend/
+# Making this dependency go away at this level means it
+# isn't as easy/convenient to startup, but that price
+# seems cheap compared to the pain of rebuilding.
+#COPY src/clj/backend/ ./src/clj/backend/
 
 # Pull in extras that go with day-to-day dev work.
 RUN boot cider repl -s less

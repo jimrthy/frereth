@@ -6,7 +6,8 @@
   ;; Trying to load byte-streams fails because of the failure
   ;; in byte-streams.graph.
   ;; This is...odd.
-  (:require [byte-streams :as b-s]  ; broken!
+  (:require [backend.main :as main]
+            [byte-streams :as b-s]
             [cider.piggieback]
             [cljs.repl.browser :as cljs-browser]
             [clojure
@@ -29,7 +30,7 @@
             [frereth.cp.shared
              [bit-twiddling :as b-t]
              [specs :as shared-specs]
-             [util :as utils]]
+             [util :as util]]
             [frereth.weald.logging :as log]
             [integrant.repl :refer [clear go halt prep init reset reset-all] :as ig-repl]
             [integrant.repl.state :as ig-state]
@@ -52,3 +53,5 @@
                               :host "0.0.0.0"
                               :launch-browser false
                               :port 9001))
+
+(println "Run (main/setup-app! {}) and then (go) to start the system")

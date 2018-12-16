@@ -33,23 +33,23 @@
                :server-extension-vector (s/and vector?
                                                #(= (count %) K/extension-length))
                :server-name string?)
-  :ret (s/keys :req [::cp-server]))
+  :ret ::cp-server)
 (defn server-options
   [logger log-state ->child server-extension-vector server-name]
   (let [child-id-atom (atom 0)
         executor (exec/fixed-thread-executor 4)
         server-extension (byte-array server-extension-vector)
         server-binary-name (shared/encode-server-name server-name)]
-    {::cp-server {::weald/logger logger
-                  ::weald/state log-state
-                  ::msg-specs/->child ->child
-                  ::msg-specs/child-spawner! (fn [io-handle]
-                                               (log/flush-logs! logger
-                                                                (log/debug (log/clean-fork log-state ::child-spawner!)
-                                                                           ::top)))
-                  ::shared/extension server-extension
-                  ::shared/my-keys #::shared{::shared-specs/srvr-name server-binary-name
-                                             :keydir "server-sample"}}}))
+    {::weald/logger logger
+     ::weald/state log-state
+     ::msg-specs/->child ->child
+     ::msg-specs/child-spawner! (fn [io-handle]
+                                  (log/flush-logs! logger
+                                                   (log/debug (log/clean-fork log-state ::child-spawner!)
+                                                              ::top)))
+     ::shared/extension server-extension
+     ::shared/my-keys #::shared{::shared-specs/srvr-name server-binary-name
+                                :keydir "server-sample"}}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Public
@@ -67,19 +67,20 @@
                ;; wreaked havoc on things.
                ;; Probably because it wasn't a duplex stream.
                :socket-source strm/source?
-               :socket-sink strm/sink?))
+               :socket-sink strm/sink?)
+  :ret ::server/pre-state)
 (defn build-server
+  "Set up the server definition"
   [logger log-state ->child server-extension-vector server-name socket-source socket-sink]
   (try
     (println "Trying to construct a server around" logger)
-    (let [server (server/ctor (into (::cp-server (server-options logger
-                                                                 log-state
-                                                                 ->child
-                                                                 server-extension-vector
-                                                                 server-name))
-                                    {::srvr-state/client-read-chan {::srvr-state/chan socket-source}
-                                     ::srvr-state/client-write-chan {::srvr-state/chan socket-sink}}))]
-      {::cp-server server})
+    (server/ctor (into (server-options logger
+                                       log-state
+                                       ->child
+                                       server-extension-vector
+                                       server-name)
+                       {::srvr-state/client-read-chan {::srvr-state/chan (:backend.system/udp-socket socket-source)}
+                        ::srvr-state/client-write-chan {::srvr-state/chan (:backend.system/udp-socket socket-sink)}}))
     (catch ExceptionInfo ex
       (try
         (log/flush-logs! logger (log/exception log-state

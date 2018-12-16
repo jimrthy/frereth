@@ -31,17 +31,32 @@
   ;; idea.
   ;; Writing to a file would probably be better for debugging than
   ;; STDOUT.
-  (println "Creating an async-log-factory for" (::ch chan))
-  (let [logger (log/composite-log-factory [(log/std-out-log-factory)
-                                           (log/async-log-factory (::ch chan))])]
+  (println "Calling async-log-factory for" (::ch chan))
+  (let [std-out-logger (log/std-out-log-factory)
+        async-logger
+        (try
+          (let [async-logger (log/async-log-factory (::ch chan))]
+            (println "Creating the async logger succeeded")
+            async-logger)
+          (catch Exception ex
+            (println ex "Creating the async-logger failed")
+            nil))
+        actual-logger
+        (if async-logger
+          (log/composite-log-factory [async-logger
+                                      std-out-logger])
+          std-out-logger)]
     (assoc opts
-           ::weald/logger logger)))
+           ::weald/logger actual-logger)))
 ;; It's tempting to add a corresponding halt! handler for ::logger,
 ;; to call flush! a final time.
 ;; But we don't actually have a log-state here.
-;; Q: Change that.
+;; Q: Change that?
 ;; And decide which is the chicken vs. the egg.
 
+;; FIXME: Move this into its own ns.
+;; server.networking needs to reference the key, and I'd
+;; like to make the dependency explicit.
 (defmethod ig/init-key ::server-socket
   [_ {:keys [::server-port]
       ;; Note that the server-port actually needs to be shared

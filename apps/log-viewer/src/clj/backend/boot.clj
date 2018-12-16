@@ -14,12 +14,15 @@
 ;; just run it.
 ;; But we don't really gain anything from this in terms of REPL startup,
 ;; and it causes problems when there are issues with the startup code.
+;; Besides...eastwood really hates that it just discards some nil const
+;; return value
 ;; TODO: Quit using it.
 ;; And decide whether it should just go away.
 (b/deftask start-app
   [p port   PORT int  "Port"]
   (println "Trying to start the app")
-  (let [x (atom nil)]  ; Q: What's the point?
+  ;; Q: What's the point to the atom silliness?
+  (let [x (atom nil)]
     (b/cleanup (halt))
     (b/with-pre-wrap fileset
       (swap! x (fn [x]
