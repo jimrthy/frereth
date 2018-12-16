@@ -166,8 +166,6 @@
  '[adzerk.boot-cljs :refer [cljs]]
  '[adzerk.boot-cljs-repl :refer [cljs-repl start-repl repl-env]]
  '[adzerk.boot-reload :refer [reload]]
- ;; This one's defined under src/clj/
- #_'[backend.boot :refer [start-app]]
  '[boot.pod :as pod]
  '[crisptrutski.boot-cljs-test :refer [test-cljs]]
  '[deraen.boot-less :refer [less]]
@@ -245,7 +243,6 @@
    (target :dir #{"dev-output"})
    ;; TODO: Experiment with this when I get web workers to compile correctly
    #_(repl :server true)
-   #_(start-app :port port)
    (if speak
      (boot.task.built-in/speak)
      identity)))

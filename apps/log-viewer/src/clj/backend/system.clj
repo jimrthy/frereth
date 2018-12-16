@@ -62,6 +62,7 @@
       ;; Note that the server-port actually needs to be shared
       :or {server-port 31425}
       :as opts}]
+  (println "Starting server socket on port" server-port)
   (assoc opts ::udp-socket @(udp/socket {:port server-port} )))
 
 (defmethod ig/halt-key! ::server-socket
@@ -78,10 +79,7 @@
                 ", a " (class incoming))))
 
 (defn ctor [opts]
-  ;; Changes in here don't really show up through a simple
-  ;; call to reset.
-  ;; FIXME: That isn't acceptable.
-  ;; It has something to do with the way the boot task was defined.
+  (println "Defining the Server side of the System")
   {:backend.web.server/web-server (::web-server opts)
    ::log-chan (::log-chan opts)
    ::logger (into {::chan (ig/ref ::log-chan)}

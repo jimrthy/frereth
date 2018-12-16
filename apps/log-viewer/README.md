@@ -18,6 +18,10 @@ At the command-line:
     # Watch log output
     docker logs -f `docker ps -q`
 
+### Directly on your host
+
+    boot cider repl
+
 ### CIDER
 
 Open the connection:
