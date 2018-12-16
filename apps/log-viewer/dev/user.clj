@@ -10,9 +10,11 @@
             [byte-streams :as b-s]
             [cider.piggieback]
             [cljs.repl.browser :as cljs-browser]
+            [clojure.core.async :as async]
             [clojure
              [data :as data]
              [edn :as edn]
+             [pprint :refor (pprint)]
              [repl :refer (apropos dir doc pst root-cause source)]]
             [clojure.java.io :as io]
             [clojure.spec.alpha :as s]

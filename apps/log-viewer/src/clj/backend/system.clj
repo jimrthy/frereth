@@ -90,10 +90,6 @@
    ;; implementation.
    ::propagate/monitor (into {::propagate/log-chan (ig/ref ::log-chan)}
                              (::monitor opts))
-   ;; FIXME: This pretty much needs to call frereth.cp.server/ctor
-   ;; to set up the method to call server.networking/start! to trigger
-   ;; the side-effects.
-   ;; FIXME: This needs a UDP socket.
    ;; FIXME: Connecting a new World Renderer needs to create a new
    ;; UDP socket along with its own CurveCP Client that tries to
    ;; connect to this.

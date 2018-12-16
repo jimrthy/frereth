@@ -27,7 +27,8 @@
 (defmethod ig/init-key ::monitor
   [_ {:keys [::log-chan]
       :as opts}]
-  (let [multiplexer (async/mult log-chan)
+  (println "Setting up propagation monitoring for " log-chan)
+  (let [multiplexer (async/mult (:backend.system/ch log-chan))
         ;; Q: What is this?
         ;; It seems like it should actually be a partial
         registration-handler (registrar/do-register-world ::log-viewer (partial connector multiplexer))]
