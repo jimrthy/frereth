@@ -33,7 +33,9 @@
              [bit-twiddling :as b-t]
              [specs :as shared-specs]
              [util :as util]]
-            [frereth.weald.logging :as log]
+            [frereth.weald
+             [logging :as log]
+             [specs :as weald]]
             [integrant.repl :refer [clear go halt prep init reset reset-all] :as ig-repl]
             [integrant.repl.state :as ig-state]
             [manifold

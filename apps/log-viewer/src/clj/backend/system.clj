@@ -79,6 +79,15 @@
                 ", a " (class incoming))))
 
 (defn ctor [opts]
+  ;; TODO: Split this up.
+  ;; The web-server portion is a baseline that I want to just
+  ;; run in general.
+  ;; That's so I can monitor things like the startup/shutdown of the
+  ;; CurveCP server. And, for that matter, so I do that startup/shutdown
+  ;; without reconnecting the web socket.
+  ;; This flies in the face of the fundamental principle that a System
+  ;; should really be an atomic whole, but that's the basic reality of
+  ;; what I'm building here.
   (println "Defining the Server side of the System")
   {:backend.web.server/web-server (::web-server opts)
    ::log-chan (::log-chan opts)

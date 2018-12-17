@@ -73,14 +73,17 @@
   "Set up the server definition"
   [logger log-state ->child server-extension-vector server-name socket-source socket-sink]
   (try
-    (println "Trying to construct a server around" logger)
-    (server/ctor (into (server-options logger
-                                       log-state
-                                       ->child
-                                       server-extension-vector
-                                       server-name)
-                       {::srvr-state/client-read-chan {::srvr-state/chan (:backend.system/udp-socket socket-source)}
-                        ::srvr-state/client-write-chan {::srvr-state/chan (:backend.system/udp-socket socket-sink)}}))
+    (let [log-state (log/info log-state
+                              ::build-server
+                              "Trying to construct a server"
+                              {::weald/logger logger})]
+      (server/ctor (into (server-options logger
+                                         log-state
+                                         ->child
+                                         server-extension-vector
+                                         server-name)
+                         {::srvr-state/client-read-chan {::srvr-state/chan (:backend.system/udp-socket socket-source)}
+                          ::srvr-state/client-write-chan {::srvr-state/chan (:backend.system/udp-socket socket-sink)}})))
     (catch ExceptionInfo ex
       (try
         (log/flush-logs! logger (log/exception log-state
@@ -105,16 +108,21 @@
       :as opts}]
   (println ::server "init-key:" logger)
   (pprint opts)
-  (let [inited (build-server (::weald/logger logger)
-                             (log/init ::component)
+  (let [log-state (log/init ::component)
+        inited (build-server (::weald/logger logger)
+                             log-state
                              ->child
                              extension-vector
                              my-name
                              socket
-                             socket)]
-    (println ::init "based on keys" (keys inited))
+                             socket)
+        log-state (log/info (::weald/state inited)
+                            ::init-key
+                            "Component constructed. Ready to Start"
+                            {::keys (keys inited)})]
     (assoc opts
-           ::cp-server (server/start! inited))))
+           ::cp-server (server/start! (assoc inited
+                                             ::weald/state log-state)))))
 
 (defmethod ig/halt-key! ::server
   [_ started]
