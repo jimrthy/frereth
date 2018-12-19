@@ -78,8 +78,30 @@
   (println (str "Server child received:" (vec incoming)
                 ", a " (class incoming))))
 
-(defn ctor [opts]
-  ;; TODO: Split this up.
+(defn client-ctor
+  [opts]
+  ;; FIXME: Connecting a new World Renderer needs to create a new
+  ;; UDP socket along with its own CurveCP Client that tries to
+  ;; connect to this.
+  (throw (RuntimeException. "Write this")))
+
+(defn server-ctor
+  [{:keys [::logger]
+    :as opts}]
+  (println "")
+  {:server.networking/server (into {::msg-specs/->child server-child-handler
+                                    :server.networking/extension-vector (range 16)
+                                    ::weald/logger (ig/ref ::weald/logger)
+                                    :server.networking/my-name "log-viewer.test.frereth.com"
+                                    :server.networking/port 32154
+                                    :server.networking/socket (ig/ref ::server-socket)}
+                                   (::server opts))
+   ::server-socket (::socket opts)
+   ::weald/logger logger})
+
+(defn monitoring-ctor
+  [opts]
+  (println "Defining the Monitoring portion of the System")
   ;; The web-server portion is a baseline that I want to just
   ;; run in general.
   ;; That's so I can monitor things like the startup/shutdown of the
@@ -88,25 +110,19 @@
   ;; This flies in the face of the fundamental principle that a System
   ;; should really be an atomic whole, but that's the basic reality of
   ;; what I'm building here.
-  (println "Defining the Server side of the System")
-  {:backend.web.server/web-server (::web-server opts)
-   ::log-chan (::log-chan opts)
-   ::logger (into {::chan (ig/ref ::log-chan)}
-                  (::logger opts))
+  {::log-chan (::log-chan opts)
+   ::wealdlogger (into {::chan (ig/ref ::log-chan)}
+                       (::logger opts))
    ;; Note that this is really propagating the Server logs.
    ;; The Client logs are really quite different...though it probably
    ;; makes sense to also send those here, at least for an initial
    ;; implementation.
    ::propagate/monitor (into {::propagate/log-chan (ig/ref ::log-chan)}
                              (::monitor opts))
-   ;; FIXME: Connecting a new World Renderer needs to create a new
-   ;; UDP socket along with its own CurveCP Client that tries to
-   ;; connect to this.
-   :server.networking/server (into {::msg-specs/->child server-child-handler
-                                    :server.networking/extension-vector (range 16)
-                                    ::weald/logger (ig/ref ::logger)
-                                    :server.networking/my-name "log-viewer.test.frereth.com"
-                                    :server.networking/port 32154
-                                    :server.networking/socket (ig/ref ::server-socket)}
-                                   (::server opts))
-   ::server-socket (::socket opts)})
+   :backend.web.server/web-server (::web-server opts)})
+
+(defn ctor [opts]
+  "Set up monitor/server/client all at once"
+  (let [monitor (monitoring-ctor opts)
+        server (server-ctor (into opts monitor))]
+    (client-ctor (into opts server))))

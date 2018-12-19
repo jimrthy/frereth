@@ -58,4 +58,16 @@
                               :launch-browser false
                               :port 9001))
 
-(println "Run (main/setup-app! {}) and then (go) to start the system")
+(defn initialize
+  [opts]
+  (require '[backend.system :as system :reload])
+  (let [ctor (resolve 'system/monitoring-ctor)]
+    (ctor opts)))
+
+(defn setup-monitor! [opts]
+  (ig-repl/set-prep! #(initialize opts)))
+
+;; TODO: Verify that this works.
+;; Then define a separate/related system using server-ctor and verify
+;; that I can go/halt! it separately
+(println "Run (setup-monitor! {}) and then (go) to start the Monitor")

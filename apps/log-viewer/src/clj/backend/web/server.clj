@@ -18,6 +18,10 @@
         ;; TODO: Switch to something more like Pedestal's Interceptor
         ;; model.
         ;; Q: Could I just use that part of their library?
+        ;; A: Well, I could. But they support aleph now, so it may
+        ;; make more sense to just use it directly.
+
+        ;; Q: Worth adding a logger middleware/interceptor?
         with-middleware (wrap-params handler)]
     (println "Starting web server on http://localhost:" port "from" opts)
     (http/start-server with-middleware {:port port})))
