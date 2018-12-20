@@ -22,7 +22,7 @@
   (async/close! ch)
   (assoc config ::ch nil))
 
-(defmethod ig/init-key ::logger
+(defmethod ig/init-key ::weald/logger
   [_ {:keys [::chan]
       :as opts}]
   ;; The only real reason to use a CompositeLog here is
@@ -111,8 +111,8 @@
   ;; should really be an atomic whole, but that's the basic reality of
   ;; what I'm building here.
   {::log-chan (::log-chan opts)
-   ::wealdlogger (into {::chan (ig/ref ::log-chan)}
-                       (::logger opts))
+   ::weald/logger (into {::chan (ig/ref ::log-chan)}
+                        (::logger opts))
    ;; Note that this is really propagating the Server logs.
    ;; The Client logs are really quite different...though it probably
    ;; makes sense to also send those here, at least for an initial

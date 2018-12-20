@@ -47,7 +47,7 @@
   ;; instructions about writing and index.html.
 
   ;; In practice, under cider and emacs, running cider-connect-sibling-cljs
-  ;; and choosing the weaser REPL type, then reloading the web page works fine.
+  ;; and choosing the weasel REPL type, then reloading the web page works fine.
 
   ;; This seems worth keeping around as a starting point for the sake of
   ;; anyone who isn't using emacs.
@@ -60,8 +60,8 @@
 
 (defn initialize
   [opts]
-  (require '[backend.system :as system :reload])
-  (let [ctor (resolve 'system/monitoring-ctor)]
+  (require 'backend.system)
+  (let [ctor (resolve 'backend.system/monitoring-ctor)]
     (ctor opts)))
 
 (defn setup-monitor! [opts]

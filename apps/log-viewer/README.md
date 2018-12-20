@@ -15,7 +15,8 @@ At the command-line:
 
     docker build -t frereth/log-viewer .
     ./run-docker.sh
-    # Watch log output
+    # Watch log output (this only works if you only have 1
+    # docker container running)
     docker logs -f `docker ps -q`
 
 ### Directly on your host
