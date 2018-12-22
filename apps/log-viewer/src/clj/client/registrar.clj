@@ -49,7 +49,9 @@
                :ctor :frereth/world-connector)
   :ret boolean?)
 (defn do-register-world
-  "Returns falsey if the command is already registered"
+  "Registers a command to run on world connection
+
+  Returns falsey if the command is already registered"
   ;; This is overly simplified.
   ;; At the very least, need a permissions system.
   ;; Obvious approach: each command includes a set of

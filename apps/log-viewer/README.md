@@ -21,16 +21,27 @@ At the command-line:
 
 ### Directly on your host
 
-    boot cider repl
+    boot cider dev
 
 ### CIDER
 
-Open the connection:
+Open the connection (theoretically):
 
     M-x cider-connect    ; specify port 43043 when prompted
     boot.user> (start-repl)
 
-Then open a browser tab pointed to [Your App](http://localhost:10555/index)
+That should open a new browser tab running your app.
+
+It was annoying enough that I tend to start the top-level System:
+
+    boot.user> (require 'user)
+    boot.user> (in-ns 'user)
+    user> (setup-monitor! {})
+    user> (go)
+
+Then `M-x cider-connect-sibling-cljs` (the connection type is weasel)
+and open a browser tab pointed to the
+[log viewer](http://localhost:10555/index)
 
 ## Serious TODO items
 

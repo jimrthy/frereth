@@ -23,8 +23,8 @@
   messages for describe to work properly:
   `git tag 0.0.2 -m 'Move forward'`"
   []
-  (let [[version commits hash dirty?]
-        (next (re-matches #"(.*?)-(.*?)-(.*?)(-dirty)?\n"
+  (let [[version previous-hash commits hash dirty?]
+        (next (re-matches #"(\d+\.\d+\.\d+)(-\w*)?-(\d*)-(.*?)(-dirty)?\n"
                           (:out (sh/sh "git"
                                        "describe"
                                        "--always"
@@ -88,6 +88,7 @@
                             [funcool/promesa "1.9.0"]
                             [metosin/boot-alt-test "0.3.2" :scope "test"]
                             [metosin/boot-deps-size "0.1.0" :scope "test"]
+                            ;; Q: Does 0.4.5 play more nicely?
                             [nrepl "0.5.3" :exclusions [org.clojure/clojure]]
                             [org.clojure/clojure "1.10.0-RC5"]
                             [org.clojure/clojurescript "1.10.439" :scope "test" :exclusions [commons-codec

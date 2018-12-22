@@ -19,6 +19,7 @@
     (async/tap log-mult real-dst)
     (async/go-loop []
       (when-let [msg (async/<! real-dst)]
+        (println "(debugging connector)" msg)
         (send-message! msg)
         (recur))))
 

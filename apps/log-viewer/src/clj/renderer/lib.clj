@@ -10,7 +10,9 @@
             [manifold
              [deferred :as dfrd]
              [stream :as strm]]
-            [clojure.java.io :as io])
+            [clojure.java.io :as io]
+            [clojure.core.async :as async]
+            [clojure.core.async.impl.protocols :as async-protocols])
   (:import clojure.lang.ExceptionInfo
            [java.io
             ByteArrayInputStream
@@ -191,6 +193,13 @@
                  "\nPending:\n"
                  (::pending @sessions))))))
 
+(def async-chan-write-handler
+  "This really shouldn't be needed"
+  (transit/write-handler "async-chan"
+                         (fn [o]
+                           (println "WARNING: trying to serialize a core.async chan")
+                           (pr-str o))))
+
 (s/fdef serialize
   ;; body isn't *really* anything. It has to be something that's
   ;; directly serializable via transit.
@@ -199,13 +208,25 @@
 (defn serialize
   [body]
   ;; Q: Useful size?
-  (let [result (ByteArrayOutputStream. 4096)
-        writer (transit/writer result :json)]
-    (transit/write writer body)
-    (.toByteArray result)))
+  (try
+    (let [result (ByteArrayOutputStream. 4096)
+          handler-map {:handlers {async-protocols/ReadPort async-chan-write-handler
+                                  clojure.core.async.impl.channels.ManyToManyChannel async-chan-write-handler}}
+          writer (transit/writer result
+                                 :json
+                                 handler-map)]
+      (transit/write writer body)
+      (.toByteArray result))))
 
 (comment
   (String. (serialize "12345" {:a 1 :b 2 :c 3}))
+  (try
+    (let [result (ByteArrayOutputStream. 4096)
+          writer (transit/writer result :json)]
+      (transit/write writer {::ch (async/chan)})
+      (.toByteArray result))
+    (catch RuntimeException ex
+      (println "Caught" ex)))
   )
 
 (s/fdef get-world-in-active-session
@@ -501,16 +522,19 @@
                           ::active
                           (get session-id))]
     (try
-      (let [envelope (serialize wrapper)
-            success (strm/try-put! (::web-socket connection)
-                                   envelope
-                                   500
-                                   ::timed-out)]
-        (dfrd/on-realized success
-                          #(println "forwarded:" %)
-                          #(println "Forwarding failed:" %)))
+      (let [envelope (serialize wrapper)]
+        (try
+          (let [success (strm/try-put! (::web-socket connection)
+                                       envelope
+                                       500
+                                       ::timed-out)]
+            (dfrd/on-realized success
+                              #(println "forwarded:" %)
+                              #(println "Forwarding failed:" %)))
+          (catch Exception ex
+            (println "Message forwarding failed:" ex))))
       (catch Exception ex
-        (println "Message forwarding failed:" ex)))
+        (println "Serializing message failed:" ex)))
     (do
       (println "No such world")
       (throw (ex-info "Trying to POST to unconnected Session"
@@ -528,7 +552,7 @@
   "Browser is trying to initiate a new Session"
   [websocket]
   (try
-    ;; FIXME: Better handshake
+    ;; FIXME: Better handshake (need an authentication phase)
     (println ::activate-session!
              "Trying to pull the Renderer's key from new websocket")
     (let [first-response (strm/try-take! websocket ::drained 500 ::timed-out)]

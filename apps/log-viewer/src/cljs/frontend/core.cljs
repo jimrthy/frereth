@@ -733,7 +733,7 @@
 
 (defn connect-web-socket!
   [shell-forker session-id]
-  (console.log "Connecting WebSocket")
+  (console.log "Connecting WebSocket for world interaction")
   (try
     (let [location (.-location js/window)
           origin-protocol (.-protocol location)
@@ -771,10 +771,10 @@
       (set! (.-onmessage ws) recv-message!)
       (set! (.-onclose ws)
             (fn [event]
-              (console.warn "Connection closed:" event)))
+              (console.warn "Frereth Connection closed:" event)))
       (set! (.-onerror ws)
             (fn [event]
-              (console.error "Connection error:" event))))
+              (console.error "Frereth Connection error:" event))))
     (catch :default ex
       (console.error ex))))
 
@@ -782,13 +782,16 @@
 ;;;; Public
 
 (defn start! []
-  (js/console.log "Starting the app")
+  (println "Starting the app")
 
   (when-not (repl/alive?)
+    (println "Trying to connect REPL websocket")
     (repl/connect "ws://localhost:9001"))
 
   (connect-web-socket! fork-shell! session-id-from-server))
 
+;; FIXME: This seems as though it should be protected behind the
+;; equivalent of defonce
 (when js/window
   (start!))
 

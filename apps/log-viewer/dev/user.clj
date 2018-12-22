@@ -6,9 +6,11 @@
   ;; Trying to load byte-streams fails because of the failure
   ;; in byte-streams.graph.
   ;; This is...odd.
-  (:require [backend.main :as main]
+  (:require [aleph.udp :as udp]
+            [backend.main :as main]
             [byte-streams :as b-s]
             [cider.piggieback]
+            [client.registrar :as registrar]
             [cljs.repl.browser :as cljs-browser]
             [clojure.core.async :as async]
             [clojure
@@ -36,11 +38,14 @@
             [frereth.weald
              [logging :as log]
              [specs :as weald]]
+            [integrant.core :as ig]
             [integrant.repl :refer [clear go halt prep init reset reset-all] :as ig-repl]
             [integrant.repl.state :as ig-state]
             [manifold
              [deferred :as dfrd]
-             [stream :as strm]]))
+             [stream :as strm]]
+            [integrant.core :as ig]
+            [renderer.lib :as renderer]))
 
 (defn cljs-repl
   ;; The last time I actually tried this, it opened a new browser window with
@@ -57,6 +62,50 @@
                               :host "0.0.0.0"
                               :launch-browser false
                               :port 9001))
+
+(defn build-server-cfg
+  [monitor]
+  (require 'backend.system)
+  (let [ctor (resolve 'backend.system/server-ctor)]
+    (ctor monitor)))
+
+(defn build-server
+  [monitor]
+  (let [config (build-server-cfg monitor)]
+    (ig/init config)))
+
+(comment
+  ig-state/system
+  (keys ig-state/system)
+  (-> ig-state/system
+      :backend.system/log-chan
+      :backend.system/ch)
+  (async/put! (-> ig-state/system
+                  :backend.system/log-chan
+                  :backend.system/ch)
+              "log message")
+
+  ;; UDP port creation is blocking. Experiment to see
+  ;; what the smallest use-case really looks like.
+  (def sample-port (udp/socket {:port 47659}))
+  @sample-port
+  (.close @sample-port)
+
+  (def server-cfg (build-server-cfg ig-state/system))
+  server-cfg
+  (keys server-cfg)
+  (def server (build-server (assoc server-cfg
+                                   :backend.system/socket {:backend.system/server-port 32156})))
+  server
+  (keys server)
+  (:server.networking/server server)
+  (-> server :server.networking/server keys)
+  (ig/halt! server)
+
+  @registrar/registry-1
+
+  @renderer/sessions
+  )
 
 (defn initialize
   [opts]

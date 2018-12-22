@@ -8,7 +8,8 @@
              [logging :as log]
              [specs :as weald]]
             [integrant.core :as ig]
-            [frereth.cp.message.specs :as msg-specs]))
+            [frereth.cp.message.specs :as msg-specs]
+            [clojure.spec.alpha :as s]))
 
 (defmethod ig/init-key ::log-chan
   [_ _]
@@ -23,31 +24,39 @@
   (assoc config ::ch nil))
 
 (defmethod ig/init-key ::weald/logger
-  [_ {:keys [::chan]
+  [_ {:keys [::chan
+             ::weald/logger]
       :as opts}]
-  ;; The only real reason to use a CompositeLog here is
-  ;; to test it out.
-  ;; Then again, debugging what the browser displays isn't a terrible
-  ;; idea.
-  ;; Writing to a file would probably be better for debugging than
-  ;; STDOUT.
-  (println "Calling async-log-factory for" (::ch chan))
-  (let [std-out-logger (log/std-out-log-factory)
-        async-logger
-        (try
-          (let [async-logger (log/async-log-factory (::ch chan))]
-            (println "Creating the async logger succeeded")
-            async-logger)
-          (catch Exception ex
-            (println ex "Creating the async-logger failed")
-            nil))
-        actual-logger
-        (if async-logger
-          (log/composite-log-factory [async-logger
-                                      std-out-logger])
-          std-out-logger)]
-    (assoc opts
-           ::weald/logger actual-logger)))
+  ;; This should get configured in waves, at least for interactive
+  ;; development.
+  ;; So allow the option to just supply an existing logger and make this
+  ;; idempotent.
+  (if logger
+    logger
+    (do
+      ;; The only real reason to use a CompositeLog here is
+      ;; to test it out.
+      ;; Then again, debugging what the browser displays isn't a terrible
+      ;; idea.
+      ;; Writing to a file would probably be better for debugging than
+      ;; STDOUT.
+      (println "Calling async-log-factory for" (::ch chan))
+      (let [std-out-logger (log/std-out-log-factory)
+            async-logger
+            (try
+              (let [async-logger (log/async-log-factory (::ch chan))]
+                (println "Creating the async logger succeeded")
+                async-logger)
+              (catch Exception ex
+                (println ex "Creating the async-logger failed")
+                nil))
+            actual-logger
+            (if async-logger
+              (log/composite-log-factory [async-logger
+                                          std-out-logger])
+              std-out-logger)]
+        (assoc opts
+               ::weald/logger actual-logger)))))
 ;; It's tempting to add a corresponding halt! handler for ::logger,
 ;; to call flush! a final time.
 ;; But we don't actually have a log-state here.
@@ -62,8 +71,11 @@
       ;; Note that the server-port actually needs to be shared
       :or {server-port 31425}
       :as opts}]
-  (println "Starting server socket on port" server-port)
-  (assoc opts ::udp-socket @(udp/socket {:port server-port} )))
+  (println "Starting server socket on port" server-port "(this may take a bit)")
+  (let [result
+        (assoc opts ::udp-socket @(udp/socket {:port server-port}))]
+    (println "UDP socket ready to serve")
+    result))
 
 (defmethod ig/halt-key! ::server-socket
   [_ {:keys [::udp-socket]
@@ -85,18 +97,29 @@
   ;; connect to this.
   (throw (RuntimeException. "Write this")))
 
+(s/fdef server-ctor
+  :args (s/cat :opts (s/keys :req [::weald/logger
+                                   ::socket]))
+  :ret (s/keys :req [:server.networking/server
+                     ::server-socket]))
 (defn server-ctor
-  [{:keys [::logger]
+  [{:keys [::weald/logger]
+    socket-opts ::socket
     :as opts}]
-  (println "")
+  (when-not logger
+    (throw (ex-info "Missing logger among"
+                    {::keys (keys opts)
+                     ::opts opts})))
   {:server.networking/server (into {::msg-specs/->child server-child-handler
                                     :server.networking/extension-vector (range 16)
+                                    ;; This seems problematic, but it's definitely
+                                    ;; required
                                     ::weald/logger (ig/ref ::weald/logger)
                                     :server.networking/my-name "log-viewer.test.frereth.com"
-                                    :server.networking/port 32154
                                     :server.networking/socket (ig/ref ::server-socket)}
                                    (::server opts))
-   ::server-socket (::socket opts)
+   ::server-socket (into {::server-port 34122}
+                         socket-opts)
    ::weald/logger logger})
 
 (defn monitoring-ctor

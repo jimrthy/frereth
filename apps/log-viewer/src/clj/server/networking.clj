@@ -76,21 +76,23 @@
     (let [log-state (log/info log-state
                               ::build-server
                               "Trying to construct a server"
-                              {::weald/logger logger})]
-      (server/ctor (into (server-options logger
-                                         log-state
-                                         ->child
-                                         server-extension-vector
-                                         server-name)
-                         {::srvr-state/client-read-chan {::srvr-state/chan (:backend.system/udp-socket socket-source)}
-                          ::srvr-state/client-write-chan {::srvr-state/chan (:backend.system/udp-socket socket-sink)}})))
+                              {::weald/logger logger})
+          base-options (server-options logger
+                                       log-state
+                                       ->child
+                                       server-extension-vector
+                                       server-name)
+          actual-options (into base-options
+                          {::srvr-state/client-read-chan {::srvr-state/chan (:backend.system/udp-socket socket-source)}
+                           ::srvr-state/client-write-chan {::srvr-state/chan (:backend.system/udp-socket socket-sink)}})]
+      (server/ctor actual-options))
     (catch ExceptionInfo ex
       (try
         (log/flush-logs! logger (log/exception log-state
                                                ex
                                                ::build-server))
         (catch Exception ex1
-          (println "Nasty failure:\n"
+          (println "Double jeapordy failure:\n"
                    ex1
                    "\ntrying to flush-logs! to report\n"
                    ex
@@ -106,23 +108,28 @@
              ::my-name
              ::socket]
       :as opts}]
-  (println ::server "init-key:" logger)
+  (println ::server "init-key logger:" logger "among" (keys opts) "\nin\n" opts)
   (pprint opts)
-  (let [log-state (log/init ::component)
-        inited (build-server (::weald/logger logger)
-                             log-state
-                             ->child
-                             extension-vector
-                             my-name
-                             socket
-                             socket)
-        log-state (log/info (::weald/state inited)
-                            ::init-key
-                            "Component constructed. Ready to Start"
-                            {::keys (keys inited)})]
-    (assoc opts
-           ::cp-server (server/start! (assoc inited
-                                             ::weald/state log-state)))))
+  (try
+    (let [log-state (log/init ::component)
+          inited (build-server logger
+                               log-state
+                               ->child
+                               extension-vector
+                               my-name
+                               socket
+                               socket)
+          log-state (log/info (::weald/state inited)
+                              ::init-key
+                              "Component constructed. Ready to Start"
+                              {::keys (keys inited)})]
+      (assoc opts
+             ::cp-server (server/start! (assoc inited
+                                               ::weald/state log-state))))
+    (catch Exception ex
+      (println "Oops" ex)
+      ;; This gives us a chance to close the socket on a failure
+      opts)))
 
 (defmethod ig/halt-key! ::server
   [_ started]
@@ -131,4 +138,7 @@
   ;; has been stopped?
   ;; The latter option just means we need to grab the state before
   ;; calling halt, which is probably a better idea anyway.
-  (update started ::cp-server server/stop!))
+  ;; Neither option matters. This gets called for side-effects,
+  ;; so the return value is correctly ignored.
+  (when-let [server (::cp-server started)]
+    (server/stop! server)))
