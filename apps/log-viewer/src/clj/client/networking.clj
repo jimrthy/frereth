@@ -18,6 +18,14 @@
             [manifold.stream :as strm])
   (:import java.net.InetAddress))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; Specs
+
+(s/def ::server-addresses (s/coll-of (s/tuple int? int? int? int?)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; Internal Implementation
+
 (s/fdef connect-to-server
   :args (s/cat :message-loop-name ::msg-specs/message-loop-name
                :my-long-key-pair ::shared/long-pair
@@ -28,8 +36,7 @@
                :server-long-term-public-key ::shared-specs/public-long
                :server-extension-vector (s/and vector?
                                                #(= (count %) K/extension-length))
-               ;; Q: Do I have a spec already defined for this?
-               :hosts (s/coll-of (s/tuple int? int? int? int?))
+               :hosts ::server-addresses
                :server-port any?  ; FIXME: Get a real spec for this
                ;; child calls this with byte-arrays
                :->child ::msg-specs/->child)
@@ -77,12 +84,19 @@
       (client/start! result)
       result)))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; Public
+
 (defmethod ig/init-key ::socket
-  [_ {:keys [::port]
-      ;; Note that the server-port actually needs to be shared
+  [_ {:keys [::shared-specs/port]
+      ;; Note that this is very distinct from the ports of
+      ;; whichever servers we might contact. We need it so
+      ;; the server can communicate back.
+      ;; At least, that's what the Aleph docs claim.
+      ;; TODO: Try it without to see what happens
       :or {port 41425}
       :as opts}]
-  (println "Starting client socket on port" port "(this may take a bit)")
+  (println "Starting client socket on port" port "(this should be fast)")
   (let [result @(udp/socket {:port port})]
     (println "Client UDP socket ready to connect")
     result))
@@ -95,18 +109,22 @@
   [_ {:keys [::msg-specs/message-loop-name
              ::shared/long-pair
              ::socket
-             ;; FIXME: Start back here with this
              ::server-addresses
-             ::server-port
              ::weald/logger
              ::weald/state]
       server-name ::shared-specs/srvr-name
       server-long-term-public-key ::shared-specs/public-long
       server-extension-vector ::client-state/server-extension
+      server-port ::shared-specs/port
       :as opts}]
   (let [log-state (log/init ::connection)
-        ->child nil
+        ->child (fn [bs]
+                  (let [bs (bytes bs)]
+                    (throw (RuntimeException. "Do something"))))
         child-spawner! (fn []
+                         ;; FIXME: Set up this and the server child
+                         ;; to act the same as what I have in the
+                         ;; CurveCP handshake test.
                          (throw (RuntimeException. "What should this do?")))]
     (connect-to-server message-loop-name
                        long-pair

@@ -18,14 +18,29 @@
             [frereth.cp.shared.crypto :as crypto]
             [frereth.cp.client.state :as client-state]))
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Magic Constants
 
 (def server-extension-vector (range 16))
 (def server-name "log-viewer.test.frereth.com")
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Specs
+
+(s/def ::client-connection-opts (s/keys :opt [::msg-specs/message-loop-name
+                                              ::shared/long-pair
+                                              ::client-net/socket
+                                              ::shared-specs/srvr-name
+                                              ::shared-specs/public-long
+                                              ::client-state/server-extension
+                                              ::client-state/server-addresses
+                                              ::shared-specs/port
+                                              ::weald/state]
+                                        :req [::weald/logger]))
+(s/def ::socket-opts any?)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; Internal Implementation
 
 (defmethod ig/init-key ::log-chan
   [_ _]
@@ -107,20 +122,24 @@
 
 (s/fdef client-ctor
   :args (s/cat :opts (s/keys :req [::weald/logger
-                                   ::client-net/connection
-                                   ::client-net/socket
-                                   ::shared-specs/public-long]))
+                                   ::shared-specs/public-long]
+                             :opt [::client-connection-opts
+                                   ::socket-opts]))
   :ret (s/keys :req [::client-net/connection
                      ::client-net/socket]))
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; Public
+
 (defn client-ctor
-  [{:keys [::weald/logger]
-    connection-opts ::client-net/connection
-    socket-opts ::client-net/socket
+  [{:keys [::weald/logger
+           ::connection-opts]
+    socket-opts ::client-net/socket-opts
     server-pk ::shared-specs/public-long
+    server-port ::shared-specs/port
     :as opts}]
   {:pre [server-pk]}
   ;; FIXME: Connecting a new World Renderer needs to trigger this.
-  ;; More interestingly, I want a button on that component that triggers a restart.
+  ;; More interestingly, I want a button on the browser that triggers a restart.
   {::client-net/connection (into #:client.networking{::msg-specs/message-loop-name (str (gensym "Client-"))
                                                      ;; TODO: Server really should be doing auth based
                                                      ;; around the public key. Using something random
@@ -130,11 +149,13 @@
                                                      ::shared-specs/srvr-name server-name
                                                      ::shared-specs/public-long server-pk
                                                      ::client-state/server-extension server-extension-vector
+                                                     ::client-state/server-addresses [[127 0 0 1]]
+                                                     ::shared-specs/port server-port
                                                      ::weald/logger (ig/ref logger)
                                                      ::weald/state (log/init ::connection)
                                                      }
                                         connection-opts)
-   ::client-net/socket (::socket opts)})
+   ::client-net/socket socket-opts})
 
 (s/fdef server-ctor
   :args (s/cat :opts (s/keys :req [::weald/logger

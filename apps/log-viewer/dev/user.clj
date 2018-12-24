@@ -45,7 +45,8 @@
              [deferred :as dfrd]
              [stream :as strm]]
             [integrant.core :as ig]
-            [renderer.lib :as renderer]))
+            [renderer.lib :as renderer]
+            [client.networking :as client-net]))
 
 (defn cljs-repl
   ;; The last time I actually tried this, it opened a new browser window with
@@ -105,6 +106,9 @@
   @registrar/registry-1
 
   @renderer/sessions
+
+  (def client-cfg {::weald/logger (::weald/logger ig-state/system)
+                   ::client-net/connection})
   )
 
 (defn initialize
