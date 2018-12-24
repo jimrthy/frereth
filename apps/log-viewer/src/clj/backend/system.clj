@@ -1,7 +1,9 @@
 (ns backend.system
   (:require [aleph.udp :as udp]
             [backend.web.server]
-            [client.propagate :as propagate]
+            [client
+             [networking :as client-net]
+             [propagate :as propagate]]
             [clojure.core.async :as async]
             [server.networking]
             [frereth.weald
@@ -9,7 +11,21 @@
              [specs :as weald]]
             [integrant.core :as ig]
             [frereth.cp.message.specs :as msg-specs]
-            [clojure.spec.alpha :as s]))
+            [frereth.cp.shared.specs :as shared-specs]
+            [clojure.spec.alpha :as s]
+            [frereth.cp.client :as client]
+            [frereth.cp.shared :as shared]
+            [frereth.cp.shared.crypto :as crypto]
+            [frereth.cp.client.state :as client-state]))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; Magic Constants
+
+(def server-extension-vector (range 16))
+(def server-name "log-viewer.test.frereth.com")
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; Specs
 
 (defmethod ig/init-key ::log-chan
   [_ _]
@@ -81,8 +97,7 @@
   [_ {:keys [::udp-socket]
       :as opts}]
   (when udp-socket
-    (.close udp-socket))
-  (dissoc opts ::udp-socket))
+    (.close udp-socket)))
 
 (defn server-child-handler
   "Doesn't belong in here. But it's a start"
@@ -90,12 +105,36 @@
   (println (str "Server child received:" (vec incoming)
                 ", a " (class incoming))))
 
+(s/fdef client-ctor
+  :args (s/cat :opts (s/keys :req [::weald/logger
+                                   ::client-net/connection
+                                   ::client-net/socket
+                                   ::shared-specs/public-long]))
+  :ret (s/keys :req [::client-net/connection
+                     ::client-net/socket]))
 (defn client-ctor
-  [opts]
-  ;; FIXME: Connecting a new World Renderer needs to create a new
-  ;; UDP socket along with its own CurveCP Client that tries to
-  ;; connect to this.
-  (throw (RuntimeException. "Write this")))
+  [{:keys [::weald/logger]
+    connection-opts ::client-net/connection
+    socket-opts ::client-net/socket
+    server-pk ::shared-specs/public-long
+    :as opts}]
+  {:pre [server-pk]}
+  ;; FIXME: Connecting a new World Renderer needs to trigger this.
+  ;; More interestingly, I want a button on that component that triggers a restart.
+  {::client-net/connection (into #:client.networking{::msg-specs/message-loop-name (str (gensym "Client-"))
+                                                     ;; TODO: Server really should be doing auth based
+                                                     ;; around the public key. Using something random
+                                                     ;; is just a getting-started shortcut
+                                                     ::shared/long-pair (crypto/random-key-pair)
+                                                     ::client-net/socket (ig/ref ::client-net/socket)
+                                                     ::shared-specs/srvr-name server-name
+                                                     ::shared-specs/public-long server-pk
+                                                     ::client-state/server-extension server-extension-vector
+                                                     ::weald/logger (ig/ref logger)
+                                                     ::weald/state (log/init ::connection)
+                                                     }
+                                        connection-opts)
+   ::client-net/socket (::socket opts)})
 
 (s/fdef server-ctor
   :args (s/cat :opts (s/keys :req [::weald/logger
@@ -111,11 +150,11 @@
                     {::keys (keys opts)
                      ::opts opts})))
   {:server.networking/server (into {::msg-specs/->child server-child-handler
-                                    :server.networking/extension-vector (range 16)
+                                    :server.networking/extension-vector server-extension-vector
                                     ;; This seems problematic, but it's definitely
                                     ;; required
                                     ::weald/logger (ig/ref ::weald/logger)
-                                    :server.networking/my-name "log-viewer.test.frereth.com"
+                                    :server.networking/my-name server-name
                                     :server.networking/socket (ig/ref ::server-socket)}
                                    (::server opts))
    ::server-socket (into {::server-port 34122}
