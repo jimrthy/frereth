@@ -31,6 +31,7 @@
             ;; These are moderately useless under boot.
             [clojure.tools.namespace.repl :refer (refresh refresh-all)]
             [frereth.cp.message :as msg]
+            [frereth.cp.shared :as cp-shared]
             [frereth.cp.shared
              [bit-twiddling :as b-t]
              [specs :as shared-specs]
@@ -48,25 +49,17 @@
             [renderer.lib :as renderer]
             [client.networking :as client-net]))
 
-(defn cljs-repl
-  ;; The last time I actually tried this, it opened a new browser window with
-  ;; instructions about writing and index.html.
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; Magic Numbers
 
-  ;; In practice, under cider and emacs, running cider-connect-sibling-cljs
-  ;; and choosing the weasel REPL type, then reloading the web page works fine.
+(def server-port 32156)
 
-  ;; This seems worth keeping around as a starting point for the sake of
-  ;; anyone who isn't using emacs.
-  "In theory, this launches a REPL that interacts with a new browser window"
-  []
-  (cider.piggieback/cljs-repl (cljs-browser/repl-env)
-                              :host "0.0.0.0"
-                              :launch-browser false
-                              :port 9001))
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; Server
 
 (defn build-server-cfg
   [monitor]
-  (require 'backend.system)
+  (require 'backend.system :reload)
   (let [ctor (resolve 'backend.system/server-ctor)]
     (ctor monitor)))
 
@@ -96,20 +89,76 @@
   server-cfg
   (keys server-cfg)
   (def server (build-server (assoc server-cfg
-                                   :backend.system/socket {:backend.system/server-port 32156})))
+                                   :backend.system/socket {:backend.system/server-port server-port})))
   server
   (keys server)
   (:server.networking/server server)
   (-> server :server.networking/server keys)
+  (-> server :server.networking/server :server.networking/cp-server keys)
+  (-> server :server.networking/server :server.networking/cp-server ::cp-shared/my-keys ::cp-shared/long-pair .getPublicKey)
   (ig/halt! server)
 
   @registrar/registry-1
 
-  @renderer/sessions
+  @renderer/sessions)
 
-  (def client-cfg {::weald/logger (::weald/logger ig-state/system)
-                   ::client-net/connection})
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; Client
+
+(defn build-client-config
+  [server]
+  {::weald/logger (-> ig-state/system ::weald/logger ::weald/logger)
+                   ::shared-specs/port server-port
+                   ::shared-specs/public-long   (-> server
+                                                    :server.networking/server
+                                                    :server.networking/cp-server
+                                                    ::cp-shared/my-keys
+                                                    ::cp-shared/long-pair
+                                                    .getPublicKey)
+   :backend.system/socket-opts {::shared-specs/port 41428}})
+
+(defn build-client-description
+  [server]
+  (require 'backend.system)
+  (let [config (build-client-config server)]
+    (backend.system/client-ctor config)))
+
+(defn start-client
+  [server]
+  (let [client-description (build-client-description server)]
+    (ig/init client-description)))
+
+(comment
+  (def client-description (build-client-description server))
+  client-description
+  (-> client-description :client.networking/connection ::weald/logger keys)
+  (def client (ig/init client-description))
+  client
+  (class client)
+  (nil? client)
+  (+ 1 3)
+  (ig/halt! client)
   )
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; Upper Management
+
+(defn cljs-repl
+  ;; The last time I actually tried this, it opened a new browser window with
+  ;; instructions about writing and index.html.
+
+  ;; In practice, under cider and emacs, running cider-connect-sibling-cljs
+  ;; and choosing the weasel REPL type, then reloading the web page works fine.
+
+  ;; This seems worth keeping around as a starting point for the sake of
+  ;; anyone who isn't using emacs.
+  "In theory, this launches a REPL that interacts with a new browser window"
+  []
+  (cider.piggieback/cljs-repl (cljs-browser/repl-env)
+                              :host "0.0.0.0"
+                              :launch-browser false
+                              :port 9001))
 
 (defn initialize
   [opts]
@@ -120,7 +169,4 @@
 (defn setup-monitor! [opts]
   (ig-repl/set-prep! #(initialize opts)))
 
-;; TODO: Verify that this works.
-;; Then define a separate/related system using server-ctor and verify
-;; that I can go/halt! it separately
 (println "Run (setup-monitor! {}) and then (go) to start the Monitor")

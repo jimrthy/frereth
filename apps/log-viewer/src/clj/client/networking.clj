@@ -126,17 +126,33 @@
                          ;; to act the same as what I have in the
                          ;; CurveCP handshake test.
                          (throw (RuntimeException. "What should this do?")))]
-    (connect-to-server message-loop-name
-                       long-pair
-                       log-state
-                       logger
-                       socket
-                       server-name
-                       server-long-term-public-key
-                       server-extension-vector
-                       server-addresses
-                       server-port
-                       ->child)))
+    (try
+      (connect-to-server message-loop-name
+                         long-pair
+                         log-state
+                         logger
+                         socket
+                         server-name
+                         server-long-term-public-key
+                         server-extension-vector
+                         server-addresses
+                         server-port
+                         ->child)
+      (catch Exception ex
+        (try
+          (log/flush-logs! logger (log/exception log-state
+                                                 ex
+                                                 ::init-key
+                                                 opts))
+          (catch Exception ex1
+            (println "Double jeopardy failure\n"
+                     ex1
+                     "\ntriggered trying to log\n"
+                     ex
+                     "\nto\n"
+                     logger
+                     "\na"
+                     (class logger))))))))
 
 (defmethod ig/halt-key! ::connection
   [_ connection]

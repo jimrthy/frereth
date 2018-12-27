@@ -120,24 +120,26 @@
   (println (str "Server child received:" (vec incoming)
                 ", a " (class incoming))))
 
-(s/fdef client-ctor
-  :args (s/cat :opts (s/keys :req [::weald/logger
-                                   ::shared-specs/public-long]
-                             :opt [::client-connection-opts
-                                   ::socket-opts]))
-  :ret (s/keys :req [::client-net/connection
-                     ::client-net/socket]))
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Public
 
+(s/fdef client-ctor
+  :args (s/cat :opts (s/keys :req [::shared-specs/public-long
+                                   ::shared-specs/port
+                                   ::weald/logger]
+                             :opt [::connection-opts
+                                   ::socket-opts]))
+  :ret (s/keys :req [::client-net/connection
+                     ::client-net/socket]))
 (defn client-ctor
   [{:keys [::weald/logger
            ::connection-opts]
-    socket-opts ::client-net/socket-opts
+    socket-opts ::socket-opts
     server-pk ::shared-specs/public-long
     server-port ::shared-specs/port
     :as opts}]
-  {:pre [server-pk]}
+  {:pre [logger
+         server-pk]}
   ;; FIXME: Connecting a new World Renderer needs to trigger this.
   ;; More interestingly, I want a button on the browser that triggers a restart.
   {::client-net/connection (into #:client.networking{::msg-specs/message-loop-name (str (gensym "Client-"))
@@ -151,7 +153,7 @@
                                                      ::client-state/server-extension server-extension-vector
                                                      ::client-state/server-addresses [[127 0 0 1]]
                                                      ::shared-specs/port server-port
-                                                     ::weald/logger (ig/ref logger)
+                                                     ::weald/logger logger
                                                      ::weald/state (log/init ::connection)
                                                      }
                                         connection-opts)
