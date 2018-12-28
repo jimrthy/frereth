@@ -176,6 +176,7 @@
                                     :server.networking/extension-vector server-extension-vector
                                     ;; This seems problematic, but it's definitely
                                     ;; required
+                                    ;; FIXME: Just store the logger instance.
                                     ::weald/logger (ig/ref ::weald/logger)
                                     :server.networking/my-name server-name
                                     :server.networking/socket (ig/ref ::server-socket)}
@@ -196,6 +197,8 @@
   ;; should really be an atomic whole, but that's the basic reality of
   ;; what I'm building here.
   {::log-chan (::log-chan opts)
+   ;; FIXME: Can I get away with just storing a logger instance here?
+   ;; And is there any real reason not to?
    ::weald/logger (into {::chan (ig/ref ::log-chan)}
                         (::logger opts))
    ;; Note that this is really propagating the Server logs.

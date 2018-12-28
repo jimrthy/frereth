@@ -197,8 +197,20 @@
   "This really shouldn't be needed"
   (transit/write-handler "async-chan"
                          (fn [o]
-                           (println "WARNING: trying to serialize a core.async chan")
+                           (println ::async-chan-write-handler
+                                    "WARNING: trying to serialize a(n)"
+                                    (class o))
                            (pr-str o))))
+
+(def atom-write-handler
+  (transit/write-handler "clojure-atom"
+                         (fn [o]
+                           (println ::atom-write-handler
+                                    "WARNING: Trying to serialize a(n)"
+                                    (class o))
+                           ;; Q: What's the proper way to
+                           ;; serialize this recursively?
+                           (pr-str @o))))
 
 (s/fdef serialize
   ;; body isn't *really* anything. It has to be something that's
@@ -211,7 +223,9 @@
   (try
     (let [result (ByteArrayOutputStream. 4096)
           handler-map {:handlers {async-protocols/ReadPort async-chan-write-handler
-                                  clojure.core.async.impl.channels.ManyToManyChannel async-chan-write-handler}}
+                                  clojure.core.async.impl.channels.ManyToManyChannel async-chan-write-handler
+                                  clojure.lang.Atom atom-write-handler
+                                  clojure.lang.Agent atom-write-handler}}
           writer (transit/writer result
                                  :json
                                  handler-map)]
@@ -536,7 +550,7 @@
       (catch Exception ex
         (println "Serializing message failed:" ex)))
     (do
-      (println "No such world")
+      (println "World not connected")
       (throw (ex-info "Trying to POST to unconnected Session"
                       {::pending (::pending @sessions)
                        ::world-id session-id
@@ -658,11 +672,11 @@
 (defn post-message!
   "Forward value to the associated World"
   ([session-id world-key action value]
-   (println "post-message! with value" value)
+   (println ::post-message! " with value " value)
    (let [wrapper (do-wrap-message world-key action value)]
      (post-real-message! session-id world-key wrapper)))
   ([session-id world-key action]
-   (println "post-message! without value")
+   (println ::post-message! " without value")
    (let [wrapper (do-wrap-message world-key action)]
      (post-real-message! session-id world-key wrapper))))
 

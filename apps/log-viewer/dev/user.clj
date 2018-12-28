@@ -120,8 +120,9 @@
 (defn build-client-description
   [server]
   (require 'backend.system)
-  (let [config (build-client-config server)]
-    (backend.system/client-ctor config)))
+  (let [config (build-client-config server)
+        ctor (resolve 'backend.system/client-ctor)]
+    (ctor config)))
 
 (defn start-client
   [server]
