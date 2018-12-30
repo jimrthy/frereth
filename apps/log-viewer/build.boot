@@ -117,7 +117,7 @@
                                                                        org.clojure/tools.reader]]
 
                             ;; Backend
-                            [com.frereth/cp "0.0.5-g1ab2285"]
+                            [com.frereth/cp "0.0.5"]
                             [integrant "0.8.0-alpha2" :exclusions [org.clojure/clojure
                                                                    org.clojure/core.specs.alpha
                                                                    org.clojure/spec.alpha]]
