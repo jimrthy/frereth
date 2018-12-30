@@ -122,6 +122,10 @@
                                     ;; That would be extremely presumptuous and
                                     ;; wasteful, even for a project as
                                     ;; extravagant as this one.
+                                    ;; (The fact that that's what I want
+                                    ;; to build/use isn't justification
+                                    ;; to impose that overhead on anyone
+                                    ;; else.
                                     "application/ecmascript"))
                 (do
                   (println ::create-world "Missing")

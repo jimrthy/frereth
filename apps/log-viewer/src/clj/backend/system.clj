@@ -211,6 +211,11 @@
 
 (defn ctor [opts]
   "Set up monitor/server/client all at once"
-  (let [monitor (monitoring-ctor opts)
-        server (server-ctor (into opts monitor))]
-    (client-ctor (into opts server))))
+  (as-> opts component
+    (monitoring-ctor component)
+    (server-ctor (into opts component))
+    ;; This doesn't seem all that realistic.
+    ;; In reality, we don't want a Client adding encryption and network
+    ;; hops to localhost.
+    ;; But it's a start.
+    (client-ctor (into opts component))))

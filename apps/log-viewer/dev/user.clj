@@ -30,13 +30,16 @@
              [generators :as lo-gen]]
             ;; These are moderately useless under boot.
             [clojure.tools.namespace.repl :refer (refresh refresh-all)]
-            [frereth.cp.message :as msg]
-            [frereth.cp.shared :as cp-shared]
+            [frereth.cp
+             [message :as msg]
+             [shared :as cp-shared]]
+            [frereth.cp.client.state :as client-state]
             [frereth.cp.shared
              [bit-twiddling :as b-t]
              [specs :as shared-specs]
              [util :as util]]
             [frereth.weald
+             [logger-macro :as l-mac]
              [logging :as log]
              [specs :as weald]]
             [integrant.core :as ig]
@@ -47,7 +50,8 @@
              [stream :as strm]]
             [integrant.core :as ig]
             [renderer.lib :as renderer]
-            [client.networking :as client-net]))
+            [client.networking :as client-net]
+            [frereth.cp.client.state :as client-state]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Magic Numbers
@@ -77,7 +81,12 @@
   (async/put! (-> ig-state/system
                   :backend.system/log-chan
                   :backend.system/ch)
-              "log message")
+              "log message"
+              (fn [success?]
+                (println "Putting log message succeeded?" success?)))
+  (-> ig-state/system
+      :client.propagate/monitor
+      :client.propagate/registration-handler)
 
   ;; UDP port creation is blocking. Experiment to see
   ;; what the smallest use-case really looks like.
@@ -138,7 +147,32 @@
   (class client)
   (nil? client)
   (+ 1 3)
+  (-> client :client.networking/connection ::client-state/state keys)
+  (-> client :client.networking/connection ::client-state/state ::weald/state)
+  (-> client :client.networking/connection ::client-state/state ::weald/logger :subordinates
+      (get 0))
+  (-> client :client.networking/connection ::client-state/state ::weald/logger)
   (ig/halt! client)
+
+  (let [log-state (-> client :client.networking/connection ::client-state/state ::weald/state)
+        logger (-> client :client.networking/connection ::client-state/state ::weald/logger)]
+    (log/flush-logs! logger
+                     (log/debug log-state
+                                ::repl
+                                "Where is this going?")))
+  (let [ch (-> client :client.networking/connection ::client-state/state ::weald/logger :subordinates
+               (get 0) :channel)
+        entry (l-mac/build-log-entry ::repl
+                                     (-> client :client.networking/connection ::client-state/state ::weald/state :lamport)
+                                     ::weald/debug
+                                     "Where does this go?")
+        cb (fn [result?]
+             (println "Put result:" result?))]
+    (async/put! ch entry cb))
+
+  (let [ch (-> client :client.networking/connection ::client-state/state ::weald/logger :subordinates
+               (get 0) :channel)]
+    (async/alts!! [ch (async/timeout 100)] :default ::beat-timeout))
   )
 
 

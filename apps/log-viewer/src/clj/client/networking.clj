@@ -140,10 +140,13 @@
                          ->child)
       (catch Exception ex
         (try
-          (log/flush-logs! logger (log/exception log-state
-                                                 ex
-                                                 ::init-key
-                                                 opts))
+          (let [log-state
+                (log/flush-logs! logger (log/exception log-state
+                                                       ex
+                                                       ::init-key
+                                                       opts))]
+            {::client-state/state {::weald/logger logger
+                                   ::weald/state log-state}})
           (catch Exception ex1
             (println "Double jeopardy failure\n"
                      ex1

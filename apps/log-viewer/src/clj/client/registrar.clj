@@ -47,8 +47,8 @@
   ;; function for acquiring the source code.
   :args (s/cat :command-key :frereth/command
                :ctor :frereth/world-connector)
-  :ret boolean?)
-(defn do-register-world
+  :ret :frereth/world-connector)
+(defn do-register-world-creator
   "Registers a command to run on world connection
 
   Returns falsey if the command is already registered"
@@ -85,4 +85,23 @@
 (defn lookup
   "Return World constructor for command-key if session-id can run it"
   [session-id command-key]
+  (comment
+    ;; Should look something like
+    (let [actual-key
+          (if (authorized? session-id command-key)
+            command-key
+            ;; Q: Would ::not-found be better?
+            ;; Actually, there are 2 angles to this.
+            ;; On a Linux box, if the user can't even read the directory
+            ;; where a command exists, they'd get a ::not-found.
+            ;; If they can see the command but aren't allowed to run it,
+            ;; they'd get a ::forbidden.
+            ;; This brings up a fundamental point that frereth really
+            ;; needs some sort of concept of locations similar to a file
+            ;; system hierarchy in addition to a permissions system.
+            ;; There's an additional point that commands get much more
+            ;; interesting when you can supply arguments and connect
+            ;; pipes.
+            ::forbidden)]
+      (get @registry actual-key)))
   @registry-1)

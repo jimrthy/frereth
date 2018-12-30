@@ -90,6 +90,10 @@
    12 -79 -102 -96
    89 87 -73 116
    66 43 39 -61])
+(comment (vec @minute-key)
+         (vec @previous-minute-key)
+         test-key
+         )
 
 ;; TODO: Just track the state with each session.
 ;; Combining them adds extra confusing nesting that just
@@ -109,6 +113,10 @@
          ;; (Then again, that's probably exactly what I'll do when I
          ;; recreate a session, so there are nuances to consider).
          ::pending #{test-key}}))
+(comment
+  (-> sessions deref ::active)
+  (-> sessions deref ::pending)
+  )
 
 (defmulti dispatch!
   "Send message to a World associated with session-id"
@@ -460,7 +468,8 @@
         (do
           (println ::login-realized "Swapping")
           ;; FIXME: Also need to dissoc public-key from the pending set.
-          ;; (current approach is strictly debug-only)
+          ;; (current approach with a hard-coded key that just lives
+          ;; there permanently is strictly debug-only)
           (swap! sessions
                  assoc-in
                  [::active session-key] {::web-socket websocket
@@ -502,7 +511,7 @@
                                                           session-key))))))))
         (do
           (println ::login-realized "Not found")
-          (throw (ex-info "Client trying to complete non-pending connection"
+          (throw (ex-info "Browser trying to complete non-pending connection"
                           {::attempt session-key
                            ::sessions @sessions})))))
     (println ::login-realized

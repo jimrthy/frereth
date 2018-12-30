@@ -32,9 +32,15 @@
   (let [multiplexer (async/mult (:backend.system/ch log-chan))
         ;; Q: What is this?
         ;; It seems like it should actually be a partial
-        registration-handler (registrar/do-register-world ::log-viewer (partial connector multiplexer))]
+        ;; Actually, this part is pretty broken.
+        ;; This returns the function for the Renderer to create a
+        ;; ::log-viewer app when it connects.
+        ;; That isn't awful, but the name is deceptive.
+        registration-handler (registrar/do-register-world-creator ::log-viewer
+                                                                  (partial connector multiplexer))]
     (assoc opts
            ::multiplexer multiplexer
+           ;; FIXME: Come up with a better name for this key
            ::registration-handler registration-handler)))
 
 (defmethod ig/halt-key! ::monitor
