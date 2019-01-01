@@ -40,8 +40,8 @@
 ;; a) immutable (and thus suitable for use as a key in a map)
 ;; and b) directly serializable via transit
 (s/def :frereth/pid any?)
-;; FIXME: This needs to me universally available
-(s/def :frereth/session-id any?)
+;; FIXME: These need to be universally available
+(s/def :frereth/session-id :frereth/pid)
 (s/def :frereth/world-id :frereth/pid)
 
 (s/def ::cookie (s/keys :req [:frereth/pid
@@ -53,7 +53,26 @@
                                         :frereth/lamport
                                         :frereth/world-id]))
 
-(s/def ::world map?)
+(s/def ::time-in-state inst?)
+(s/def ::world-connection-state #{::active
+                                  ::forked
+                                  ::forking
+                                  ::pending})
+;; This is whatever makes sense for the world implementation.
+;; This seems like it will probably always be a map?, but it could very
+;; easily also be a mutable Object (though that seems like a terrible
+;; idea).
+(s/def ::world-internal-state any?)
+(s/def ::world (s/keys :req [::time-in-state
+                             ::world-connection-state
+                             ::world-internal-state]))
+
+(s/def ::session-state #{::active ::pending})
+(s/def :frereth/session (s/merge (s/map-of :frereth/world-id ::world)
+                                 (s/keys :req [::session-state
+                                               ::time-in-state])))
+(s/def ::sessions (s/map-of :frereth/session-id :frereth/session))
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Globals
@@ -101,20 +120,30 @@
 ;; Might be interesting to track deactivated for historical
 ;; comparisons.
 (def sessions
-  (atom {::active {}
-         ;; For now, just hard-code some arbitrary random key as a baby-step.
-         ;; This really needs to be injected here at login.
-         ;; And it also needs to be a map that includes the time added so
-         ;; we can time out the oldest if/when we get overloaded.
-         ;; Although that isn't a great algorithm. Should also track
-         ;; session sources so we can prune back ones that are being
-         ;; too aggressive and trying to open too many world at the
-         ;; same time.
-         ;; (Then again, that's probably exactly what I'll do when I
-         ;; recreate a session, so there are nuances to consider).
-         ::pending #{test-key}}))
+  (atom
+   ;; For now, just hard-code some arbitrary random key as a baby-step.
+   ;; This really needs to be injected here at login.
+   ;; And it also needs to be a map that includes the time added so
+   ;; we can time out the oldest if/when we get overloaded.
+   ;; Although that isn't a great algorithm. Should also track
+   ;; session sources so we can prune back ones that are being
+   ;; too aggressive and trying to open too many world at the
+   ;; same time.
+   ;; (Then again, that's probably exactly what I'll do when I
+   ;; recreate a session, so there are nuances to consider).
+   ;; Here's the real reason the initial implementation was broken
+   ;; into active/pending states at the root of the tree.
+   ;; That allowed me to cheaply use the same key for all
+   ;; sessions, so there was really only one (possibly both
+   ;; pending and active).
+   ;; Moving the session key to the root of the tree and tracking
+   ;; the state this way means I'll have to add the initial
+   ;; connection logic to negotiate this key so it's waiting and
+   ;; ready when the websocket connects.
+   {test-key {::session-state ::pending
+              ::time-in-state (java.time.Instant/now)}}))
 (comment
-  (-> sessions deref ::active)
+  (-> sessions deref ::active ::worlds ::active vals)
   (-> sessions deref ::pending)
   )
 
@@ -149,6 +178,9 @@
                                 :action :frereth/action))
   :ret ::message-envelope)
 ;; Honestly, this should be a Component in the System.
+;; And it needs to interact with the clock from weald
+;; For that matter, the Lamport clock itself is worth its own
+;; Component that this uses.
 (let [lamport (atom 0)]
   (defn do-wrap-message
     ([world-key action]
@@ -253,12 +285,11 @@
 
 (s/fdef get-world-in-active-session
   :args (s/cat :session-id :frereth/session-id
-               :world-key :frereth/world-key
-               :which #{::active ::pending})
+               :world-key :frereth/world-key)
   :ret ::world)
 (defn get-world-in-active-session
-  [session-id world-key which]
-  (get-in @sessions [::active session-id ::worlds which world-key]))
+  [session-id world-key]
+  (get-in @sessions [::active session-id ::worlds world-key]))
 
 (defn deactivate-world!
   [session-id world-key]

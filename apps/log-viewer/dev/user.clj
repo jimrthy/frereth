@@ -163,9 +163,9 @@
   (let [ch (-> client :client.networking/connection ::client-state/state ::weald/logger :subordinates
                (get 0) :channel)
         entry (l-mac/build-log-entry ::repl
-                                     (-> client :client.networking/connection ::client-state/state ::weald/state :lamport)
+                                     (-> client :client.networking/connection ::client-state/state ::weald/state ::weald/lamport)
                                      ::weald/debug
-                                     "Where does this go?")
+                                     "What about an entry build by hand?")
         cb (fn [result?]
              (println "Put result:" result?))]
     (async/put! ch entry cb))
