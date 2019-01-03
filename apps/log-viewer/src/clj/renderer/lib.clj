@@ -5,6 +5,7 @@
             [clojure.pprint :refer [pprint]]
             [clojure.spec.alpha :as s]
             [frereth.cp.shared.crypto :as crypto]
+            [frereth.cp.shared.util :as cp-util]
             ;; Q: Do something interesting with this?
             [integrant.core :as ig]
             [manifold
@@ -19,7 +20,7 @@
             ByteArrayOutputStream]
            java.util.Base64))
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Specs
 
 ;; It's tempting to make this a limited set.
@@ -32,9 +33,6 @@
 (s/def :frereth/action keyword?)
 
 (s/def :frereth/body any?)
-
-(s/def :frereth/lamport integer?)
-
 
 ;; These are really anything that's
 ;; a) immutable (and thus suitable for use as a key in a map)
@@ -68,9 +66,20 @@
                              ::world-internal-state]))
 
 (s/def ::session-state #{::active ::pending})
-(s/def :frereth/session (s/merge (s/map-of :frereth/world-id ::world)
-                                 (s/keys :req [::session-state
-                                               ::time-in-state])))
+;; Think about the way that om-next maintains a stack of states to let
+;; us roll back and forth.
+;; It's tempting to use something like a datomic squuid for the ID
+;; and put them into a list.
+;; It's also tempting to not use this at all...if world states are updating
+;; 60x a second, it seems like this will quicky blow out available RAM.
+;; Not doing so would be premature optimization, but it seems like a
+;; very obvious one.
+(s/def ::state-id :frereth/pid)
+(s/def ::worlds (s/map-of :frereth/world-id ::world))
+(s/def :frereth/session (s/keys :req [::session-state
+                                      ::state-id
+                                      ::time-in-state]
+                                :opt [::worlds]))
 (s/def ::sessions (s/map-of :frereth/session-id :frereth/session))
 
 
@@ -140,11 +149,23 @@
    ;; the state this way means I'll have to add the initial
    ;; connection logic to negotiate this key so it's waiting and
    ;; ready when the websocket connects.
-   {test-key {::session-state ::pending
+   {::state-id (cp-util/random-uuid)
+    ;; It's very tempting to nest these a step further to make them
+    ;; easy/obvious to isolate.
+    test-key {::session-state ::pending
               ::time-in-state (java.time.Instant/now)}}))
 (comment
-  (-> sessions deref ::active ::worlds ::active vals)
-  (-> sessions deref ::pending)
+  (->> sessions
+       deref
+       vals
+       (filter #(= (::session-state %) ::active))
+       ::worlds
+       vals)
+  (->> sessions
+       deref
+       vals
+       (filter #(= (::session-state %) ::pending))
+       ::worlds)
   )
 
 (defmulti dispatch!
@@ -159,6 +180,17 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Internal Implementation
+
+(s/fdef get-active-session
+  :args (s/cat :session-map ::sessions
+               :session-id :frereth/session-id)
+  :ret (s/nilable :frereth/session))
+(defn get-active-session
+  "Returns the active :frereth/session, if any"
+  [session-map session-id]
+  (when-let [session (get session-map session-id)]
+    (when (= (::session-state session) ::active)
+      session)))
 
 (s/fdef deserialize
   :args (s/cat :message-string string?)
@@ -208,7 +240,8 @@
                     ": "
                     message-string
                     " at " local-clock))
-      (if (get-in @sessions [::active session-id])
+      ;; FIXME: Set things up so sessions is another parameter
+      (if (get-active-session @sessions session-id)
         (try
           (let [{:keys [:frereth/body]
                  remote-clock :frereth/lamport
