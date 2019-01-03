@@ -1,23 +1,23 @@
 (ns renderer.lib
   "Library functions specific for the web renderer"
-  (:require [cognitect.transit :as transit]
-            [client.registrar :as registrar]
+  (:require [client.registrar :as registrar]
             [clojure.pprint :refer [pprint]]
             [clojure.spec.alpha :as s]
             [frereth.cp.shared.crypto :as crypto]
-            [frereth.cp.shared.util :as cp-util]
-            ;; Q: Do something interesting with this?
+            ;; TODO: something interesting with this
             [integrant.core :as ig]
             [manifold
              [deferred :as dfrd]
              [stream :as strm]]
             [clojure.java.io :as io]
             [clojure.core.async :as async]
-            [clojure.core.async.impl.protocols :as async-protocols])
+            [renderer
+             [marshalling :as marshall]
+             [sessions :as sessions]]
+            [shared
+             [specs]
+             [lamport :as lamport]])
   (:import clojure.lang.ExceptionInfo
-           [java.io
-            ByteArrayInputStream
-            ByteArrayOutputStream]
            java.util.Base64))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -34,53 +34,16 @@
 
 (s/def :frereth/body any?)
 
-;; These are really anything that's
-;; a) immutable (and thus suitable for use as a key in a map)
-;; and b) directly serializable via transit
-(s/def :frereth/pid any?)
-;; FIXME: These need to be universally available
-(s/def :frereth/session-id :frereth/pid)
-(s/def :frereth/world-id :frereth/pid)
-
 (s/def ::cookie (s/keys :req [:frereth/pid
                               :frereth/state
                               :frereth/world-ctor]))
 
+;; Note that this assumes messages go to a specific world.
+;; Q: How valid is that assumption?
 (s/def ::message-envelope (s/keys :req [:frereth/action
                                         :frereth/body
                                         :frereth/lamport
                                         :frereth/world-id]))
-
-(s/def ::time-in-state inst?)
-(s/def ::world-connection-state #{::active
-                                  ::forked
-                                  ::forking
-                                  ::pending})
-;; This is whatever makes sense for the world implementation.
-;; This seems like it will probably always be a map?, but it could very
-;; easily also be a mutable Object (though that seems like a terrible
-;; idea).
-(s/def ::world-internal-state any?)
-(s/def ::world (s/keys :req [::time-in-state
-                             ::world-connection-state
-                             ::world-internal-state]))
-
-(s/def ::session-state #{::active ::pending})
-;; Think about the way that om-next maintains a stack of states to let
-;; us roll back and forth.
-;; It's tempting to use something like a datomic squuid for the ID
-;; and put them into a list.
-;; It's also tempting to not use this at all...if world states are updating
-;; 60x a second, it seems like this will quicky blow out available RAM.
-;; Not doing so would be premature optimization, but it seems like a
-;; very obvious one.
-(s/def ::state-id :frereth/pid)
-(s/def ::worlds (s/map-of :frereth/world-id ::world))
-(s/def :frereth/session (s/keys :req [::session-state
-                                      ::state-id
-                                      ::time-in-state]
-                                :opt [::worlds]))
-(s/def ::sessions (s/map-of :frereth/session-id :frereth/session))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -102,71 +65,10 @@
   (using the CurveCP, not web, sense of the term)"
   (atom (crypto/random-key)))
 
-(def test-key
-  "Placeholder for crypto key to identify a connection.
-
-  Because I have to start somewhere, and that isn't with
-  key exchange algorithms.
-
-  Mostly, I don't want to copy/paste this any more than I
-  must."
-  [-39 -55 106 103
-   -31 117 120 57
-   -102 12 -102 -36
-   32 77 -66 -74
-   97 29 9 16
-   12 -79 -102 -96
-   89 87 -73 116
-   66 43 39 -61])
 (comment (vec @minute-key)
          (vec @previous-minute-key)
          test-key
          )
-
-;; TODO: Just track the state with each session.
-;; Combining them adds extra confusing nesting that just
-;; leads to pain.
-;; Might be interesting to track deactivated for historical
-;; comparisons.
-(def sessions
-  (atom
-   ;; For now, just hard-code some arbitrary random key as a baby-step.
-   ;; This really needs to be injected here at login.
-   ;; And it also needs to be a map that includes the time added so
-   ;; we can time out the oldest if/when we get overloaded.
-   ;; Although that isn't a great algorithm. Should also track
-   ;; session sources so we can prune back ones that are being
-   ;; too aggressive and trying to open too many world at the
-   ;; same time.
-   ;; (Then again, that's probably exactly what I'll do when I
-   ;; recreate a session, so there are nuances to consider).
-   ;; Here's the real reason the initial implementation was broken
-   ;; into active/pending states at the root of the tree.
-   ;; That allowed me to cheaply use the same key for all
-   ;; sessions, so there was really only one (possibly both
-   ;; pending and active).
-   ;; Moving the session key to the root of the tree and tracking
-   ;; the state this way means I'll have to add the initial
-   ;; connection logic to negotiate this key so it's waiting and
-   ;; ready when the websocket connects.
-   {::state-id (cp-util/random-uuid)
-    ;; It's very tempting to nest these a step further to make them
-    ;; easy/obvious to isolate.
-    test-key {::session-state ::pending
-              ::time-in-state (java.time.Instant/now)}}))
-(comment
-  (->> sessions
-       deref
-       vals
-       (filter #(= (::session-state %) ::active))
-       ::worlds
-       vals)
-  (->> sessions
-       deref
-       vals
-       (filter #(= (::session-state %) ::pending))
-       ::worlds)
-  )
 
 (defmulti dispatch!
   "Send message to a World associated with session-id"
@@ -181,27 +83,6 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Internal Implementation
 
-(s/fdef get-active-session
-  :args (s/cat :session-map ::sessions
-               :session-id :frereth/session-id)
-  :ret (s/nilable :frereth/session))
-(defn get-active-session
-  "Returns the active :frereth/session, if any"
-  [session-map session-id]
-  (when-let [session (get session-map session-id)]
-    (when (= (::session-state session) ::active)
-      session)))
-
-(s/fdef deserialize
-  :args (s/cat :message-string string?)
-  :ret bytes?)
-(defn deserialize
-  [message-string]
-  (let [message-bytes (.getBytes message-string)
-        in (ByteArrayInputStream. message-bytes)
-        reader (transit/reader in :json)]
-    (transit/read reader)))
-
 (s/fdef do-wrap-message
   :args (s/or :with-body (s/cat :world-key :frereth/world-id
                                 :action :frereth/action
@@ -210,9 +91,10 @@
                                 :action :frereth/action))
   :ret ::message-envelope)
 ;; Honestly, this should be a Component in the System.
-;; And it needs to interact with the clock from weald
-;; For that matter, the Lamport clock itself is worth its own
-;; Component that this uses.
+;; And it needs to interact with the clock from weald.
+;; TODO: Switch to using a :shared.lamport/clock.
+;; Interestingly enough, that makes it tempting to convert both
+;; do-wrap-message and on-message into a Protocol.
 (let [lamport (atom 0)]
   (defn do-wrap-message
     ([world-key action]
@@ -226,103 +108,48 @@
            (assoc (do-wrap-message world-key action)
                   :frereth/body value)]
        (println "Adding" value "to message")
-       result)))
+       result))))
 
-  (defn on-message
-    "Deserialize and dispatch a raw message from browser"
-    [session-id message-string]
-    ;; Q: Could I avoid a layer of indirection and just
-    ;; have this body be the dispactch function for the dispatch!
-    ;; multi?
-    (let [local-clock (swap! lamport inc)]
-      (println (str "Incoming message from "
-                    session-id
-                    ": "
-                    message-string
-                    " at " local-clock))
-      ;; FIXME: Set things up so sessions is another parameter
-      (if (get-active-session @sessions session-id)
-        (try
-          (let [{:keys [:frereth/body]
-                 remote-clock :frereth/lamport
-                 :as wrapper} (deserialize message-string)]
-            (when (> remote-clock local-clock)
-              (println "Remote clock is ahead. Skip past to " remote-clock)
-              (reset! lamport (inc remote-clock)))
-            ;; The actual point.
-            ;; It's easy to miss this in the middle of the error handling.
-            ;; Which is one reason this is worth keeping separate from the
-            ;; dispatching code.
-            (dispatch! session-id body))
-          (catch Exception ex
-            (println ex "trying to deserialize/dispatch" message-string)))
-        ;; This consumes messages from the websocket associated
-        ;; with public-key until that websocket closes.
-        (println "This should be impossible\n"
-                 "No"
-                 session-id
-                 "\namong\n"
-                 (keys (::active @sessions))
-                 "\nPending:\n"
-                 (::pending @sessions))))))
+(s/fdef on-message!
+  :args (s/cat :clock ::lamport/clock
+               :session-id ::sessions/session-id
+               :message-string string?)
+  ;; Called for side-effects
+  :ret any?)
+(defn on-message!
+  "Deserialize and dispatch a raw message from browser"
+  [clock session-id message-string]
+  ;; Q: Would it make sense to avoid a layer of indirection and just
+  ;; have this body be the dispactch function for the dispatch!
+  ;; multi?
 
-(def async-chan-write-handler
-  "This really shouldn't be needed"
-  (transit/write-handler "async-chan"
-                         (fn [o]
-                           (println ::async-chan-write-handler
-                                    "WARNING: trying to serialize a(n)"
-                                    (class o))
-                           (pr-str o))))
-
-(def atom-write-handler
-  (transit/write-handler "clojure-atom"
-                         (fn [o]
-                           (println ::atom-write-handler
-                                    "WARNING: Trying to serialize a(n)"
-                                    (class o))
-                           ;; Q: What's the proper way to
-                           ;; serialize this recursively?
-                           (pr-str @o))))
-
-(s/fdef serialize
-  ;; body isn't *really* anything. It has to be something that's
-  ;; directly serializable via transit.
-  :args (s/cat :body any?)
-  :ret bytes?)
-(defn serialize
-  [body]
-  ;; Q: Useful size?
-  (try
-    (let [result (ByteArrayOutputStream. 4096)
-          handler-map {:handlers {async-protocols/ReadPort async-chan-write-handler
-                                  clojure.core.async.impl.channels.ManyToManyChannel async-chan-write-handler
-                                  clojure.lang.Atom atom-write-handler
-                                  clojure.lang.Agent atom-write-handler}}
-          writer (transit/writer result
-                                 :json
-                                 handler-map)]
-      (transit/write writer body)
-      (.toByteArray result))))
-
-(comment
-  (String. (serialize "12345" {:a 1 :b 2 :c 3}))
-  (try
-    (let [result (ByteArrayOutputStream. 4096)
-          writer (transit/writer result :json)]
-      (transit/write writer {::ch (async/chan)})
-      (.toByteArray result))
-    (catch RuntimeException ex
-      (println "Caught" ex)))
-  )
-
-(s/fdef get-world-in-active-session
-  :args (s/cat :session-id :frereth/session-id
-               :world-key :frereth/world-key)
-  :ret ::world)
-(defn get-world-in-active-session
-  [session-id world-key]
-  (get-in @sessions [::active session-id ::worlds world-key]))
+  ;; FIXME: Set things up so sessions is another parameter to on-message
+  ;; rather than this sort of global
+  (if (sessions/get-active-session @sessions/sessions session-id)
+    (try
+      (let [{:keys [:frereth/body]
+             remote-clock :frereth/lamport
+             :as wrapper} (marshall/deserialize message-string)
+            local-clock (lamport/do-tick clock remote-clock)]
+        ;; The actual point.
+        ;; It's easy to miss this in the middle of the error handling.
+        ;; Which is one reason this is worth keeping separate from the
+        ;; dispatching code.
+        (dispatch! session-id body))
+      (catch Exception ex
+        (println ex "trying to deserialize/dispatch" message-string)))
+    (do
+      (lamport/do-tick clock)
+      ;; This consumes messages from the websocket associated
+      ;; with public-key until that websocket closes.
+      (println "This should be impossible\n"
+               "No"
+               session-id
+               "\namong\n"
+               (keys (::active @sessions))
+               "\nPending:\n"
+               (::pending @sessions)
+               "\nat" @clock))))
 
 (defn deactivate-world!
   [session-id world-key]
@@ -342,14 +169,6 @@
                                         (conj key-chain k)
                                         v))]
     (get-in result-holder key-chain)))
-
-(defn get-active-world
-  [session-id world-key]
-  (get-world-in-active-session session-id world-key ::active))
-
-(defn get-pending-world
-  [session-id world-key]
-  (get-world-in-active-session session-id world-key ::pending))
 
 (defn activate-pending-world!
   [session-id world-key]
@@ -398,7 +217,7 @@
   (let [dscr {:frereth/pid world-key
               :frereth/session-id session-id
               :frereth/world-ctor command}
-        world-system-bytes (serialize dscr)]
+        world-system-bytes (marshall/serialize dscr)]
     ;; TODO: This needs to be encrypted by the current minute
     ;; key before we encode it.
     ;; Q: Is it worth keeping a copy of the encoder around persistently?
@@ -415,7 +234,7 @@
              (class cookie-string)
              "from"
              cookie-bytes "a" (class cookie-bytes))
-    (deserialize cookie-string)))
+    (marshall/deserialize cookie-string)))
 
 (defmethod dispatch! :default
   [session-id
@@ -521,7 +340,7 @@
   (println ::login-realized "Received initial websocket message:" wrapper)
   (if (and (not= ::drained wrapper)
            (not= ::timed-out wrapper))
-    (let [envelope (deserialize wrapper)
+    (let [envelope (marshall/deserialize wrapper)
           _ (println ::login-realized "Key pulled:" envelope)
           session-key (:frereth/body envelope)]
       (println ::login-realized "Trying to move\n" session-key
@@ -609,7 +428,7 @@
                           ::active
                           (get session-id))]
     (try
-      (let [envelope (serialize wrapper)]
+      (let [envelope (marshall/serialize wrapper)]
         (try
           (let [success (strm/try-put! (::web-socket connection)
                                        envelope
