@@ -1,7 +1,6 @@
 (ns shared.lamport
   "Think about splitting a singleton clock into a Component"
   (:require [clojure.spec.alpha :as s]
-            [frereth.cp.shared.specs :as cp-specs]
             [integrant.core :as ig]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -9,7 +8,8 @@
 
 (s/def :frereth/lamport integer?)
 
-(s/def ::clock (s/and (cp-specs/class-predicate clojure.lang.Atom)
+(s/def ::clock (s/and #?(:clj #(instance? clojure.lang.Atom %))
+                      #?(:cljs #(= (type %) Atom))
                       ;; Q: Is s/conform more appropriate than s/valid?
                       ;; here?
                       #(s/conform :frereth/lamport (deref %))))
