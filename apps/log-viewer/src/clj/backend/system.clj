@@ -17,7 +17,7 @@
             [frereth.cp.shared :as shared]
             [frereth.cp.shared.crypto :as crypto]
             [frereth.cp.client.state :as client-state]
-            [shared.lamport]))
+            [shared.lamport :as lamport]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Magic Constants
@@ -197,7 +197,8 @@
   ;; This flies in the face of the fundamental principle that a System
   ;; should really be an atomic whole, but that's the basic reality of
   ;; what I'm building here.
-  {:backend.web.server/web-server (::web-server opts)
+  {:backend.web.server/web-server (into {::lamport/clock (ig/ref ::lamport/clock)}
+                                        (::web-server opts))
    ::log-chan (::log-chan opts)
    ;; Note that this is really propagating the Server logs.
    ;; The Client logs are really quite different...though it probably
@@ -208,7 +209,7 @@
    ;; Surely both server and client need access to this.
    ;; The renderer/session manager definitely does.
    ;; TODO: spread it out
-   :shared.lamport/clock (::clock opts)
+   ::lamport/clock (::clock opts)
    ;; FIXME: Can I get away with just storing a logger instance here?
    ;; And is there any real reason not to?
    ::weald/logger (into {::chan (ig/ref ::log-chan)}

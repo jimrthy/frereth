@@ -72,7 +72,8 @@
 
 (defmulti dispatch!
   "Send message to a World associated with session-id"
-  (fn [session-id {:keys [:frereth/action]
+  (fn [session  ; ::sessions/sessions
+       session-id {:keys [:frereth/action]
                    :as body}]
     action))
 
@@ -94,7 +95,7 @@
 ;; And it needs to interact with the clock from weald.
 ;; TODO: Switch to using a :shared.lamport/clock.
 ;; Interestingly enough, that makes it tempting to convert both
-;; do-wrap-message and on-message into a Protocol.
+;; do-wrap-message and on-message! into a Protocol.
 (let [lamport (atom 0)]
   (defn do-wrap-message
     ([world-key action]
@@ -135,7 +136,7 @@
         ;; It's easy to miss this in the middle of the error handling.
         ;; Which is one reason this is worth keeping separate from the
         ;; dispatching code.
-        (dispatch! session-id body))
+        (swap! sessions/sessions dispatch! session-id body))
       (catch Exception ex
         (println ex "trying to deserialize/dispatch" message-string)))
     (do
@@ -146,35 +147,79 @@
                "No"
                session-id
                "\namong\n"
-               (keys (::active @sessions))
+               (keys (::active @sessions/sessions))
                "\nPending:\n"
-               (::pending @sessions)
+               (::pending @sessions/sessions)
                "\nat" @clock))))
 
 (defn deactivate-world!
   [session-id world-key]
   ;; This would be significantly easier if I just tracked the state in
   ;; the world rather than different parts of this tree.
-  (swap! sessions
+  (swap! sessions/sessions
          #(update-in % [::active session-id ::worlds ::active]
                      dissoc
                      world-key)))
 
+(s/fdef assoc-active-world
+  :args (s/cat :sessions ::sessions
+               :session-id :frereth/session-id
+               :world-key :frereth/world-key
+               ;; Well, any immutable value.
+               ;; Although, in practice, this will probably generally be
+               ;; keyword?
+               ;; Note that this is really a leftover from the initial
+               ;; implementation that assumed the world state would be a
+               ;; hashmap.
+               ;; I've since come to the realization that that
+               ;; assumption isn't really a valid starting point for
+               ;; generic usefulness.
+               ;; It probably covers 90-95% of use cases, but it isn't
+               ;; universal.
+               ;; Many end-users, for example, will want to use a Record
+               ;; instead.
+               ;; It seems likely that others will want to use a mutable
+               ;; java Object.
+               ;; So it probably doesn't make sense to take this any
+               ;; further.
+               ;; However:
+               ;; It probably does make sense to write an update
+               ;; function that lets callers supply a callable.
+               ;; And, for that matter, this still makes sense for
+               ;; worlds that are represented by hashmaps. Or that want
+               ;; to just overwrite one of a Record's properties.
+               ;; From that perspective, this should really allow the
+               ;; capability to update multiple key/value pairs at once.
+               ;; Furthermore:
+               ;; This really isn't for the arbitrary world-state.
+               ;; This is for the sake of associating things at this
+               ;; abstraction layer. Such as a ::client.
+               :key any?
+               :value any?)
+  :ret ::sessions)
 (defn assoc-active-world
   "Add a key/value pair to an active world"
-  [session-id world-key k v]
-  (let [key-chain [::active session-id ::worlds ::active world-key]
-        result-holder (swap! sessions
-                             #(assoc-in %
-                                        (conj key-chain k)
-                                        v))]
-    (get-in result-holder key-chain)))
+  [sessions session-id world-key k v]
+  (let [key-chain [::active session-id ::worlds ::active world-key]]
+    (assoc-in sessions
+              (conj key-chain k)
+              v)))
 
-(defn activate-pending-world!
-  [session-id world-key]
-  (if-let [world (get-pending-world session-id world-key)]
+(s/fdef activate-pending-world
+  :args (s/cat :sessions ::sessions
+               :session-id :frereth/session-id
+               :world-key :frereth/world-key)
+  :ret ::sessions)
+(defn activate-pending-world
+  [sessions session-id world-key]
+  (when-let [world (sessions/get-pending-world sessions session-id world-key)]
+    ;; TODO: Caller is responsible for wrapping this in a swap! call.
+    (throw (RuntimeException. "sessions is no longer an atom"))
     (swap! sessions
            (fn [browser-sessions]
+             ;; This is a relic from the time before I decided to
+             ;; track the state inside each individual Session/World.
+             (throw (RuntimeException. "No longer"))
              (-> browser-sessions
                  (assoc-in [::active ::worlds ::active world-key]
                            world)
@@ -237,12 +282,14 @@
     (marshall/deserialize cookie-string)))
 
 (defmethod dispatch! :default
-  [session-id
+  [sessions
+   session-id
    body]
   (println "Unhandled action:" body))
 
 (defmethod dispatch! :frereth/forked
-  [session-id
+  [sessions
+   session-id
    {world-key :frereth/pid
     :keys [:frereth/cookie]
     :as params}]
@@ -254,7 +301,7 @@
   ;; Main point:
   ;; This needs to start up a new System of Component(s) that
   ;; :frereth/forking prepped.
-  (if-let [world (get-pending-world session-id world-key)]
+  (if-let [world (sessions/get-pending-world sessions session-id world-key)]
     (let [{actual-pid :frereth/pid
            actual-session :frereth/session-id
            constructor-key :frereth/world-ctor
@@ -271,9 +318,13 @@
                                       (deactivate-world! session-id world-key)
                                       (post-message! session-id world-key :frereth/disconnect true)))))]
           (post-message! session-id world-key :frereth/ack-forked)
-          (activate-pending-world! session-id world-key)
-          (assoc-active-world session-id world-key
-                              ::client client))
+          (let [session-map (activate-pending-world sessions
+                                                    session-id
+                                                    world-key)]
+            (assoc-active-world sessions
+                                session-id
+                                world-key
+                                ::client client)))
         ;; This could be a misbehaving World.
         ;; Or it could be a nasty bug in the rendering code.
         ;; Well, it would have to be a nasty bug for a World to misbehave
@@ -301,7 +352,7 @@
                            ::expected {:frereth/session session-id
                                        :frereth/world-key world-key}})))))
     (throw (ex-info (str "Need to make world lookup simpler. Could not find")
-                    {::active-session (-> sessions
+                    {::active-session (-> sessions/sessions
                                           deref
                                           ::active
                                           (get session-id))
@@ -310,13 +361,15 @@
                      ::world-key-class (class world-key)}))))
 
 (defmethod dispatch! :frereth/forking
-  [session-id
+  [sessions
+   session-id
    {:keys [:frereth/command
            :frereth/pid]}]
   (if (and command pid)
-    (when-let [session (get-in @sessions [::active session-id])]
+    (when-let [session (sessions/get-active-session sessions session-id)]
       (let [worlds (::worlds session)]
         (if (and worlds
+                 (throw (RuntimeException. "World state is no longer split like this"))
                  (not (contains? (::pending worlds) pid))
                  (not (contains? (::active worlds) pid)))
           ;; TODO: Need to check with the Client registry
@@ -334,22 +387,29 @@
                   pid
                   "'"))))
 
-(defn login-realized
+(s/fdef login-realized!
+  :args (s/cat :lamport ::lamport/clock
+               ;; FIXME: This deserves a named spec
+               :websocket (s/and strm/sink?
+                                 strm/source?)
+               :wrapper string?)
+  :ret any?)
+(defn login-realized!
   "Client has finished its authentication"
-  [websocket wrapper]
-  (println ::login-realized "Received initial websocket message:" wrapper)
+  [lamport websocket wrapper]
+  (println ::login-realized! "Received initial websocket message:" wrapper)
   (if (and (not= ::drained wrapper)
            (not= ::timed-out wrapper))
     (let [envelope (marshall/deserialize wrapper)
-          _ (println ::login-realized "Key pulled:" envelope)
+          _ (println ::login-realized! "Key pulled:" envelope)
           session-key (:frereth/body envelope)]
-      (println ::login-realized "Trying to move\n" session-key
+      (println ::login-realized! "Trying to move\n" session-key
                "a" (class session-key)
                "\nfrom\n"
                (::pending @sessions))
       (if (get (::pending @sessions) session-key)
         (do
-          (println ::login-realized "Swapping")
+          (println ::login-realized! "Swapping")
           ;; FIXME: Also need to dissoc public-key from the pending set.
           ;; (current approach with a hard-coded key that just lives
           ;; there permanently is strictly debug-only)
@@ -358,17 +418,18 @@
                  [::active session-key] {::web-socket websocket
                                          ::worlds {::active {}
                                                    ::pending #{}}})
-          (println ::login-realized "Swapped:")
+          (println ::login-realized! "Swapped:")
           (pprint websocket)
           ;; Set up the message handler
           (let [connection-closed
-                (strm/consume (partial on-message
+                (strm/consume (partial on-message!
+                                       lamport
                                        session-key)
                               websocket)]
             ;; Cope with it closing
             (dfrd/on-realized connection-closed
                               (fn [succeeded]
-                                (println (str ::login-realized
+                                (println (str ::login-realized!
                                               " Socket closed cleanly"
                                               " for session "
                                               session-key
@@ -381,7 +442,7 @@
                                                  #(dissoc %
                                                           session-key)))))
                               (fn [failure]
-                                (println ::login-realized
+                                (println ::login-realized!
                                          "Web socket failed for session"
                                          session-key
                                          ":"
@@ -393,11 +454,11 @@
                                                  #(dissoc %
                                                           session-key))))))))
         (do
-          (println ::login-realized "Not found")
+          (println ::login-realized! "Not found")
           (throw (ex-info "Browser trying to complete non-pending connection"
                           {::attempt session-key
                            ::sessions @sessions})))))
-    (println ::login-realized
+    (println ::login-realized!
              "Waiting for login completion failed:"
              wrapper)))
 
@@ -452,11 +513,12 @@
 ;;;; Public
 
 (s/fdef activate-session!
-  :args (s/cat :connection (s/and strm/sink?
+  :args (s/cat :lamport-clock ::lamport/clock
+               :connection (s/and strm/sink?
                                   strm/source?)))
 (defn activate-session!
   "Browser is trying to initiate a new Session"
-  [websocket]
+  [lamport-clock websocket]
   (try
     ;; FIXME: Better handshake (need an authentication phase)
     (println ::activate-session!
@@ -475,7 +537,7 @@
       ;; TODO: Check this FSM handshake with stack overflow's security
       ;; board.
       (dfrd/on-realized first-response
-                        (partial login-realized websocket)
+                        (partial login-realized! lamport-clock websocket)
                         (fn [error]
                           (println ::activate-session!
                                    "Failed pulling initial key:" error))))

@@ -133,6 +133,11 @@
   [sessions session-id world-key]
   (get-world-in-active-session session-id world-key ::active))
 
+(s/fdef get-pending-world
+  :args (s/cat :sessions ::sessions
+               :session-id :frereth/session-id
+               :world-key :frereth/world-key)
+  :ret (s/nilable ::world/world))
 (defn get-pending-world
-  [session-id world-key]
-  (get-world-in-active-session session-id world-key ::pending))
+  [sessions session-id world-key]
+  (get-world-in-active-session sessions session-id world-key ::pending))

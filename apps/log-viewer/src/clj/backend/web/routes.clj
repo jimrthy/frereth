@@ -7,27 +7,39 @@
    [clojure.edn :as edn]
    [clojure.java.io :as io]
    [clojure.pprint :refer [pprint]]
+   [clojure.spec.alpha :as s]
    [hiccup.core :refer [html]]
    [hiccup.page :refer [html5 include-js include-css]]
    [manifold.deferred :as dfrd]
    [manifold.stream :as strm]
    [renderer.lib :as lib]
    [ring.util.response :as rsp]
-   [clojure.edn :as edn])
+   [shared.lamport :as lamport])
   (:import clojure.lang.ExceptionInfo))
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; Specs
+
+;;; I know I've written a spec for this at some point or other.
+;;; FIXME: Track that down so I don't need to duplicate it.
+(s/def ::ring-request map?)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Internal Helpers
 
 (def non-websocket-request
   (rsp/bad-request "Expected a websocket request"))
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Handlers
 ;;;; These really belong in their own ns[es]
 
+(s/fdef connect-renderer
+  :args (s/cat :lamport-clock ::lamport/clock
+               :request ::ring-request)
+  :ret dfrd/deferred?)
 (defn connect-renderer
-  [request]
+  [lamport-clock request]
   (try
     (println "connect-renderer: Request from\n"
              (:remote-addr request))
@@ -38,7 +50,7 @@
                                  (fn [_] nil))]
     (println "connect-renderer: websocket upgrade: '" websocket "'")
     (if websocket
-      (lib/activate-session! websocket)
+      (lib/activate-session! lamport-clock websocket)
       non-websocket-request)))
 
 (defn create-world
@@ -200,18 +212,22 @@
 ;; dynamically so this can reload without restarting the entire
 ;; system
 
-;; Note: when running uberjar from project dir, it is
-;; possible that the dev-output dir exists.
-(def routes ["/" {"js/" (if (.exists (io/file "dev-output/js"))
-                          (ring/->Files {:dir "dev-output/js"})
-                          (ring/->Resources {:prefix "js"}))
-                  "css/" (if (.exists (io/file "dev-output/css"))
-                           (ring/->Files {:dir "dev-output/js"})
-                           (ring/->Resources {:prefix "css"}))
-                  #{"" "index" "index.html"} (bidi/tag index-page ::index)
-                  "api/" {"fork" (bidi/tag create-world ::connect-world)}
-                  "echo" (bidi/tag echo-page ::echo)
-                  "test" (bidi/tag test-page ::test)
-                  "ws" (bidi/tag connect-renderer ::renderer-ws)}])
+(s/fdef build-routes
+  :args (s/cat :lamport-clock ::lamport/clock))
+(defn build-routes
+  [lamport-clock]
+  ;; Note: when running uberjar from project dir, it is
+  ;; possible that the dev-output dir exists.
+  ["/" {"js/" (if (.exists (io/file "dev-output/js"))
+                (ring/->Files {:dir "dev-output/js"})
+                (ring/->Resources {:prefix "js"}))
+        "css/" (if (.exists (io/file "dev-output/css"))
+                 (ring/->Files {:dir "dev-output/js"})
+                 (ring/->Resources {:prefix "css"}))
+        #{"" "index" "index.html"} (bidi/tag index-page ::index)
+        "api/" {"fork" (bidi/tag create-world ::connect-world)}
+        "echo" (bidi/tag echo-page ::echo)
+        "test" (bidi/tag test-page ::test)
+        "ws" (bidi/tag (partial connect-renderer lamport-clock) ::renderer-ws)}])
 (comment
-  (bidi/match-route routes "/"))
+  (bidi/match-route (build-routes nil) "/"))
