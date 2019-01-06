@@ -109,20 +109,19 @@
 
 (s/fdef on-message!
   :args (s/cat :clock ::lamport/clock
+               :session-atom ::sessions/session-atom
                :session-id ::sessions/session-id
                :message-string string?)
   ;; Called for side-effects
   :ret any?)
 (defn on-message!
   "Deserialize and dispatch a raw message from browser"
-  [clock session-id message-string]
+  [clock session-atom session-id message-string]
   ;; Q: Would it make sense to avoid a layer of indirection and just
   ;; have this body be the dispactch function for the dispatch!
   ;; multi?
 
-  ;; FIXME: Set things up so sessions is another parameter to on-message
-  ;; rather than this sort of global
-  (if (sessions/get-active-session @sessions/sessions session-id)
+  (if (sessions/get-active-session @session-atom session-id)
     (try
       (let [{:keys [:frereth/body]
              remote-clock :frereth/lamport
@@ -132,7 +131,7 @@
         ;; It's easy to miss this in the middle of the error handling.
         ;; Which is one reason this is worth keeping separate from the
         ;; dispatching code.
-        (swap! sessions/sessions dispatch! session-id body))
+        (swap! session-atom dispatch! session-id body))
       (catch Exception ex
         (println ex "trying to deserialize/dispatch" message-string)))
     (do
@@ -143,16 +142,16 @@
                "No"
                session-id
                "\namong\n"
-               (keys (::active @sessions/sessions))
+               (keys (::active @session-atom))
                "\nPending:\n"
-               (::pending @sessions/sessions)
+               (::pending @session-atom)
                "\nat" @clock))))
 
 (defn deactivate-world!
-  [session-id world-key]
-  ;; This would be significantly easier if I just tracked the state in
-  ;; the world rather than different parts of this tree.
-  (swap! sessions/sessions
+  [session-atom session-id world-key]
+  ;; TODO: Refactor/move this into the sessions ns
+  (throw (RuntimeException. "Rearranged the way session state as managed"))
+  (swap! session-atom
          #(update-in % [::active session-id ::worlds ::active]
                      dissoc
                      world-key)))
@@ -419,8 +418,7 @@
                            ::expected {:frereth/session session-id
                                        :frereth/world-key world-key}})))))
     (throw (ex-info (str "Need to make world lookup simpler. Could not find")
-                    {::active-session (-> sessions/sessions
-                                          deref
+                    {::active-session (-> sessions
                                           ::active
                                           (get session-id))
                      ::among params
@@ -494,6 +492,7 @@
           (let [connection-closed
                 (strm/consume (partial on-message!
                                        lamport
+                                       session-atom
                                        session-key)
                               websocket)]
             ;; Cope with it closing

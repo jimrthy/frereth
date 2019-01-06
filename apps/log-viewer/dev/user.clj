@@ -51,7 +51,8 @@
             [integrant.core :as ig]
             [renderer.lib :as renderer]
             [client.networking :as client-net]
-            [frereth.cp.client.state :as client-state]))
+            [frereth.cp.client.state :as client-state]
+            [renderer.sessions :as sessions]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Magic Numbers
@@ -205,3 +206,22 @@
   (ig-repl/set-prep! #(initialize opts)))
 
 (println "Run (setup-monitor! {}) and then (go) to start the Monitor")
+
+(comment
+  (->> ig-state/system
+       ::sessions/session-atom
+       deref)
+  (->> ig-state/system
+       ::sessions/session-atom
+       deref
+       vals
+       (filter #(= (::sessions/session-state %) ::sessions/active))
+       ::sessions/worlds
+       vals)
+  (->> ig-state/system
+       ::sessions/session-atom
+       deref
+       vals
+       (filter #(= (::sessions/session-state %) ::sessions/pending))
+       ::sessions/worlds)
+  )

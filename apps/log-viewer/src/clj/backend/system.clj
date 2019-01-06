@@ -5,18 +5,20 @@
              [networking :as client-net]
              [propagate :as propagate]]
             [clojure.core.async :as async]
-            [server.networking]
+            [clojure.spec.alpha :as s]
             [frereth.weald
              [logging :as log]
              [specs :as weald]]
             [integrant.core :as ig]
             [frereth.cp.message.specs :as msg-specs]
-            [frereth.cp.shared.specs :as shared-specs]
-            [clojure.spec.alpha :as s]
             [frereth.cp.client :as client]
-            [frereth.cp.shared :as shared]
-            [frereth.cp.shared.crypto :as crypto]
             [frereth.cp.client.state :as client-state]
+            [frereth.cp.shared :as shared]
+            [frereth.cp.shared
+             [crypto :as crypto]
+             [specs :as shared-specs]]
+            [renderer.sessions :as sessions]
+            [server.networking]
             [shared.lamport :as lamport]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -199,6 +201,10 @@
   ;; what I'm building here.
   {:backend.web.server/web-server (into {::lamport/clock (ig/ref ::lamport/clock)}
                                         (::web-server opts))
+   ;; Surely both server and client need access to this.
+   ;; The renderer/session manager definitely does.
+   ;; TODO: spread it out
+   ::lamport/clock (::clock opts)
    ::log-chan (::log-chan opts)
    ;; Note that this is really propagating the Server logs.
    ;; The Client logs are really quite different...though it probably
@@ -206,10 +212,7 @@
    ;; implementation.
    ::propagate/monitor (into {::propagate/log-chan (ig/ref ::log-chan)}
                              (::monitor opts))
-   ;; Surely both server and client need access to this.
-   ;; The renderer/session manager definitely does.
-   ;; TODO: spread it out
-   ::lamport/clock (::clock opts)
+   ::sessions/session-atom (::sessions/session-atom opts)
    ;; FIXME: Can I get away with just storing a logger instance here?
    ;; And is there any real reason not to?
    ::weald/logger (into {::chan (ig/ref ::log-chan)}

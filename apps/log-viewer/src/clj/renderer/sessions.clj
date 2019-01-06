@@ -6,6 +6,7 @@
   ;; Each Session here really represents a browser connection/websocket.
   (:require [clojure.spec.alpha :as s]
             [frereth.cp.shared.util :as cp-util]
+            [integrant.core :as ig]
             [renderer.world :as world]
             [shared.specs :as specs]))
 
@@ -25,6 +26,8 @@
 ;; very obvious one.
 (s/def ::state-id :frereth/pid)
 
+;; Might be interesting to track deactivated sessions for historical
+;; comparisons.
 (s/def ::session-state #{::active ::pending})
 
 (s/def :frereth/session (s/keys :req [::session-state
@@ -55,48 +58,6 @@
    12 -79 -102 -96
    89 87 -73 116
    66 43 39 -61])
-
-;; Might be interesting to track deactivated sessions for historical
-;; comparisons.
-(def sessions
-  (atom
-   ;; For now, just hard-code some arbitrary random key as a baby-step.
-   ;; This really needs to be injected here at login.
-   ;; And it also needs to be a map that includes the time added so
-   ;; we can time out the oldest if/when we get overloaded.
-   ;; Although that isn't a great algorithm. Should also track
-   ;; session sources so we can prune back ones that are being
-   ;; too aggressive and trying to open too many world at the
-   ;; same time.
-   ;; (Then again, that's probably exactly what I'll do when I
-   ;; recreate a session, so there are nuances to consider).
-   ;; Here's the real reason the initial implementation was broken
-   ;; into active/pending states at the root of the tree.
-   ;; That allowed me to cheaply use the same key for all
-   ;; sessions, so there was really only one (possibly both
-   ;; pending and active).
-   ;; Moving the session key to the root of the tree and tracking
-   ;; the state this way means I'll have to add the initial
-   ;; connection logic to negotiate this key so it's waiting and
-   ;; ready when the websocket connects.
-   {::state-id (cp-util/random-uuid)
-    ;; It's very tempting to nest these a step further to make them
-    ;; easy/obvious to isolate.
-    test-key {::session-state ::pending
-              ::time-in-state (java.time.Instant/now)}}))
-(comment
-  (->> sessions
-       deref
-       vals
-       (filter #(= (::session-state %) ::active))
-       ::worlds
-       vals)
-  (->> sessions
-       deref
-       vals
-       (filter #(= (::session-state %) ::pending))
-       ::worlds)
-  )
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Internal Implementation
@@ -135,6 +96,34 @@
                                                 world-key)]
     (when (world/state-match? world state)
       world)))
+
+(defmethod ig/init-key ::session-atom
+  [_ _]
+  (atom
+   ;; For now, just hard-code some arbitrary random key as a baby-step.
+   ;; This really needs to be injected here at login.
+   ;; And it also needs to be a map that includes the time added so
+   ;; we can time out the oldest if/when we get overloaded.
+   ;; Although that isn't a great algorithm. Should also track
+   ;; session sources so we can prune back ones that are being
+   ;; too aggressive and trying to open too many world at the
+   ;; same time.
+   ;; (Then again, that's probably exactly what I'll do when I
+   ;; recreate a session, so there are nuances to consider).
+   ;; Here's the real reason the initial implementation was broken
+   ;; into active/pending states at the root of the tree.
+   ;; That allowed me to cheaply use the same key for all
+   ;; sessions, so there was really only one (possibly both
+   ;; pending and active).
+   ;; Moving the session key to the root of the tree and tracking
+   ;; the state this way means I'll have to add the initial
+   ;; connection logic to negotiate this key so it's waiting and
+   ;; ready when the websocket connects.
+   {::state-id (cp-util/random-uuid)
+    ;; It's very tempting to nest these a step further to make them
+    ;; easy/obvious to isolate.
+    test-key {::session-state ::pending
+              ::time-in-state (java.time.Instant/now)}}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Public
