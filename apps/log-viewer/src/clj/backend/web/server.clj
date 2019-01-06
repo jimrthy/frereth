@@ -7,16 +7,19 @@
             [ring.middleware.params :refer [wrap-params]]
             [ring.util.response :refer [redirect]]
             [ring.util.http-response :refer :all]
-            [shared.lamport :as lamport]))
+            [shared.lamport :as lamport]
+            [renderer.sessions :as sessions]))
 
 (defmethod ig/init-key ::web-server
-  [_ {:keys [:port]
+  [_ {:keys [:port
+             ::sessions/session-atom]
       lamport-clock ::lamport/clock
       :as opts}]
   (let [port (or port 10555)
         ;; FIXME: Switch to pedestal. It's supported aleph as a backend
         ;; since 0.5.0.
-        handler (ring/make-handler (routes/build-routes lamport-clock))
+        handler (ring/make-handler (routes/build-routes lamport-clock
+                                                        session-atom))
         ;; TODO: add a logger interceptor
         with-middleware (wrap-params handler)]
     (println "Starting web server on http://localhost:" port "from" opts)

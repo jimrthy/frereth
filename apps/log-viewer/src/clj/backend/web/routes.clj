@@ -12,7 +12,10 @@
    [hiccup.page :refer [html5 include-js include-css]]
    [manifold.deferred :as dfrd]
    [manifold.stream :as strm]
-   [renderer.lib :as lib]
+   [renderer
+    [lib :as lib]
+    [marshalling :as marshall]
+    [sessions :as sessions]]
    [ring.util.response :as rsp]
    [shared.lamport :as lamport])
   (:import clojure.lang.ExceptionInfo))
@@ -36,10 +39,11 @@
 
 (s/fdef connect-renderer
   :args (s/cat :lamport-clock ::lamport/clock
+               :session-atom ::sessions/session-atom
                :request ::ring-request)
   :ret dfrd/deferred?)
 (defn connect-renderer
-  [lamport-clock request]
+  [lamport-clock session-atom request]
   (try
     (println "connect-renderer: Request from\n"
              (:remote-addr request))
@@ -50,9 +54,14 @@
                                  (fn [_] nil))]
     (println "connect-renderer: websocket upgrade: '" websocket "'")
     (if websocket
-      (lib/activate-session! lamport-clock websocket)
+      (lib/activate-session! lamport-clock session-atom websocket)
       non-websocket-request)))
 
+(s/fdef create-world
+  ;; FIXME: Yet again, need specs for ring request/response
+  :args (s/cat :sessionatom ::sessions/session-atom
+               :ring-request any?)
+  :ret any?)
 (defn create-world
   "This is really Step 2 of a World's life cycle.
 
@@ -65,7 +74,8 @@
 
   For the 'real thing,' this should contact the Client and get the
   appropriate code from the Server."
-  [{:keys [:query-params]
+  [session-atom
+   {:keys [:query-params]
     :as request}]
   (try
     (println ::create-world
@@ -84,7 +94,7 @@
           {:keys [:frereth/cookie
                   :frereth/session-id
                   :frereth/world-key]
-           :as initiate} (lib/deserialize initiate-wrapper)]
+           :as initiate} (marshall/deserialize initiate-wrapper)]
       (if (and cookie session-id world-key)
         (do
           (println ::create-world "Trying to decode" cookie
@@ -111,13 +121,17 @@
                      ::world-key world-key
                      ::signature signature})
             (try
-              (if-let [body (lib/get-code-for-world session-id
+              (if-let [body (lib/get-code-for-world @session-atom
+                                                    session-id
                                                     world-key
                                                     cookie)]
                 (do
                   (println ::create-world "Response body:" body)
                   (try
-                    (lib/register-pending-world! session-id world-key cookie)
+                    (lib/register-pending-world! session-atom
+                                                 session-id
+                                                 world-key
+                                                 cookie)
                     (println ::create-world
                              "Registration succeeded. Should be good to go")
                     (catch Throwable ex
@@ -142,8 +156,7 @@
                 (do
                   (println ::create-world "Missing")
                   (pprint {:frereth/session-id session-id
-                           :frereth/world-key world-key
-                           })
+                           :frereth/world-key world-key})
                   (rsp/not-found "Unknown World")))
               (catch ExceptionInfo ex
                 (println "Error retrieving code for World\n" ex)
@@ -213,9 +226,13 @@
 ;; system
 
 (s/fdef build-routes
-  :args (s/cat :lamport-clock ::lamport/clock))
+  :args (s/cat :lamport-clock ::lamport/clock
+               :session-atom ::sessions/atom)
+  ;; FIXME: Track down a spec for this
+  :ret any?)
 (defn build-routes
-  [lamport-clock]
+  [lamport-clock
+   session-atom]
   ;; Note: when running uberjar from project dir, it is
   ;; possible that the dev-output dir exists.
   ["/" {"js/" (if (.exists (io/file "dev-output/js"))
@@ -225,9 +242,12 @@
                  (ring/->Files {:dir "dev-output/js"})
                  (ring/->Resources {:prefix "css"}))
         #{"" "index" "index.html"} (bidi/tag index-page ::index)
-        "api/" {"fork" (bidi/tag create-world ::connect-world)}
+        "api/" {"fork" (bidi/tag (partial create-world
+                                          session-atom) ::connect-world)}
         "echo" (bidi/tag echo-page ::echo)
         "test" (bidi/tag test-page ::test)
-        "ws" (bidi/tag (partial connect-renderer lamport-clock) ::renderer-ws)}])
+        "ws" (bidi/tag (partial connect-renderer
+                                lamport-clock
+                                session-atom) ::renderer-ws)}])
 (comment
   (bidi/match-route (build-routes nil) "/"))

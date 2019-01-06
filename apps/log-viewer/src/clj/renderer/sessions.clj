@@ -33,6 +33,9 @@
                                 :opt [::worlds]))
 (s/def ::sessions (s/map-of :frereth/session-id :frereth/session))
 
+(s/def ::session-atom (s/and #(instance? clojure.lang.Atom %)
+                             #(s/valid? ::sessions (deref %))))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Globals
 
@@ -117,9 +120,21 @@
 (defn get-world-in-active-session
   [sessions session-id world-key]
   (when-let [session (get-active-session sessions session-id)]
-    (-> session
-        ::worlds
-        (get world-key))))
+    (world/get-world (::worlds session) world-key)))
+
+(s/fdef get-world-by-state-in-active-session
+  :args (s/cat :sessions ::sessions
+               :session-id :frereth/session-id
+               :world-key :frereth/world-key
+               :world-state ::world/connection-state)
+  :ret (s/nilable ::world/world))
+(defn get-world-by-state-in-active-session
+  [sessions session-id world-key state]
+  (when-let [world (get-world-in-active-session sessions
+                                                session-id
+                                                world-key)]
+    (when (world/state-match? world state)
+      world)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Public
@@ -131,7 +146,10 @@
   :ret (s/nilable ::world/world))
 (defn get-active-world
   [sessions session-id world-key]
-  (get-world-in-active-session session-id world-key ::active))
+  (get-world-by-state-in-active-session sessions
+                                        session-id
+                                        world-key
+                                        ::world/active))
 
 (s/fdef get-pending-world
   :args (s/cat :sessions ::sessions
@@ -140,4 +158,7 @@
   :ret (s/nilable ::world/world))
 (defn get-pending-world
   [sessions session-id world-key]
-  (get-world-in-active-session sessions session-id world-key ::pending))
+  (get-world-by-state-in-active-session sessions
+                                        session-id
+                                        world-key
+                                        ::world/pending))

@@ -77,10 +77,6 @@
                    :as body}]
     action))
 
-;; The fact that I need to do this makes me more inclined to move the
-;; dispatch! methods into a different ns.
-(declare post-message!)
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Internal Implementation
 
@@ -281,6 +277,69 @@
              cookie-bytes "a" (class cookie-bytes))
     (marshall/deserialize cookie-string)))
 
+(s/fdef post-real-message!
+  :args (s/cat :sessions ::sessions/sessions
+               :sesion-id :frereth/session-id
+               :world-key :frereth/world-key
+               ;; This needs to be anything that we can cleanly
+               ;; serialize
+               :wrapper any?)
+  :ret any?)
+(defn post-real-message!
+  "Forward marshalled value to the associated World"
+  [sessions session-id world-key wrapper]
+  (println (str "Trying to send "
+                wrapper
+                "\nto "
+                world-key
+                "\nin\n"
+                session-id))
+  (if-let [connection (-> sessions
+                          ::active
+                          (get session-id))]
+    (try
+      (let [envelope (marshall/serialize wrapper)]
+        (try
+          (let [success (strm/try-put! (::web-socket connection)
+                                       envelope
+                                       500
+                                       ::timed-out)]
+            (dfrd/on-realized success
+                              #(println "forwarded:" %)
+                              #(println "Forwarding failed:" %)))
+          (catch Exception ex
+            (println "Message forwarding failed:" ex))))
+      (catch Exception ex
+        (println "Serializing message failed:" ex)))
+    (do
+      (println "World not connected")
+      (throw (ex-info "Trying to POST to unconnected Session"
+                      {::pending (::pending @sessions)
+                       ::world-id session-id
+                       ::connected (::active @sessions)})))))
+
+(s/fdef post-message!
+  :args (s/or :with-value (s/cat :sessions ::sessions/sessions
+                                 :session-id :frereth/session-id
+                                 :world-key :frereth/world-id
+                                 :action :frereth/action
+                                 :value :frereth/body)
+              :sans-value (s/cat :sessions ::sessions/sessions
+                                 :session-id :frereth/session-id
+                                 :world-key :frereth/world-id
+                                 :action :frereth/action))
+  :ret any?)
+(defn post-message!
+  "Marshalling wrapper around post-real-message!"
+  ([sessions session-id world-key action value]
+   (println ::post-message! " with value " value)
+   (let [wrapper (do-wrap-message world-key action value)]
+     (post-real-message! sessions session-id world-key wrapper)))
+  ([sessions session-id world-key action]
+   (println ::post-message! " without value")
+   (let [wrapper (do-wrap-message world-key action)]
+     (post-real-message! sessions session-id world-key wrapper))))
+
 (defmethod dispatch! :default
   [sessions
    session-id
@@ -313,11 +372,19 @@
               client (connector world-stop-signal
                                 (fn [raw-message]
                                   (if (not= raw-message world-stop-signal)
-                                    (post-message! session-id world-key :frereth/forward raw-message)
+                                    (post-message! sessions
+                                                   session-id
+                                                   world-key
+                                                   :frereth/forward
+                                                   raw-message)
                                     (do
                                       (deactivate-world! session-id world-key)
-                                      (post-message! session-id world-key :frereth/disconnect true)))))]
-          (post-message! session-id world-key :frereth/ack-forked)
+                                      (post-message! sessions
+                                                     session-id
+                                                     world-key
+                                                     :frereth/disconnect
+                                                     true)))))]
+          (post-message! sessions session-id world-key :frereth/ack-forked)
           (let [session-map (activate-pending-world sessions
                                                     session-id
                                                     world-key)]
@@ -376,7 +443,8 @@
           ;; to verify that command is legal for the current
           ;; session.
           (let [cookie (build-cookie session-id pid command)]
-            (post-message! session-id
+            (post-message! sessions
+                           session-id
                            pid
                            :frereth/ack-forking
                            {:frereth/cookie cookie}))
@@ -389,6 +457,7 @@
 
 (s/fdef login-realized!
   :args (s/cat :lamport ::lamport/clock
+               :session-atom ::sessions/session-atom
                ;; FIXME: This deserves a named spec
                :websocket (s/and strm/sink?
                                  strm/source?)
@@ -396,7 +465,7 @@
   :ret any?)
 (defn login-realized!
   "Client has finished its authentication"
-  [lamport websocket wrapper]
+  [lamport session-atom websocket wrapper]
   (println ::login-realized! "Received initial websocket message:" wrapper)
   (if (and (not= ::drained wrapper)
            (not= ::timed-out wrapper))
@@ -406,14 +475,15 @@
       (println ::login-realized! "Trying to move\n" session-key
                "a" (class session-key)
                "\nfrom\n"
-               (::pending @sessions))
-      (if (get (::pending @sessions) session-key)
+               ;; FIXME: This isn't the way sessions handle state any longer
+               (::pending @session-atom))
+      (if (get (::pending @session-atom) session-key)
         (do
           (println ::login-realized! "Swapping")
           ;; FIXME: Also need to dissoc public-key from the pending set.
           ;; (current approach with a hard-coded key that just lives
           ;; there permanently is strictly debug-only)
-          (swap! sessions
+          (swap! session-atom
                  assoc-in
                  [::active session-key] {::web-socket websocket
                                          ::worlds {::active {}
@@ -435,7 +505,7 @@
                                               session-key
                                               ": "
                                               succeeded))
-                                (swap! sessions
+                                (swap! session-atom
                                        (fn [current]
                                          (update current
                                                  ::active
@@ -447,7 +517,7 @@
                                          session-key
                                          ":"
                                          failure)
-                                (swap! sessions
+                                (swap! session-atom
                                        (fn [current]
                                          (update current
                                                  ::active
@@ -457,7 +527,7 @@
           (println ::login-realized! "Not found")
           (throw (ex-info "Browser trying to complete non-pending connection"
                           {::attempt session-key
-                           ::sessions @sessions})))))
+                           ::sessions @session-atom})))))
     (println ::login-realized!
              "Waiting for login completion failed:"
              wrapper)))
@@ -476,49 +546,17 @@
   (and (= pid world-id)
        (= session-id actual-session-id)))
 
-(defn post-real-message!
-  [session-id world-key wrapper]
-  (println (str "Trying to send "
-                wrapper
-                "\nto "
-                world-key
-                "\nin\n"
-                session-id))
-  (if-let [connection (-> sessions
-                          deref
-                          ::active
-                          (get session-id))]
-    (try
-      (let [envelope (marshall/serialize wrapper)]
-        (try
-          (let [success (strm/try-put! (::web-socket connection)
-                                       envelope
-                                       500
-                                       ::timed-out)]
-            (dfrd/on-realized success
-                              #(println "forwarded:" %)
-                              #(println "Forwarding failed:" %)))
-          (catch Exception ex
-            (println "Message forwarding failed:" ex))))
-      (catch Exception ex
-        (println "Serializing message failed:" ex)))
-    (do
-      (println "World not connected")
-      (throw (ex-info "Trying to POST to unconnected Session"
-                      {::pending (::pending @sessions)
-                       ::world-id session-id
-                       ::connected (::active @sessions)})))))
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Public
 
 (s/fdef activate-session!
   :args (s/cat :lamport-clock ::lamport/clock
+               :session-atom ::sessions/session-atom
                :connection (s/and strm/sink?
                                   strm/source?)))
 (defn activate-session!
   "Browser is trying to initiate a new Session"
-  [lamport-clock websocket]
+  [lamport-clock session-atom websocket]
   (try
     ;; FIXME: Better handshake (need an authentication phase)
     (println ::activate-session!
@@ -537,7 +575,7 @@
       ;; TODO: Check this FSM handshake with stack overflow's security
       ;; board.
       (dfrd/on-realized first-response
-                        (partial login-realized! lamport-clock websocket)
+                        (partial login-realized! lamport-clock session-atom websocket)
                         (fn [error]
                           (println ::activate-session!
                                    "Failed pulling initial key:" error))))
@@ -550,14 +588,15 @@
       (.close websocket))))
 
 (s/fdef get-code-for-world
-  :args (s/cat :session-id :frereth/session-id
+  :args (s/cat :sessions ::sessions/sessions
+               :session-id :frereth/session-id
                :world-key :frereth/world-id
                :cookie-bytes bytes?)
   ;; Q: What makes sense for the real return value?
   :ret (s/nilable bytes?))
 (defn get-code-for-world
-  [actual-session-id world-key cookie-bytes]
-  (if-let [session (get-in @sessions [::active actual-session-id])]
+  [sessions actual-session-id world-key cookie-bytes]
+  (if-let [session (get-in sessions [::active actual-session-id])]
     (let [{:keys [:frereth/pid
                   :frereth/session-id
                   :frereth/world-ctor]
@@ -606,38 +645,23 @@
       (println "Missing session key\n"
                actual-session-id "a" (class actual-session-id)
                "\namong")
-      (doseq [session-key (-> sessions deref ::active keys)]
+      (doseq [session-key (-> sessions ::active keys)]
         (println session-key "a" (class session-key)))
       (throw (ex-info "Trying to fork World for missing session"
-                      {::sessions @sessions
+                      {::sessions sessions
                        :frereth/session-id actual-session-id
                        :frereth/world-id world-key
                        ::cookie-bytes cookie-bytes})))))
 
-(s/fdef post-message!
-  :args (s/or :with-value (s/cat :session-id :frereth/session-id
-                                 :world-key :frereth/world-id
-                                 :action :frereth/action
-                                 :value :frereth/body)
-              :sans-value (s/cat :session-id :frereth/session-id
-                                 :world-key :frereth/world-id
-                                 :action :frereth/action))
-  :ret any?)
-(defn post-message!
-  "Forward value to the associated World"
-  ([session-id world-key action value]
-   (println ::post-message! " with value " value)
-   (let [wrapper (do-wrap-message world-key action value)]
-     (post-real-message! session-id world-key wrapper)))
-  ([session-id world-key action]
-   (println ::post-message! " without value")
-   (let [wrapper (do-wrap-message world-key action)]
-     (post-real-message! session-id world-key wrapper))))
-
+(s/fdef register-pending-world!
+  :args (s/cat :session-atom ::sessions/session-atom
+               :session-id :frereth/session-id
+               :world-key :frereth/world-key
+               :cookie ::cookie))
 (defn register-pending-world!
   "Browser has requested a World's Code. Time to take things seriously"
-  [session-id world-key cookie]
-  (swap! sessions
+  [session-atom session-id world-key cookie]
+  (swap! session-atom
          update-in
          [::active session-id ::worlds ::pending]
          #(conj % world-key cookie)))

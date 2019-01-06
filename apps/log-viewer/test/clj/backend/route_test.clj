@@ -5,7 +5,8 @@
              [clojure.test :as t]))
 
 (t/deftest check-matches
-  (t/is (= (:tag (bidi/match-route routes/routes "/echo"))
-           ::server/echo))
-  (t/is (= (:tag (bidi/match-route routes/routes "/"))
-           ::server/index)))
+  (let [routes (routes/build-routes nil nil)]
+    (t/is (= (:tag (bidi/match-route routes "/echo"))
+             ::server/echo))
+    (t/is (= (:tag (bidi/match-route routes "/"))
+             ::server/index))))
