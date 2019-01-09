@@ -214,14 +214,19 @@
   (->> ig-state/system
        ::sessions/session-atom
        deref
-       vals
-       (filter #(= (::sessions/session-state %) ::sessions/active))
-       ::sessions/worlds
+       keys)
+  (->> ig-state/system
+       ::sessions/session-atom
+       deref
        vals)
   (->> ig-state/system
        ::sessions/session-atom
        deref
        vals
-       (filter #(= (::sessions/session-state %) ::sessions/pending))
-       ::sessions/worlds)
+       (filter #(= (::sessions/session-state %) ::sessions/pending)))
+  (->> ig-state/system
+       ::sessions/session-atom
+       deref
+       vals
+       (filter #(= (::sessions/session-state %) ::sessions/active)))
   )

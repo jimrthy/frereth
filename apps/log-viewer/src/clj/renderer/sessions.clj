@@ -26,14 +26,61 @@
 ;; very obvious one.
 (s/def ::state-id :frereth/pid)
 
+;; Q: What is this?
+;; (another alias for :frereth/pid is tempting.
+;; So is a java.security.Principal)
+(s/def ::principal any?)
+
 ;; Might be interesting to track deactivated sessions for historical
 ;; comparisons.
-(s/def ::session-state #{::active ::pending})
+;; Q: Is there any point to setting up a pre log-in session?
+;; A: Well, there's the obvious "anonymous" browsing.
+;; But, given the main architecture, that seems iffy without a
+;; websocket.
+;; Anonymous browsing is definitely an important piece of the
+;; puzzle: want to be able to connect to a blog and read it without
+;; being tracked.
+;; I need to think more about this, also.
+;; There are degrees of "logged in" that get twisty when we're looking
+;; at connections to multiple worlds/servers and potentially different
+;; connection IDs.
+;; I can be logged in to the local Server to view logs. I can also have
+;; a Client connection to a remote Server to monitor its health.
+;; And an anonymous Client connection to some other remote Server to
+;; browse a blog.
+;; And an authenticated Client connection to that some Server to write
+;; new blog entries.
+;; None of this matters for an initial proof of concept, but it's
+;; important to keep in mind.
+;; Because it probably means that "logged in" really happens after the
+;; websocket connection.
+;; But that's going to depend on the World.
+;; Except that the Session is a direct browser connection to this local
+;; web server.
+;; World connections beyond that will go through the Client interface
+;; instead.
+;; So this does make sense.
+(s/def ::session-state #{::connected  ; ready to log in
+                         ::pending  ; Awaiting web socket
+                         ::active  ; web socket active
+                         })
 
 (s/def :frereth/session (s/keys :req [::session-state
                                       ::state-id
                                       ::specs/time-in-state]
-                                :opt [::worlds]))
+                                :opt [::principal
+                                      ::worlds]))
+;; History has to fit in here somewhere.
+;; It almost seems like it makes sense to have this recursively
+;; inside :frereth/session. (Although circular references are
+;; awful...maybe this should be limited to previous states).
+;; It's tempting to split it up and keep each world's history
+;; separate. It's also tempting to just automatically reject
+;; that in knee-jerk response.
+;; That probably isn't as terrible as it seems at first glance.
+;; TODO: Sort out how this should work.
+;; Look into  om-next's implementation
+(s/def ::history (s/map-of ::state-id :frereth/session))
 (s/def ::sessions (s/map-of :frereth/session-id :frereth/session))
 
 (s/def ::session-atom (s/and #(instance? clojure.lang.Atom %)
@@ -97,36 +144,71 @@
     (when (world/state-match? world state)
       world)))
 
+(declare create log-in)
 (defmethod ig/init-key ::session-atom
   [_ _]
   (atom
    ;; For now, just hard-code some arbitrary random key as a baby-step.
    ;; This really needs to be injected here at login.
-   ;; And it also needs to be a map that includes the time added so
-   ;; we can time out the oldest if/when we get overloaded.
-   ;; Although that isn't a great algorithm. Should also track
-   ;; session sources so we can prune back ones that are being
-   ;; too aggressive and trying to open too many world at the
-   ;; same time.
-   ;; (Then again, that's probably exactly what I'll do when I
-   ;; recreate a session, so there are nuances to consider).
    ;; Here's the real reason the initial implementation was broken
    ;; into active/pending states at the root of the tree.
    ;; That allowed me to cheaply use the same key for all
    ;; sessions, so there was really only one (possibly both
    ;; pending and active).
    ;; Moving the session key to the root of the tree and tracking
-   ;; the state this way means I'll have to add the initial
-   ;; connection logic to negotiate this key so it's waiting and
-   ;; ready when the websocket connects.
-   {::state-id (cp-util/random-uuid)
-    ;; It's very tempting to nest these a step further to make them
-    ;; easy/obvious to isolate.
-    test-key {::session-state ::pending
-              ::time-in-state (java.time.Instant/now)}}))
+   ;; the state this way means I'll have to implement something like the
+   ;; initial connection logic to negotiate this key so it's waiting
+   ;; and ready when the websocket connects.
+   {test-key (log-in (create))}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Public
+
+(s/fdef create
+  :args nil
+  :ret ::session-state)
+(defn create
+  "Create a new anonymous SESSION"
+  []
+  {::state-id (cp-util/random-uuid)
+              ::session-state ::connected
+              ;; So we can time out the oldest if/when we get
+              ;; overloaded.
+              ;; Although that isn't a great algorithm. Should also
+              ;; track session sources so we can prune back ones that
+              ;; are being too aggressive and trying to open too many
+              ;; world at the same time.
+              ;; (Then again, that's probably exactly what I'll do when
+              ;; I recreate a session, so there are nuances to
+              ;; consider).
+   ::time-in-state (java.time.Instant/now)})
+
+(s/fdef log-in
+  :args (s/cat :state ::session-state
+               :principal ::principal)
+  :fn (s/and #(= (-> % :args :state ::session-state) ::connected)
+             #(= (-> % :ret ::session-state) ::pending)
+             #(= (-> % :args :principal)
+                 (-> % :ret ::principal)))
+  :ret ::session-state)
+(defn login
+  "Handle authentication elsewhere"
+  [session-state principal]
+  (assoc session-state
+         ::session-state ::pending
+         ::principal principal))
+
+(s/fdef activate
+  :args (s/cat :state ::session-state)
+  :fn (s/and #(= (-> % :args :state ::session-state) ::pending)
+             #(= (-> % :ret ::session-state) ::active)
+             #(= (-> % :args :state (dissoc ::session-state))
+                 (-> % :ret (dissoc ::session-state))))
+  :ret ::session-state)
+(defn activate
+  "Web socket is ready to interact"
+  [state]
+  (assoc state ::session-state ::active))
 
 (s/fdef get-active-world
   :args (s/cat :sessions ::sessions
