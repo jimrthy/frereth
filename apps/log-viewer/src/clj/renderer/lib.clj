@@ -4,8 +4,6 @@
             [clojure.pprint :refer [pprint]]
             [clojure.spec.alpha :as s]
             [frereth.cp.shared.crypto :as crypto]
-            ;; TODO: something interesting with this
-            [integrant.core :as ig]
             [manifold
              [deferred :as dfrd]
              [stream :as strm]]
@@ -32,6 +30,8 @@
 ;; happen ASAP on both sides.
 (s/def :frereth/action keyword?)
 
+;; This is a serializable value that will get converted to travel
+;; across a wire.
 (s/def :frereth/body any?)
 
 (s/def ::cookie (s/keys :req [:frereth/pid
@@ -49,17 +49,15 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Globals
 
+;; Q: Put these in another System Component that rotates them once a
+;; minute?
+;; Better Q: Is this approach really a good alternative?
 (def minute-key
-  ;; TODO: Need another System Component that rotates this once a
-  ;; minute
   "Symmetric key used for encrypting short-term key pairs in a Cookie
 
   (using the CurveCP, not web, sense of the term)"
   (atom (crypto/random-key)))
-
 (def previous-minute-key
-  ;; TODO: Need another System Component that rotates this once a
-  ;; minute
   "Old symmetric key used for encrypting short-term key pairs in Cookie
 
   (using the CurveCP, not web, sense of the term)"
@@ -72,6 +70,8 @@
 
 (defmulti dispatch!
   "Send message to a World associated with session-id"
+  ;; Probably worth mentioning that this is mainly for the sake of
+  ;; calling swap! on a session atom
   (fn [session  ; ::sessions/sessions
        session-id {:keys [:frereth/action]
                    :as body}]
@@ -299,7 +299,7 @@
     (try
       (let [envelope (marshall/serialize wrapper)]
         (try
-          (let [success (strm/try-put! (::web-socket connection)
+          (let [success (strm/try-put! (::sessions/web-socket connection)
                                        envelope
                                        500
                                        ::timed-out)]
@@ -456,9 +456,7 @@
 (s/fdef login-realized!
   :args (s/cat :lamport ::lamport/clock
                :session-atom ::sessions/session-atom
-               ;; FIXME: This deserves a named spec
-               :websocket (s/and strm/sink?
-                                 strm/source?)
+               :websocket ::sessions/web-socket
                :wrapper string?)
   :ret any?)
 (defn login-realized!
@@ -478,20 +476,24 @@
       (if (get (::pending @session-atom) session-key)
         (do
           (println ::login-realized! "Swapping")
-          ;; FIXME: Also need to dissoc public-key from the pending set.
-          ;; (current approach with a hard-coded key that just lives
-          ;; there permanently is strictly debug-only)
           (swap! session-atom
-                 assoc-in
-                 [::active session-key] {::web-socket websocket
-                                         ::worlds {::active {}
-                                                   ::pending #{}}})
+                 (fn [sessions]
+                   (update sessions session-key
+                           sessions/activate
+                           websocket)))
           (println ::login-realized! "Swapped:")
           (pprint websocket)
           ;; Set up the message handler
           (let [connection-closed
                 (strm/consume (partial on-message!
                                        lamport
+                                       ;; This is another opportunity to
+                                       ;; learn from om-next.
+                                       ;; Possibly.
+                                       ;; TODO: Review how it's replaced
+                                       ;; Om's cursors.
+                                       ;; That's really more relevant
+                                       ;; for the world-state.
                                        session-atom
                                        session-key)
                               websocket)]

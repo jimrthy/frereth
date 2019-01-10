@@ -7,6 +7,7 @@
   (:require [clojure.spec.alpha :as s]
             [frereth.cp.shared.util :as cp-util]
             [integrant.core :as ig]
+            [manifold.stream :as strm]
             [renderer.world :as world]
             [shared.specs :as specs]))
 
@@ -60,15 +61,19 @@
 ;; World connections beyond that will go through the Client interface
 ;; instead.
 ;; So this does make sense.
-(s/def ::session-state #{::connected  ; ready to log in
-                         ::pending  ; Awaiting web socket
-                         ::active  ; web socket active
-                         })
+(s/def ::state #{::connected  ; ready to log in
+                 ::pending  ; Awaiting web socket
+                 ::active  ; web socket active
+                 })
 
-(s/def :frereth/session (s/keys :req [::session-state
+(s/def ::web-socket (s/and strm/sink?
+                           strm/source?))
+
+(s/def :frereth/session (s/keys :req [::state
                                       ::state-id
                                       ::specs/time-in-state]
                                 :opt [::principal
+                                      ::web-socket
                                       ::worlds]))
 ;; History has to fit in here somewhere.
 ;; It almost seems like it makes sense to have this recursively
@@ -83,6 +88,8 @@
 (s/def ::history (s/map-of ::state-id :frereth/session))
 (s/def ::sessions (s/map-of :frereth/session-id :frereth/session))
 
+;; The session- prefix is annoying in other namespaces.
+;; Q: Does it make sense to convert to just ::atom?
 (s/def ::session-atom (s/and #(instance? clojure.lang.Atom %)
                              #(s/valid? ::sessions (deref %))))
 
@@ -117,7 +124,7 @@
   "Returns the active :frereth/session, if any"
   [session-map session-id]
   (when-let [session (get session-map session-id)]
-    (when (= (::session-state session) ::active)
+    (when (= (::state session) ::active)
       session)))
 
 (s/fdef get-world-in-active-session
@@ -166,12 +173,12 @@
 
 (s/fdef create
   :args nil
-  :ret ::session-state)
+  :ret :frereth/session)
 (defn create
   "Create a new anonymous SESSION"
   []
   {::state-id (cp-util/random-uuid)
-              ::session-state ::connected
+              ::state ::connected
               ;; So we can time out the oldest if/when we get
               ;; overloaded.
               ;; Although that isn't a great algorithm. Should also
@@ -184,31 +191,34 @@
    ::time-in-state (java.time.Instant/now)})
 
 (s/fdef log-in
-  :args (s/cat :state ::session-state
+  :args (s/cat :state :frereth/state
                :principal ::principal)
-  :fn (s/and #(= (-> % :args :state ::session-state) ::connected)
-             #(= (-> % :ret ::session-state) ::pending)
+  :fn (s/and #(= (-> % :args :state ::state) ::connected)
+             #(= (-> % :ret ::state) ::pending)
              #(= (-> % :args :principal)
                  (-> % :ret ::principal)))
-  :ret ::session-state)
-(defn login
+  :ret :frereth/session)
+(defn log-in
   "Handle authentication elsewhere"
   [session-state principal]
   (assoc session-state
-         ::session-state ::pending
+         ::state ::pending
          ::principal principal))
 
 (s/fdef activate
-  :args (s/cat :state ::session-state)
-  :fn (s/and #(= (-> % :args :state ::session-state) ::pending)
-             #(= (-> % :ret ::session-state) ::active)
-             #(= (-> % :args :state (dissoc ::session-state))
-                 (-> % :ret (dissoc ::session-state))))
-  :ret ::session-state)
+  :args (s/cat :state :frereth/session
+               :web-socket ::web-socket)
+  :fn (s/and #(= (-> % :args :state ::state) ::pending)
+             #(= (-> % :ret ::state) ::active)
+             #(= (-> % :args :state (dissoc ::state))
+                 (-> % :ret (dissoc ::state ::web-socket))))
+  :ret :frereth/session)
 (defn activate
   "Web socket is ready to interact"
-  [state]
-  (assoc state ::session-state ::active))
+  [state web-socket]
+  (assoc state
+         ::state ::active
+         ::web-socket web-socket))
 
 (s/fdef get-active-world
   :args (s/cat :sessions ::sessions
