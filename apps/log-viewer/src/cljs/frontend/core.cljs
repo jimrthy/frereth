@@ -6,14 +6,14 @@
   ;; issues filed against it, and ~30 forks.
   ;; Plus...does it really add all that much?
   (:require [cemerick.url :as url]
+            [cljs.core.async :as async]
+            [clojure.spec.alpha :as s]
+            [clojure.string]
             [cognitect.transit :as transit]
             [foo.bar]
             ;; Start by at least partially supporting this, since it's
             ;; so popular
             [reagent.core :as r]
-            [cljs.core.async :as async]
-            [clojure.spec.alpha :as s]
-            [clojure.string]
             [weasel.repl :as repl]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -47,6 +47,7 @@
 
 ;; This is some sort of human-readable/transit-serializable
 ;; representation of a World's public key
+;; TODO: Take advantage of renderer.world
 (s/def ::world-key map?)
 (s/def ::world-state-keys #{::active ::forked ::forking ::pending})
 (s/def ::state ::world-state-keys)
@@ -250,7 +251,7 @@
           envelope (transit/read reader raw-envelope)
           {:keys [:frereth/action
                   :frereth/body  ; Not all messages have a meaningful body
-                  :frereth/world-id]
+                  :frereth/world-key]
            remote-lamport :frereth/lamport
            :or [remote-lamport 0]} envelope]
       (console.log "Read:" envelope)

@@ -43,7 +43,7 @@
 (s/def ::message-envelope (s/keys :req [:frereth/action
                                         :frereth/body
                                         :frereth/lamport
-                                        :frereth/world-id]))
+                                        :frereth/world-key]))
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -81,10 +81,10 @@
 ;;;; Internal Implementation
 
 (s/fdef do-wrap-message
-  :args (s/or :with-body (s/cat :world-key :frereth/world-id
+  :args (s/or :with-body (s/cat :world-key :frereth/world-key
                                 :action :frereth/action
                                 :value :frereth/body)
-              :sans-body (s/cat :world-key :frereth/world-id
+              :sans-body (s/cat :world-key :frereth/world-key
                                 :action :frereth/action))
   :ret ::message-envelope)
 ;; Honestly, this should be a Component in the System.
@@ -99,7 +99,7 @@
      (swap! lamport inc)
      {:frereth/action action
       :frereth/lamport @lamport
-      :frereth/world-id world-key})
+      :frereth/world-key world-key})
     ([world-key action value]
      (let [result
            (assoc (do-wrap-message world-key action)
@@ -320,12 +320,12 @@
 (s/fdef post-message!
   :args (s/or :with-value (s/cat :sessions ::sessions/sessions
                                  :session-id :frereth/session-id
-                                 :world-key :frereth/world-id
+                                 :world-key :frereth/world-key
                                  :action :frereth/action
                                  :value :frereth/body)
               :sans-value (s/cat :sessions ::sessions/sessions
                                  :session-id :frereth/session-id
-                                 :world-key :frereth/world-id
+                                 :world-key :frereth/world-key
                                  :action :frereth/action))
   :ret any?)
 (defn post-message!
@@ -563,8 +563,13 @@
     (println ::activate-session!
              "Trying to pull the Renderer's key from new websocket")
     (let [first-response (strm/try-take! websocket ::drained 500 ::timed-out)]
-      ;; TODO: Need the login exchange.
-      ;; Do that before opening the websocket, using SRP.
+      ;; TODO: Need the login exchange before this.
+      ;; Do that before opening the websocket, using something like SRP.
+      ;; Except that people generally agree that it's crap.
+      ;; Look into something like OPAQUE instead.
+      ;; The consensus seems to be that mutual TLS is really the way
+      ;; to go.
+      ;; Q: Is there a way to do this for web site auth?
       ;; That should add the Session's short-term key to the ::pending
       ;; session map.
       ;; In order to authenticate, it had to already contact its Server.
@@ -591,7 +596,7 @@
 (s/fdef get-code-for-world
   :args (s/cat :sessions ::sessions/sessions
                :session-id :frereth/session-id
-               :world-key :frereth/world-id
+               :world-key :frereth/world-key
                :cookie-bytes bytes?)
   ;; Q: What makes sense for the real return value?
   :ret (s/nilable bytes?))
@@ -630,7 +635,7 @@
                      actual-session-id "!=" session-id)
             (throw (ex-info "Invalid Cookie: probable hacking attempt"
                             {:frereth/session-id actual-session-id
-                             :frereth/world-id world-key
+                             :frereth/world-key world-key
                              :frereth/cookie cookie}))))
         (do
           (println (str "Incoming cookie has issue with either '"
@@ -651,7 +656,7 @@
       (throw (ex-info "Trying to fork World for missing session"
                       {::sessions sessions
                        :frereth/session-id actual-session-id
-                       :frereth/world-id world-key
+                       :frereth/world-key world-key
                        ::cookie-bytes cookie-bytes})))))
 
 (s/fdef register-pending-world!
@@ -663,6 +668,5 @@
   "Browser has requested a World's Code. Time to take things seriously"
   [session-atom session-id world-key cookie]
   (swap! session-atom
-         update-in
-         [::active session-id ::worlds ::pending]
-         #(conj % world-key cookie)))
+         sessions/add-pending-world
+         session-id world-key cookie))

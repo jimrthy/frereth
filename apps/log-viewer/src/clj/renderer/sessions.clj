@@ -49,6 +49,8 @@
 ;; a Client connection to a remote Server to monitor its health.
 ;; And an anonymous Client connection to some other remote Server to
 ;; browse a blog.
+;; Q: Any point to building a blog engine like a regular web server
+;; that people can read anonymously?
 ;; And an authenticated Client connection to that some Server to write
 ;; new blog entries.
 ;; None of this matters for an initial proof of concept, but it's
@@ -78,7 +80,8 @@
 ;; History has to fit in here somewhere.
 ;; It almost seems like it makes sense to have this recursively
 ;; inside :frereth/session. (Although circular references are
-;; awful...maybe this should be limited to previous states).
+;; awful...maybe this should be limited to previous or "other"
+;; states, with a link to previous).
 ;; It's tempting to split it up and keep each world's history
 ;; separate. It's also tempting to just automatically reject
 ;; that in knee-jerk response.
@@ -145,6 +148,10 @@
   :ret (s/nilable ::world/world))
 (defn get-world-by-state-in-active-session
   [sessions session-id world-key state]
+  ;; This has diverged from the implementation in world.
+  ;; That has its own specific variations that start
+  ;; with get-world-in-state.
+  ;; FIXME: Consolidate these.
   (when-let [world (get-world-in-active-session sessions
                                                 session-id
                                                 world-key)]
@@ -243,3 +250,24 @@
                                         session-id
                                         world-key
                                         ::world/pending))
+
+(s/fdef add-pending-world
+  :args (s/cat :sessions ::sessions
+               :session-id :frereth/session-id
+               :world-key :frereth/world-key
+               :initial-state ::world/state)
+  :ret ::sessions)
+(defn add-pending-world
+  [sessions session-id world-key cookie]
+  (update sessions
+          session-id
+          (fn [{:keys [::state-id
+                       ::specs/time-in-state
+                       ::worlds]
+                :as current}]
+            (let [worlds
+                  (world/add-pending worlds world-key cookie)]
+              (assoc current
+                     ::state-id (cp-util/random-uuid)
+                     ::specs/time-in-state (java.time.Instant/now)
+                     ::worlds worlds)))))

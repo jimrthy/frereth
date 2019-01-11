@@ -63,6 +63,12 @@
                :ring-request any?)
   :ret any?)
 (defn create-world
+  ;; FIXME: This name seems misleading.
+  ;; It seems like connect-to-possibly-new-world might be more
+  ;; accurate.
+  ;; Then again...there's a drastic difference between plugging
+  ;; into an existing, possibly multi-player world, and forking
+  ;; a new instance.
   "This is really Step 2 of a World's life cycle.
 
   The browser side sent us a websocket notification that it was going

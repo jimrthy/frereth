@@ -2,21 +2,22 @@
   (:require [clojure.spec.alpha :as s]
             [shared.specs :as specs]))
 
-(s/def ::world-state #{::active
-                       ::forked
-                       ::forking
-                       ::pending})
+(s/def ::connection-state #{::active   ; we've ACKed the browser's fork
+                            ::forked   ; Q: diff between this and forking?
+                            ::forking  ; received source code. Ready to fork
+                            ::pending  ; browser would like to fork
+                            })
 ;; This is whatever makes sense for the world implementation.
 ;; This seems like it will probably always be a map?, but it could very
 ;; easily also be a mutable Object (though that seems like a terrible
 ;; idea).
 (s/def ::internal-state any?)
-(s/def ::world (s/keys :req [::time-in-state
+(s/def ::world (s/keys :req [::specs/time-in-state
                              ::connection-state
                              ::internal-state]))
 
-(s/def :frereth/world-id :frereth/pid)
-(s/def :frereth/worlds (s/map-of :frereth/world-id ::world))
+(s/def :frereth/world-key :frereth/pid)
+(s/def :frereth/worlds (s/map-of :frereth/world-key ::world))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Internal Implementation
@@ -26,7 +27,7 @@
 
 (s/fdef get-world
   :args (s/cat :world-map :frereth/worlds
-               :world-key :frereth/world-id)
+               :world-key :frereth/world-key)
   :ret (s/nilable ::world))
 (defn get-world
   [world-map world-key]
@@ -42,7 +43,7 @@
 
 (s/fdef get-world-in-state
   :args (s/cat :world-map :frereth/worlds
-               :world-key :frereth/world-id
+               :world-key :frereth/world-key
                :connection-state ::connection-state)
   :ret (s/nilable ::world))
 (defn get-world-in-state
@@ -51,18 +52,30 @@
     (when (state-match? world state)
       world)))
 
-(s/fdef get-active-world
+(s/fdef get-active
   :args (s/cat :world-map :frereth/worlds
-               :world-key :frereth/world-id)
+               :world-key :frereth/world-key)
   :ret (s/nilable ::world))
-(defn get-active-world
+(defn get-active
   [world-map world-key]
   (get-world-in-state world-map world-key ::active))
 
-(s/fdef get-pending-world
+(s/fdef add-pending
   :args (s/cat :world-map :frereth/worlds
-               :world-key :frereth/world-id)
+               :world-key :frereth/world-key
+               :initial-state ::internal-state)
+  :ret :frereth/worlds)
+(defn add-pending
+  "Set up a new world that's waiting for the connection signal"
+  [world-map world-key initial-state]
+  (assoc world-map world-key {::specs/time-in-state (java.time.Instant/now)
+                              ::connection-state ::pending
+                              ::internal-state initial-state}))
+
+(s/fdef get-pending
+  :args (s/cat :world-map :frereth/worlds
+               :world-key :frereth/world-key)
   :ret (s/nilable ::world))
-(defn get-pending-world
+(defn get-pending
   [world-map world-key]
   (get-world-in-state world-map world-key ::pending))
