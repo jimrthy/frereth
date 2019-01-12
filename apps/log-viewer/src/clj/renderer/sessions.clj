@@ -73,10 +73,10 @@
 
 (s/def :frereth/session (s/keys :req [::state
                                       ::state-id
-                                      ::specs/time-in-state]
+                                      ::specs/time-in-state
+                                      :frereth/worlds]
                                 :opt [::principal
-                                      ::web-socket
-                                      ::worlds]))
+                                      ::web-socket]))
 ;; History has to fit in here somewhere.
 ;; It almost seems like it makes sense to have this recursively
 ;; inside :frereth/session. (Although circular references are
@@ -138,7 +138,7 @@
 (defn get-world-in-active-session
   [sessions session-id world-key]
   (when-let [session (get-active-session sessions session-id)]
-    (world/get-world (::worlds session) world-key)))
+    (world/get-world (:frereth/worlds session) world-key)))
 
 (s/fdef get-world-by-state-in-active-session
   :args (s/cat :sessions ::sessions
@@ -195,7 +195,22 @@
               ;; (Then again, that's probably exactly what I'll do when
               ;; I recreate a session, so there are nuances to
               ;; consider).
-   ::time-in-state (java.time.Instant/now)})
+   ::time-in-state (java.time.Instant/now)
+   :frereth/worlds {}})
+
+(s/fdef get-by-state
+  :args (s/cat :sessions ::sessions
+               :state ::state))
+(defn get-by-state
+  "Return sessions that match state"
+  [sessions state]
+  (reduce (fn [acc [k {session-state ::state
+                       :as v}]]
+            (if (= state session-state)
+              (assoc acc k v)
+              acc))
+          {}
+          sessions))
 
 (s/fdef log-in
   :args (s/cat :state :frereth/state
@@ -222,10 +237,26 @@
   :ret :frereth/session)
 (defn activate
   "Web socket is ready to interact"
-  [state web-socket]
-  (assoc state
+  [session web-socket]
+  (assoc session
          ::state ::active
          ::web-socket web-socket))
+
+(s/fdef deactivate
+  :args (s/cat :sessions ::sessions
+               :session-id :frereth/session-id)
+  :ret ::sessions)
+(defn deactivate
+  [sessions session-id]
+  ;; It's very tempting to collect these.
+  ;; Possibly in a ::deactivated bucket in sessions.
+  ;; Possibly just by transitioning the ::state to
+  ;; ::deactivated.
+  ;; It's even a bit tempting to just store this in
+  ;; a global.
+  ;; For starters, just go with the simplest possible
+  ;; approach
+  (dissoc sessions session-id))
 
 (s/fdef get-active-world
   :args (s/cat :sessions ::sessions
@@ -263,11 +294,11 @@
           session-id
           (fn [{:keys [::state-id
                        ::specs/time-in-state
-                       ::worlds]
+                       :frereth/worlds]
                 :as current}]
             (let [worlds
                   (world/add-pending worlds world-key cookie)]
               (assoc current
                      ::state-id (cp-util/random-uuid)
                      ::specs/time-in-state (java.time.Instant/now)
-                     ::worlds worlds)))))
+                     :frereth/worlds worlds)))))

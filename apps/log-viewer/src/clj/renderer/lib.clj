@@ -89,7 +89,7 @@
   :ret ::message-envelope)
 ;; Honestly, this should be a Component in the System.
 ;; And it needs to interact with the clock from weald.
-;; TODO: Switch to using a :shared.lamport/clock.
+;; FIXME: Switch to using a :shared.lamport/clock.
 ;; Interestingly enough, that makes it tempting to convert both
 ;; do-wrap-message and on-message! into a Protocol.
 (let [lamport (atom 0)]
@@ -117,10 +117,9 @@
 (defn on-message!
   "Deserialize and dispatch a raw message from browser"
   [clock session-atom session-id message-string]
-  ;; Q: Would it make sense to avoid a layer of indirection and just
-  ;; have this body be the dispactch function for the dispatch!
-  ;; multi?
-
+  ;; It shouldn't be possible to get here if the session isn't
+  ;; active.
+  ;; It seems worth checking for that scenario out of paranoia.
   (if (sessions/get-active-session @session-atom session-id)
     (try
       (let [{:keys [:frereth/body]
@@ -142,9 +141,11 @@
                "No"
                session-id
                "\namong\n"
-               (keys (::active @session-atom))
+               (keys (sessions/get-by-state @session-atom
+                                            ::sessions/active))
                "\nPending:\n"
-               (::pending @session-atom)
+               (sessions/get-by-state @session-atom
+                                      ::sessions/pending)
                "\nat" @clock))))
 
 (defn deactivate-world!
@@ -453,35 +454,36 @@
                   pid
                   "'"))))
 
-(s/fdef login-realized!
+(s/fdef login-finalized!
   :args (s/cat :lamport ::lamport/clock
                :session-atom ::sessions/session-atom
                :websocket ::sessions/web-socket
                :wrapper string?)
   :ret any?)
-(defn login-realized!
-  "Client has finished its authentication"
+(defn login-finalized!
+  "Client might have authenticated over websocket"
   [lamport session-atom websocket wrapper]
-  (println ::login-realized! "Received initial websocket message:" wrapper)
+  (println ::login-finalized! "Received initial websocket message:" wrapper)
   (if (and (not= ::drained wrapper)
            (not= ::timed-out wrapper))
     (let [envelope (marshall/deserialize wrapper)
-          _ (println ::login-realized! "Key pulled:" envelope)
-          session-key (:frereth/body envelope)]
-      (println ::login-realized! "Trying to move\n" session-key
-               "a" (class session-key)
+          _ (println ::login-finalized! "Key pulled:" envelope)
+          session-id (:frereth/body envelope)]
+      (println ::login-realized! "Trying to activate\n" session-id
+               "a" (class session-id)
                "\nfrom\n"
-               ;; FIXME: This isn't the way sessions handle state any longer
-               (::pending @session-atom))
-      (if (get (::pending @session-atom) session-key)
+               (sessions/get-by-state @session-atom ::pending))
+      (if (get @session-atom session-id)
         (do
-          (println ::login-realized! "Swapping")
+          (println ::login-finalized!
+                   "Activating session"
+                   session-id)
           (swap! session-atom
                  (fn [sessions]
-                   (update sessions session-key
+                   (update sessions session-id
                            sessions/activate
                            websocket)))
-          (println ::login-realized! "Swapped:")
+          (println ::login-finalized! "Swapped:")
           (pprint websocket)
           ;; Set up the message handler
           (let [connection-closed
@@ -495,41 +497,35 @@
                                        ;; That's really more relevant
                                        ;; for the world-state.
                                        session-atom
-                                       session-key)
+                                       session-id)
                               websocket)]
             ;; Cope with it closing
             (dfrd/on-realized connection-closed
                               (fn [succeeded]
-                                (println (str ::login-realized!
+                                (println (str ::login-finalized!
                                               " Socket closed cleanly"
                                               " for session "
-                                              session-key
+                                              session-id
                                               ": "
                                               succeeded))
                                 (swap! session-atom
-                                       (fn [current]
-                                         (update current
-                                                 ::active
-                                                 #(dissoc %
-                                                          session-key)))))
+                                       sessions/deactivate
+                                       session-id))
                               (fn [failure]
-                                (println ::login-realized!
+                                (println ::login-finalized!
                                          "Web socket failed for session"
-                                         session-key
+                                         session-id
                                          ":"
                                          failure)
                                 (swap! session-atom
-                                       (fn [current]
-                                         (update current
-                                                 ::active
-                                                 #(dissoc %
-                                                          session-key))))))))
+                                       sessions/deactivate
+                                       session-id)))))
         (do
-          (println ::login-realized! "Not found")
+          (println ::login-dinalized! "Not found")
           (throw (ex-info "Browser trying to complete non-pending connection"
-                          {::attempt session-key
+                          {::attempt session-id
                            ::sessions @session-atom})))))
-    (println ::login-realized!
+    (println ::login-finalized!
              "Waiting for login completion failed:"
              wrapper)))
 
@@ -562,7 +558,7 @@
     ;; FIXME: Better handshake (need an authentication phase)
     (println ::activate-session!
              "Trying to pull the Renderer's key from new websocket")
-    (let [first-response (strm/try-take! websocket ::drained 500 ::timed-out)]
+    (let [first-message (strm/try-take! websocket ::drained 500 ::timed-out)]
       ;; TODO: Need the login exchange before this.
       ;; Do that before opening the websocket, using something like SRP.
       ;; Except that people generally agree that it's crap.
@@ -580,8 +576,11 @@
       ;; should/will be a much bigger drain on system resources.
       ;; TODO: Check this FSM handshake with stack overflow's security
       ;; board.
-      (dfrd/on-realized first-response
-                        (partial login-realized! lamport-clock session-atom websocket)
+      (dfrd/on-realized first-message
+                        (partial login-finalized!
+                                 lamport-clock
+                                 session-atom
+                                 websocket)
                         (fn [error]
                           (println ::activate-session!
                                    "Failed pulling initial key:" error))))
@@ -616,6 +615,8 @@
                            io/file
                            (fn [file-name]
                              (io/file (io/resource (str "js/" file-name)))))
+                  ;; FIXME: This needs to vary based on the World that's
+                  ;; actually being connected
                   raw (opener "dev-output/js/worker.js")]
               (when-not (.exists raw)
                 (throw (ex-info "Missing worker file"
