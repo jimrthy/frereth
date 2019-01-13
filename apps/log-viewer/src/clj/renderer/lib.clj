@@ -68,11 +68,17 @@
          test-key
          )
 
+(s/fdef dispatch!
+  :args (s/cat :session ::sessions/sessions
+               :lamport ::lamport/clock
+               :session-id ::sessions/session-id)
+  :ret any?)
 (defmulti dispatch!
   "Send message to a World associated with session-id"
   ;; Probably worth mentioning that this is mainly for the sake of
   ;; calling swap! on a session atom
   (fn [session  ; ::sessions/sessions
+       lamport  ; ::lamport/clock
        session-id {:keys [:frereth/action]
                    :as body}]
     action))
@@ -81,10 +87,12 @@
 ;;;; Internal Implementation
 
 (s/fdef do-wrap-message
-  :args (s/or :with-body (s/cat :world-key :frereth/world-key
+  :args (s/or :with-body (s/cat :lamport ::lamport/clock
+                                :world-key :frereth/world-key
                                 :action :frereth/action
                                 :value :frereth/body)
-              :sans-body (s/cat :world-key :frereth/world-key
+              :sans-body (s/cat :lamport ::lamport/clock
+                                :world-key :frereth/world-key
                                 :action :frereth/action))
   :ret ::message-envelope)
 ;; Honestly, this should be a Component in the System.
@@ -92,31 +100,30 @@
 ;; FIXME: Switch to using a :shared.lamport/clock.
 ;; Interestingly enough, that makes it tempting to convert both
 ;; do-wrap-message and on-message! into a Protocol.
-(let [lamport (atom 0)]
-  (defn do-wrap-message
-    ([world-key action]
-     (println "Building a" action "message")
-     (swap! lamport inc)
-     {:frereth/action action
-      :frereth/lamport @lamport
-      :frereth/world-key world-key})
-    ([world-key action value]
-     (let [result
-           (assoc (do-wrap-message world-key action)
-                  :frereth/body value)]
-       (println "Adding" value "to message")
-       result))))
+(defn do-wrap-message
+  ([lamport world-key action]
+   (println "Building a" action "message")
+   (swap! lamport inc)
+   {:frereth/action action
+    :frereth/lamport @lamport
+    :frereth/world-key world-key})
+  ([lamport world-key action value]
+   (let [result
+         (assoc (do-wrap-message world-key action)
+                :frereth/body value)]
+     (println "Adding" value "to message")
+     result)))
 
 (s/fdef on-message!
-  :args (s/cat :clock ::lamport/clock
-               :session-atom ::sessions/session-atom
+  :args (s/cat :session-atom ::sessions/session-atom
+               :clock ::lamport/clock
                :session-id ::sessions/session-id
                :message-string string?)
   ;; Called for side-effects
   :ret any?)
 (defn on-message!
   "Deserialize and dispatch a raw message from browser"
-  [clock session-atom session-id message-string]
+  [session-atom clock session-id message-string]
   ;; It shouldn't be possible to get here if the session isn't
   ;; active.
   ;; It seems worth checking for that scenario out of paranoia.
@@ -130,7 +137,7 @@
         ;; It's easy to miss this in the middle of the error handling.
         ;; Which is one reason this is worth keeping separate from the
         ;; dispatching code.
-        (swap! session-atom dispatch! session-id body))
+        (swap! session-atom dispatch! clock session-id body))
       (catch Exception ex
         (println ex "trying to deserialize/dispatch" message-string)))
     (do
@@ -320,34 +327,38 @@
 
 (s/fdef post-message!
   :args (s/or :with-value (s/cat :sessions ::sessions/sessions
+                                 :lamport ::lamport/clock
                                  :session-id :frereth/session-id
                                  :world-key :frereth/world-key
                                  :action :frereth/action
                                  :value :frereth/body)
               :sans-value (s/cat :sessions ::sessions/sessions
+                                 :lamport ::lamport/clock
                                  :session-id :frereth/session-id
                                  :world-key :frereth/world-key
                                  :action :frereth/action))
   :ret any?)
 (defn post-message!
   "Marshalling wrapper around post-real-message!"
-  ([sessions session-id world-key action value]
+  ([sessions lamport session-id world-key action value]
    (println ::post-message! " with value " value)
-   (let [wrapper (do-wrap-message world-key action value)]
+   (let [wrapper (do-wrap-message lamport world-key action value)]
      (post-real-message! sessions session-id world-key wrapper)))
-  ([sessions session-id world-key action]
+  ([sessions lamport session-id world-key action]
    (println ::post-message! " without value")
-   (let [wrapper (do-wrap-message world-key action)]
+   (let [wrapper (do-wrap-message lamport world-key action)]
      (post-real-message! sessions session-id world-key wrapper))))
 
 (defmethod dispatch! :default
   [sessions
+   lamport
    session-id
    body]
   (println "Unhandled action:" body))
 
 (defmethod dispatch! :frereth/forked
   [sessions
+   lamport
    session-id
    {world-key :frereth/pid
     :keys [:frereth/cookie]
@@ -373,6 +384,7 @@
                                 (fn [raw-message]
                                   (if (not= raw-message world-stop-signal)
                                     (post-message! sessions
+                                                   lamport
                                                    session-id
                                                    world-key
                                                    :frereth/forward
@@ -380,11 +392,16 @@
                                     (do
                                       (deactivate-world! session-id world-key)
                                       (post-message! sessions
+                                                     lamport
                                                      session-id
                                                      world-key
                                                      :frereth/disconnect
                                                      true)))))]
-          (post-message! sessions session-id world-key :frereth/ack-forked)
+          (post-message! sessions
+                         lamport
+                         session-id
+                         world-key
+                         :frereth/ack-forked)
           (let [session-map (activate-pending-world sessions
                                                     session-id
                                                     world-key)]
@@ -428,6 +445,7 @@
 
 (defmethod dispatch! :frereth/forking
   [sessions
+   lamport
    session-id
    {:keys [:frereth/command
            :frereth/pid]}]
@@ -443,6 +461,7 @@
           ;; session.
           (let [cookie (build-cookie session-id pid command)]
             (post-message! sessions
+                           lamport
                            session-id
                            pid
                            :frereth/ack-forking
@@ -488,7 +507,6 @@
           ;; Set up the message handler
           (let [connection-closed
                 (strm/consume (partial on-message!
-                                       lamport
                                        ;; This is another opportunity to
                                        ;; learn from om-next.
                                        ;; Possibly.
@@ -497,6 +515,7 @@
                                        ;; That's really more relevant
                                        ;; for the world-state.
                                        session-atom
+                                       lamport
                                        session-id)
                               websocket)]
             ;; Cope with it closing

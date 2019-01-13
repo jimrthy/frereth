@@ -6,7 +6,7 @@
 
 (t/deftest check-matches
   (let [routes (routes/build-routes nil nil)]
-    (t/is (= (:tag (bidi/match-route routes "/echo"))
-             ::server/echo))
-    (t/is (= (:tag (bidi/match-route routes "/"))
-             ::server/index))))
+    (t/is (= ::routes/echo
+             (:tag (bidi/match-route routes "/echo"))))
+    (t/is (= ::routes/index
+             (:tag (bidi/match-route routes "/"))))))
