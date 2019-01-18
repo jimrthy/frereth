@@ -11,6 +11,10 @@ Currently, this is strictly REPL-based, going through Docker.
 
 ### Docker
 
+This project and its dependencies are currently in enough flux that
+downloading dependencies to build a docker container make it less
+useful than usual.
+
 At the command-line:
 
     docker build -t frereth/log-viewer .

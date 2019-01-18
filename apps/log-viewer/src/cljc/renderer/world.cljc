@@ -68,7 +68,11 @@
 (defn add-pending
   "Set up a new world that's waiting for the connection signal"
   [world-map world-key initial-state]
-  (assoc world-map world-key {::specs/time-in-state (java.time.Instant/now)
+  ;; time-in-state is set in at least 3 different places now.
+  ;; TODO: Refactor this into its own function so I don't have
+  ;; to update multiple places if/when I decide to change its
+  ;; implementation again.
+  (assoc world-map world-key {::specs/time-in-state (java.util.Date.)
                               ::connection-state ::pending
                               ::internal-state initial-state}))
 

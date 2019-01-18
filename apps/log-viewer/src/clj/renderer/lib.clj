@@ -165,7 +165,7 @@
                      world-key)))
 
 (s/fdef assoc-active-world
-  :args (s/cat :sessions ::sessions
+  :args (s/cat :sessions ::sessions/sessions
                :session-id :frereth/session-id
                :world-key :frereth/world-key
                ;; Well, any immutable value.
@@ -199,7 +199,7 @@
                ;; abstraction layer. Such as a ::client.
                :key any?
                :value any?)
-  :ret ::sessions)
+  :ret ::sessions/sessions)
 (defn assoc-active-world
   "Add a key/value pair to an active world"
   [sessions session-id world-key k v]
@@ -209,10 +209,10 @@
               v)))
 
 (s/fdef activate-pending-world
-  :args (s/cat :sessions ::sessions
+  :args (s/cat :sessions ::sessions/sessions
                :session-id :frereth/session-id
                :world-key :frereth/world-key)
-  :ret ::sessions)
+  :ret ::sessions/sessions)
 (defn activate-pending-world
   [sessions session-id world-key]
   (when-let [world (sessions/get-pending-world sessions session-id world-key)]
@@ -543,7 +543,7 @@
           (println ::login-dinalized! "Not found")
           (throw (ex-info "Browser trying to complete non-pending connection"
                           {::attempt session-id
-                           ::sessions @session-atom})))))
+                           ::sessions/sessions @session-atom})))))
     (println ::login-finalized!
              "Waiting for login completion failed:"
              wrapper)))
@@ -674,7 +674,7 @@
       (doseq [session-key (-> sessions ::active keys)]
         (println session-key "a" (class session-key)))
       (throw (ex-info "Trying to fork World for missing session"
-                      {::sessions sessions
+                      {::sessions/sessions sessions
                        :frereth/session-id actual-session-id
                        :frereth/world-key world-key
                        ::cookie-bytes cookie-bytes})))))

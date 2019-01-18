@@ -47,6 +47,7 @@
                             [adzerk/boot-reload "0.6.0" :scope "test"]
                             [bidi "2.1.4"]
                             [boot/core "2.8.2" :scope "provided"]
+                            [buddy/buddy-auth "2.1.0"]
                             [cider/piggieback "0.3.10" :scope "test" :exclusions [com.google.guava/guava
                                                                                   com.google.javascript/closure-compiler-externs
                                                                                   com.google.javascript/closure-compiler-unshaded
@@ -86,11 +87,14 @@
                                                                      org.clojure/spec.alpha
                                                                      org.clojure/tools.reader]]
                             [funcool/promesa "1.9.0"]
+                            [io.pedestal/pedestal.service "0.5.5"]
+                            [io.pedestal/pedestal.service-tools "0.5.5"]
+                            [io.pedestal/pedestal.immutant "0.5.5"]
                             [metosin/boot-alt-test "0.3.2" :scope "test"]
                             [metosin/boot-deps-size "0.1.0" :scope "test"]
                             ;; Q: Does 0.4.5 play more nicely?
                             [nrepl "0.5.3" :exclusions [org.clojure/clojure]]
-                            [org.clojure/clojure "1.10.0-RC5"]
+                            [org.clojure/clojure "1.10.0"]
                             [org.clojure/clojurescript "1.10.439" :scope "test" :exclusions [commons-codec
                                                                                              com.cognitect/transit-clj
                                                                                              com.cognitect/transit-java

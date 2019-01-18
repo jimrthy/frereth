@@ -267,20 +267,20 @@
       ;; cljs.
       (condp = action
         :frereth/ack-forked
-        (if-let [{:keys [::worker]} (do-get-world world-id ::forked)]
+        (if-let [{:keys [::worker]} (do-get-world world-key ::forked)]
           (try
-            (adjust-world-state! world-id ::forked ::active)
+            (adjust-world-state! world-key ::forked ::active)
             (catch :default ex
               (console.error "Forked ACK failed to adjust world state:" ex)))
           (console.error "Missing forked worker"
                          {::problem envelope
                           ::forked (get-worlds-by-state ::forked)
-                          ::world-id world-id}))
+                          ::world-id world-key}))
 
 
         :frereth/ack-forking
         (try
-          (if-let [ack-chan (::waiting-ack (do-get-world world-id
+          (if-let [ack-chan (::waiting-ack (do-get-world world-key
                                                          ::pending))]
             (let [success (async/put! ack-chan body)]
               (console.log (str "Message put onto " ack-chan
@@ -288,33 +288,33 @@
             (console.error "ACK about non-pending world"
                            {::problem envelope
                             ::pending (get-worlds-by-state ::pending)
-                            ::world-id world-id}))
+                            ::world-id world-key}))
           (catch :default ex
             (console.error "Failed to handle :frereth/ack-forking" ex body)))
 
         :frereth/disconnect
-        (if-let [worker (::worker (do-get-world world-id))]
+        (if-let [worker (::worker (do-get-world world-key))]
           (.postMessage worker raw-envelope)
           (console.error "Disconnect message for"
-                         world-id
+                         world-key
                          "in"
                          envelope
                          ". No match in"
                          @worlds))
 
         :frereth/forward
-        (if-let [world (do-get-world world-id ::active)]
+        (if-let [world (do-get-world world-key ::active)]
           (if-let [worker (::worker world)]
             (.postMessage worker (serialize body))
             (console.error "Message for"
-                           world-id
+                           world-key
                            "in"
                            envelope
                            ". Missing worker"
                            (keys world)
                            "among" world))
           ;; This is impossible: it will throw an exception
-          (console.error "Missing world" world-id "inside" worlds)))))
+          (console.error "Missing world" world-key "inside" worlds)))))
 
   (defn send-message!
     "Send `body` over `socket` for `world-id`"

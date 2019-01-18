@@ -26,6 +26,8 @@
 (defmethod ig/init-key ::clock
   [_ {:keys [::initial]
       :or {initial 0}}]
+  ;; It's very tempting to convert this to a map that includes
+  ;; the local #inst.
   (atom initial))
 
 (s/fdef do-tick

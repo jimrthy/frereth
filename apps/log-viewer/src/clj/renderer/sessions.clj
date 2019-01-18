@@ -162,18 +162,18 @@
 (defmethod ig/init-key ::session-atom
   [_ _]
   (atom
-   ;; For now, just hard-code some arbitrary random key as a baby-step.
-   ;; This really needs to be injected here at login.
-   ;; Here's the real reason the initial implementation was broken
-   ;; into active/pending states at the root of the tree.
-   ;; That allowed me to cheaply use the same key for all
-   ;; sessions, so there was really only one (possibly both
-   ;; pending and active).
+   ;; For now, just hard-code some arbitrary random key and
+   ;; claims as a baby-step.
+   ;; These really need to be injected here at login.
+   ;; Except that it doesn't.
+   ;; If someone opens a websocket with a valid unexpired claims token,
+   ;; then that should be fine.
    ;; Moving the session key to the root of the tree and tracking
    ;; the state this way means I'll have to implement something like the
    ;; initial connection logic to negotiate this key so it's waiting
    ;; and ready when the websocket connects.
-   {test-key (log-in (create))}))
+   (let [test-claims {}]
+     {test-key (log-in (create) test-claims)})))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Public
@@ -182,6 +182,15 @@
   :args nil
   :ret :frereth/session)
 (defn create
+  ;; There's now an open question about when this should happen.
+  ;; The obvious point seems to be when the browser loads the SPA.
+  ;; But that wastes server resources and exposes us to
+  ;; an easy DoS attack.
+  ;; This is the point behind JWT and the Bearer authentication scheme.
+  ;; OTOH:
+  ;; This *is* useful for server-side introspection about what's going
+  ;; on in "real-time" in the wild.
+  ;; And it gets trickier when we get into the websocket interactions.
   "Create a new anonymous SESSION"
   []
   {::state-id (cp-util/random-uuid)
@@ -195,7 +204,7 @@
               ;; (Then again, that's probably exactly what I'll do when
               ;; I recreate a session, so there are nuances to
               ;; consider).
-   ::time-in-state (java.time.Instant/now)
+   ::time-in-state (java.util.Date.)
    :frereth/worlds {}})
 
 (s/fdef get-by-state
@@ -300,5 +309,5 @@
                   (world/add-pending worlds world-key cookie)]
               (assoc current
                      ::state-id (cp-util/random-uuid)
-                     ::specs/time-in-state (java.time.Instant/now)
+                     ::specs/time-in-state (java.util.Date.)
                      :frereth/worlds worlds)))))
