@@ -199,7 +199,8 @@
   ;; This flies in the face of the fundamental principle that a System
   ;; should really be an atomic whole, but that's the basic reality of
   ;; what I'm building here.
-  {:backend.web.server/web-server (into {::lamport/clock (ig/ref ::lamport/clock)}
+  {:backend.web.server/web-server (into {::lamport/clock (ig/ref ::lamport/clock)
+                                         ::sessions/session-atom (ig/ref ::sessions/session-atom)}
                                         (::web-server opts))
    ;; Surely both server and client need access to this.
    ;; The renderer/session manager definitely does.

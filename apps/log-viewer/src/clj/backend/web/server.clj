@@ -15,6 +15,10 @@
              ::sessions/session-atom]
       lamport-clock ::lamport/clock
       :as opts}]
+  (when-not (and lamport-clock
+                 session-atom)
+    (throw (ex-info "Missing something vital among"
+                    opts)))
   (let [port (or port 10555)
         ;; FIXME: Switch to pedestal. It's supported aleph as a backend
         ;; since 0.5.0.

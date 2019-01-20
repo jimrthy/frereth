@@ -14,7 +14,8 @@
              [sessions :as sessions]]
             [shared
              [specs]
-             [lamport :as lamport]])
+             [lamport :as lamport]]
+            [frereth.weald.logging :as log])
   (:import clojure.lang.ExceptionInfo
            java.util.Base64))
 
@@ -109,7 +110,7 @@
     :frereth/world-key world-key})
   ([lamport world-key action value]
    (let [result
-         (assoc (do-wrap-message world-key action)
+         (assoc (do-wrap-message lamport world-key action)
                 :frereth/body value)]
      (println "Adding" value "to message")
      result)))
@@ -301,29 +302,38 @@
                 world-key
                 "\nin\n"
                 session-id))
-  (if-let [connection (-> sessions
-                          ::active
-                          (get session-id))]
-    (try
-      (let [envelope (marshall/serialize wrapper)]
-        (try
-          (let [success (strm/try-put! (::sessions/web-socket connection)
-                                       envelope
-                                       500
-                                       ::timed-out)]
-            (dfrd/on-realized success
-                              #(println "forwarded:" %)
-                              #(println "Forwarding failed:" %)))
-          (catch Exception ex
-            (println "Message forwarding failed:" ex))))
-      (catch Exception ex
-        (println "Serializing message failed:" ex)))
+  (if-let [session (get sessions session-id)]
+    (if (= ::sessions/active (::sessions/state session))
+      (try
+        (let [envelope (marshall/serialize wrapper)]
+          (try
+            (let [success (strm/try-put! (::sessions/web-socket session)
+                                         envelope
+                                         500
+                                         ::timed-out)]
+              (dfrd/on-realized success
+                                #(println "forwarded:" %)
+                                #(println "Forwarding failed:" %)))
+            (catch Exception ex
+              (println "Message forwarding failed:" ex))))
+        (catch Exception ex
+          (println "Serializing message failed:" ex)))
+      (do
+        (println "Session not active")
+        (throw (ex-info "Trying to POST to inactive Session"
+                        {::pending (sessions/get-by-state sessions
+                                                          ::sessions/pending)
+                         ::world-id session-id
+                         ::connected (sessions/get-by-state sessions
+                                                            ::sessions/active)}))))
     (do
       (println "World not connected")
       (throw (ex-info "Trying to POST to unconnected Session"
-                      {::pending (::pending @sessions)
+                      {::pending (sessions/get-by-state sessions
+                                                        ::sessions/pending)
                        ::world-id session-id
-                       ::connected (::active @sessions)})))))
+                       ::connected (sessions/get-by-state sessions
+                                                          ::sessions/active)})))))
 
 (s/fdef post-message!
   :args (s/or :with-value (s/cat :sessions ::sessions/sessions
@@ -448,14 +458,14 @@
    lamport
    session-id
    {:keys [:frereth/command
+           ;; It seems like it would be better to make this explicitly a
+           ;; :frereth/world-key instead.
            :frereth/pid]}]
   (if (and command pid)
     (when-let [session (sessions/get-active-session sessions session-id)]
-      (let [worlds (::worlds session)]
+      (let [worlds (:frereth/worlds session)]
         (if (and worlds
-                 (throw (RuntimeException. "World state is no longer split like this"))
-                 (not (contains? (::pending worlds) pid))
-                 (not (contains? (::active worlds) pid)))
+                 (not (contains? worlds pid)))
           ;; TODO: Need to check with the Client registry
           ;; to verify that command is legal for the current
           ;; session.
@@ -466,7 +476,9 @@
                            pid
                            :frereth/ack-forking
                            {:frereth/cookie cookie}))
-          (println "Error: trying to re-fork pid" pid))))
+          (println "Error: trying to re-fork pid" pid
+                   "\namong\n"
+                   worlds))))
     (println (str "Missing either/both of '"
                   command
                   "' or/and '"
@@ -488,10 +500,16 @@
     (let [envelope (marshall/deserialize wrapper)
           _ (println ::login-finalized! "Key pulled:" envelope)
           session-id (:frereth/body envelope)]
-      (println ::login-realized! "Trying to activate\n" session-id
-               "a" (class session-id)
-               "\nfrom\n"
-               (sessions/get-by-state @session-atom ::pending))
+      (try
+        (println ::login-realized! "Trying to activate\n" session-id
+                 "a" (class session-id)
+                 "\nfrom\n"
+                 (sessions/get-by-state @session-atom ::pending))
+        (catch Exception ex
+          (println "Failed trying to log activation details:" ex)
+          (pprint {::details (log/exception-details ex)
+                   ::sessions/session-id session-id
+                   ::session-atom session-atom})))
       (if (get @session-atom session-id)
         (do
           (println ::login-finalized!
@@ -576,7 +594,9 @@
   (try
     ;; FIXME: Better handshake (need an authentication phase)
     (println ::activate-session!
-             "Trying to pull the Renderer's key from new websocket")
+             "Trying to pull the Renderer's key from new websocket"
+             "\namong"
+             @session-atom)
     (let [first-message (strm/try-take! websocket ::drained 500 ::timed-out)]
       ;; TODO: Need the login exchange before this.
       ;; Do that before opening the websocket, using something like SRP.
@@ -620,6 +640,9 @@
   :ret (s/nilable bytes?))
 (defn get-code-for-world
   [sessions actual-session-id world-key cookie-bytes]
+  ;; This is still built around the original implementation
+  ;; where the state was at the root of the tree.
+  (throw (RuntimeException. "Start back here"))
   (if-let [session (get-in sessions [::active actual-session-id])]
     (let [{:keys [:frereth/pid
                   :frereth/session-id

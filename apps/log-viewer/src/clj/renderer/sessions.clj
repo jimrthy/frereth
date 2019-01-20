@@ -123,6 +123,9 @@
   :args (s/cat :session-map ::sessions
                :session-id :frereth/session-id)
   :ret (s/nilable :frereth/session))
+;; This really should be public.
+;; But I don't feel like get-world-in-active-session should.
+;; TODO: Consider this discrepancy.
 (defn get-active-session
   "Returns the active :frereth/session, if any"
   [session-map session-id]

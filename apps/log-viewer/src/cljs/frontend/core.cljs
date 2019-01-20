@@ -226,6 +226,8 @@
                ;; Anything that transit can serialize natively, anyway
                :body any?))
 
+;; FIXME: Turn this into an integrant-based System that uses
+;; my Lamport Component instead.
 (let [lamport (atom 0)
       ;; Q: msgpack ?
       ;; A: Not in clojurescript, yet.

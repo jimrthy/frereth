@@ -208,6 +208,9 @@
 (println "Run (setup-monitor! {}) and then (go) to start the Monitor")
 
 (comment
+  (setup-monitor! {})
+  (go)
+
   (->> ig-state/system
        ::sessions/session-atom
        deref)
