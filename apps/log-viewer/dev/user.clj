@@ -217,6 +217,10 @@
   (->> ig-state/system
        ::sessions/session-atom
        deref
+       class)
+  (->> ig-state/system
+       ::sessions/session-atom
+       deref
        keys)
   (->> ig-state/system
        ::sessions/session-atom

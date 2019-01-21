@@ -29,8 +29,8 @@
 
 ;; Q: What is this?
 ;; (another alias for :frereth/pid is tempting.
-;; So is a java.security.Principal)
-(s/def ::principal any?)
+;; So is a java.security.auth.Subject)
+(s/def ::subject any?)
 
 ;; Might be interesting to track deactivated sessions for historical
 ;; comparisons.
@@ -75,7 +75,7 @@
                                       ::state-id
                                       ::specs/time-in-state
                                       :frereth/worlds]
-                                :opt [::principal
+                                :opt [::subject
                                       ::web-socket]))
 ;; History has to fit in here somewhere.
 ;; It almost seems like it makes sense to have this recursively
@@ -119,48 +119,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Internal Implementation
 
-(s/fdef get-active-session
-  :args (s/cat :session-map ::sessions
-               :session-id :frereth/session-id)
-  :ret (s/nilable :frereth/session))
-;; This really should be public.
-;; But I don't feel like get-world-in-active-session should.
-;; TODO: Consider this discrepancy.
-(defn get-active-session
-  "Returns the active :frereth/session, if any"
-  [session-map session-id]
-  (when-let [session (get session-map session-id)]
-    (when (= (::state session) ::active)
-      session)))
-
-(s/fdef get-world-in-active-session
-  :args (s/cat :sessions ::sessions
-               :session-id :frereth/session-id
-               :world-key :frereth/world-key)
-  :ret ::world/world)
-(defn get-world-in-active-session
-  [sessions session-id world-key]
-  (when-let [session (get-active-session sessions session-id)]
-    (world/get-world (:frereth/worlds session) world-key)))
-
-(s/fdef get-world-by-state-in-active-session
-  :args (s/cat :sessions ::sessions
-               :session-id :frereth/session-id
-               :world-key :frereth/world-key
-               :world-state ::world/connection-state)
-  :ret (s/nilable ::world/world))
-(defn get-world-by-state-in-active-session
-  [sessions session-id world-key state]
-  ;; This has diverged from the implementation in world.
-  ;; That has its own specific variations that start
-  ;; with get-world-in-state.
-  ;; FIXME: Consolidate these.
-  (when-let [world (get-world-in-active-session sessions
-                                                session-id
-                                                world-key)]
-    (when (world/state-match? world state)
-      world)))
-
+;; Only needed because I'm fudging past the initial auth stage
 (declare create log-in)
 (defmethod ig/init-key ::session-atom
   [_ _]
@@ -210,6 +169,17 @@
    ::time-in-state (java.util.Date.)
    :frereth/worlds {}})
 
+(s/fdef get-active-session
+  :args (s/cat :session-map ::sessions
+               :session-id :frereth/session-id)
+  :ret (s/nilable :frereth/session))
+(defn get-active-session
+  "Returns the active :frereth/session, if any"
+  [session-map session-id]
+  (when-let [session (get session-map session-id)]
+    (when (= (::state session) ::active)
+      session)))
+
 (s/fdef get-by-state
   :args (s/cat :sessions ::sessions
                :state ::state))
@@ -224,20 +194,50 @@
           {}
           sessions))
 
+(s/fdef get-world-in-active-session
+  :args (s/cat :sessions ::sessions
+               :session-id :frereth/session-id
+               :world-key :frereth/world-key)
+  :ret ::world/world)
+(defn get-world-in-active-session
+  [sessions session-id world-key]
+  (when-let [session (get-active-session sessions session-id)]
+    (world/get-world (:frereth/worlds session) world-key)))
+
+(s/fdef get-world-by-state-in-active-session
+  :args (s/cat :sessions ::sessions
+               :session-id :frereth/session-id
+               :world-key :frereth/world-key
+               :world-state ::world/connection-state)
+  :ret (s/nilable ::world/world))
+(defn get-world-by-state-in-active-session
+  [sessions session-id world-key state]
+  ;; This has diverged from the implementation in world.
+  ;; That has its own specific variations that start
+  ;; with get-world-in-state.
+  ;; FIXME: Consolidate these.
+  (when-let [world (get-world-in-active-session sessions
+                                                session-id
+                                                world-key)]
+    (when (world/state-match? world state)
+      world)))
+
 (s/fdef log-in
   :args (s/cat :state :frereth/state
-               :principal ::principal)
+               :subject ::subject)
   :fn (s/and #(= (-> % :args :state ::state) ::connected)
              #(= (-> % :ret ::state) ::pending)
-             #(= (-> % :args :principal)
-                 (-> % :ret ::principal)))
+             #(= (-> % :args :subject)
+                 (-> % :ret ::subject)))
   :ret :frereth/session)
 (defn log-in
-  "Handle authentication elsewhere"
-  [session-state principal]
+  "Change Session state.
+
+  Handle the authentication elsewhere"
+  [session-state subject]
   (assoc session-state
          ::state ::pending
-         ::principal principal))
+         ::subject subject))
 
 (s/fdef activate
   :args (s/cat :state :frereth/session

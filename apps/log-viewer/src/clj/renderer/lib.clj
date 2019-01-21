@@ -66,22 +66,31 @@
 
 (comment (vec @minute-key)
          (vec @previous-minute-key)
-         test-key
-         )
+         test-key)
 
-(s/fdef dispatch!
+;; FIXME: This seems like it might be more generally useful for other
+;; renderers.
+;; Then again, any such hypothetical renderers will be built around a
+;; totally different architecture, so probably not.
+(s/fdef dispatch
   :args (s/cat :session ::sessions/sessions
                :lamport ::lamport/clock
-               :session-id ::sessions/session-id)
-  :ret any?)
-(defmulti dispatch!
-  "Send message to a World associated with session-id"
+               :session-id ::sessions/session-id
+               :body :frereth/body)
+  ;; Q: What should this spec?
+  ;; The return value of the defmulti dispatcher?
+  ;; Or the actual multi-method?
+  ;; Currently, this doesn't seem to be supported at all.
+  :ret ::sessions/sessions)
+(defmulti dispatch
+  "Browser sent message to a World associated with session-id"
   ;; Probably worth mentioning that this is mainly for the sake of
   ;; calling swap! on a session atom
   (fn [session  ; ::sessions/sessions
        lamport  ; ::lamport/clock
-       session-id {:keys [:frereth/action]
-                   :as body}]
+       session-id  ; ::sessions/session-id
+       {:keys [:frereth/action]
+        :as body}]
     action))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -138,7 +147,7 @@
         ;; It's easy to miss this in the middle of the error handling.
         ;; Which is one reason this is worth keeping separate from the
         ;; dispatching code.
-        (swap! session-atom dispatch! clock session-id body))
+        (swap! session-atom dispatch clock session-id body))
       (catch Exception ex
         (println ex "trying to deserialize/dispatch" message-string)))
     (do
@@ -359,14 +368,15 @@
    (let [wrapper (do-wrap-message lamport world-key action)]
      (post-real-message! sessions session-id world-key wrapper))))
 
-(defmethod dispatch! :default
+(defmethod dispatch :default
   [sessions
    lamport
    session-id
    body]
-  (println "Unhandled action:" body))
+  (println "Unhandled action:" body)
+  sessions)
 
-(defmethod dispatch! :frereth/forked
+(defmethod dispatch :frereth/forked
   [sessions
    lamport
    session-id
@@ -441,19 +451,19 @@
                                 " != "
                                 actual-pid ", a " (class actual-pid)))
                    "\nQ: notify browser?")]
-          (throw (ex-info error-message
-                          {::actual decrypted
-                           ::expected {:frereth/session session-id
-                                       :frereth/world-key world-key}})))))
-    (throw (ex-info (str "Need to make world lookup simpler. Could not find")
-                    {::active-session (-> sessions
-                                          ::active
-                                          (get session-id))
-                     ::among params
-                     ::world-key world-key
-                     ::world-key-class (class world-key)}))))
+          (println error-message)
+          sessions)))
+    (do
+      (println "Need to make world lookup simpler. Could not find world")
+      (pprint {::active-sessions (sessions/get-by-state sessions
+                                                        ::sessions/active)
+               ::among params
+               ::world-key world-key
+               ::world-key-class (class world-key)})
+      sessions)))
 
-(defmethod dispatch! :frereth/forking
+;; FIXME: Check the return values for the rest of these.
+(defmethod dispatch :frereth/forking
   [sessions
    lamport
    session-id
@@ -633,74 +643,79 @@
 
 (s/fdef get-code-for-world
   :args (s/cat :sessions ::sessions/sessions
-               :session-id :frereth/session-id
+               :actual-session-id :frereth/session-id
                :world-key :frereth/world-key
                :cookie-bytes bytes?)
   ;; Q: What makes sense for the real return value?
   :ret (s/nilable bytes?))
 (defn get-code-for-world
   [sessions actual-session-id world-key cookie-bytes]
-  ;; This is still built around the original implementation
-  ;; where the state was at the root of the tree.
-  (throw (RuntimeException. "Start back here"))
-  (if-let [session (get-in sessions [::active actual-session-id])]
-    (let [{:keys [:frereth/pid
-                  :frereth/session-id
-                  :frereth/world-ctor]
-           :as cookie} (decode-cookie cookie-bytes)]
-      (println ::get-code-for-world "Have a session. Decoded cookie")
-      (if (and pid session-id world-ctor)
-        (if (verify-cookie actual-session-id world-key cookie)
+  (if actual-session-id
+    (if-let [session (sessions/get-active-session sessions
+                                                  actual-session-id)]
+      (let [{:keys [:frereth/pid
+                    :frereth/world-ctor]
+             expected-session-id :frereth/session-id
+             :as cookie} (decode-cookie cookie-bytes)]
+        (println ::get-code-for-world "Have a session. Decoded cookie")
+        (if (and pid expected-session-id world-ctor)
+          (if (verify-cookie actual-session-id world-key cookie)
+            (do
+              (println "Cookie verified")
+              (let [opener (if (.exists (io/file "dev-output/js"))
+                             io/file
+                             (fn [file-name]
+                               (io/file (io/resource (str "js/" file-name)))))
+                    ;; FIXME: This needs to vary based on the World that's
+                    ;; actually being connected
+                    raw (opener "dev-output/js/worker.js")]
+                (when-not (.exists raw)
+                  (throw (ex-info "Missing worker file"
+                                  {::problem opener})))
+                ;; I still need access to the actual worker .cljs so
+                ;; I can inject the public key that must be part of the cookie.
+                ;; This is really just the .js that loads up that .cljs.
+                ;; Though, honestly, this needs to adjust all the calls to
+                ;; require to place them under an API route that involves
+                ;; both the session and world IDs.
+                (println "Returning" raw "a" (class raw))
+                raw))
+            (do
+              (println "Bad Initiate packet.\n"
+                       cookie "!=" world-key
+                       "\nor"
+                       actual-session-id "!=" expected-session-id)
+              (throw (ex-info "Invalid Cookie: probable hacking attempt"
+                              {:frereth/session-id expected-session-id
+                               ::real-session-id actual-session-id
+                               :frereth/world-key world-key
+                               :frereth/cookie cookie}))))
           (do
-            (println "Cookie verified")
-            (let [opener (if (.exists (io/file "dev-output/js"))
-                           io/file
-                           (fn [file-name]
-                             (io/file (io/resource (str "js/" file-name)))))
-                  ;; FIXME: This needs to vary based on the World that's
-                  ;; actually being connected
-                  raw (opener "dev-output/js/worker.js")]
-              (when-not (.exists raw)
-                (throw (ex-info "Missing worker file"
-                                {::problem opener})))
-              ;; I still need access to the actual worker .cljs so
-              ;; I can inject the public key that must be part of the cookie.
-              ;; This is really just the .js that loads up that .cljs.
-              ;; Though, honestly, this needs to adjust all the calls to
-              ;; require to place them under an API route that involves
-              ;; both the session and world IDs.
-              (println "Returning" raw "a" (class raw))
-              raw))
-          (do
-            (println "Bad Initiate packet.\n"
-                     cookie "!=" world-key
-                     "\nor"
-                     actual-session-id "!=" session-id)
-            (throw (ex-info "Invalid Cookie: probable hacking attempt"
-                            {:frereth/session-id actual-session-id
-                             :frereth/world-key world-key
-                             :frereth/cookie cookie}))))
-        (do
-          (println (str "Incoming cookie has issue with either '"
-                        pid
-                        "', '"
-                        session-id
-                        "', or '"
-                        world-ctor
-                        "'"))
-          (throw (ex-info "Bad cookie"
-                          cookie)))))
-    (do
-      (println "Missing session key\n"
-               actual-session-id "a" (class actual-session-id)
-               "\namong")
-      (doseq [session-key (-> sessions ::active keys)]
-        (println session-key "a" (class session-key)))
-      (throw (ex-info "Trying to fork World for missing session"
-                      {::sessions/sessions sessions
-                       :frereth/session-id actual-session-id
-                       :frereth/world-key world-key
-                       ::cookie-bytes cookie-bytes})))))
+            (println (str "Incoming cookie has issue with either '"
+                          pid
+                          "', '"
+                          expected-session-id
+                          "', or '"
+                          world-ctor
+                          "'"))
+            (throw (ex-info "Bad cookie"
+                            cookie)))))
+      (do
+        (println "Missing session key\n"
+                 actual-session-id "a" (class actual-session-id)
+                 "\namong")
+        (doseq [session-key (sessions/get-by-state ::sessions/active)]
+          (println session-key "a" (class session-key)))
+        (throw (ex-info "Trying to fork World for missing session"
+                        {::sessions/sessions sessions
+                         :frereth/session-id actual-session-id
+                         :frereth/world-key world-key
+                         ::cookie-bytes cookie-bytes}))))
+    (throw (ex-info "Trying to fork World with falsey session-id"
+                    {::sessions/sessions sessions
+                     :frereth/session-id actual-session-id
+                     :frereth/world-key world-key
+                     ::cookie-bytes cookie-bytes}))))
 
 (s/fdef register-pending-world!
   :args (s/cat :session-atom ::sessions/session-atom
