@@ -49,16 +49,43 @@ and open a browser tab pointed to the
 
 ## Serious TODO items
 
-Need to pull in an SRP library implemented in javascript that's suitable
-for use in the browser.
+I haven't put much thought into the order yet
+
+### Go back to CP handshake
+
+See what happens with these latest changes
+
+### Rearrange namespaces
+
+Move more/everything under frereth.apps.
+
+### Switch to Pedestal
+
+And re-present my case about websocket auth.
+
+### Authentication
+
+#### PAKE
+
+Very tempting to pull in an SRP/OPAQUE library implemented in
+javascript that's suitable for use in the browser.
 
 https://github.com/simbo1905/thinbus-srp-npm seems promising.
 
 See https://clojurescript.org/guides/javascript-modules for hints about
 how to do this.
 
+#### That's silly
+
+Just start with simple Buddy JWE login. It's what all the cool kids are
+doing.
+
+### Authorization
+
+Buddy seems like a good starting point
+
 # License
 
-Copyright 2018 James Gatannah
+Copyright 2018-2019 James Gatannah
 
 Distributed under the Eclipse Public License either version 1.0 or (at your option) any later version.
