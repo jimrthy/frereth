@@ -4,7 +4,9 @@
   ;; But, really, the browser shouldn't know anything about this
   ;; abstraction layer.
   ;; Each Session here really represents a browser connection/websocket.
-  (:require [clojure.spec.alpha :as s]
+  (:require [clojure.pprint :refer (pprint)]
+            [clojure.spec.alpha :as s]
+            [frereth.apps.login-viewer.specs]
             [frereth.cp.shared.util :as cp-util]
             [integrant.core :as ig]
             [manifold.stream :as strm]
@@ -254,6 +256,52 @@
          ::state ::active
          ::web-socket web-socket))
 
+;; This is just for the sake of keeping things alphabetized
+(declare get-pending-world)
+(s/fdef activate-pending-world
+  :args (s/cat :sessions ::sessions
+               :session-id :frereth/session-id
+               :world-key :frereth/world-key
+               :client :frereth/renderer->client)
+  :ret ::sessions)
+(defn activate-pending-world
+  ;; This feels more than a little ridiculous.
+  "Transition World from pending to active"
+  [sessions session-id world-key client]
+  (if-let [world (get-pending-world sessions session-id world-key)]
+    (update-in sessions
+               [session-id world-key]
+               world/activate-pending
+               client)
+    (do
+      (println "No pending world"
+               world-key
+               "to activate for session"
+               session-id
+               "\namong")
+      (pprint sessions)
+      sessions)))
+
+(s/fdef add-pending-world
+  :args (s/cat :sessions ::sessions
+               :session-id :frereth/session-id
+               :world-key :frereth/world-key
+               :initial-state ::world/state)
+  :ret ::sessions)
+(defn add-pending-world
+  [sessions session-id world-key cookie]
+  (update sessions
+          session-id
+          (fn [{:keys [::state-id
+                       ::specs/time-in-state
+                       :frereth/worlds]
+                :as current}]
+            (let [worlds
+                  (world/add-pending worlds world-key cookie)]
+              (assoc current
+                     ::state-id (cp-util/random-uuid)
+                     ::specs/time-in-state (java.util.Date.)
+                     :frereth/worlds worlds)))))
 (s/fdef deactivate
   :args (s/cat :sessions ::sessions
                :session-id :frereth/session-id)
@@ -293,24 +341,3 @@
                                         session-id
                                         world-key
                                         ::world/pending))
-
-(s/fdef add-pending-world
-  :args (s/cat :sessions ::sessions
-               :session-id :frereth/session-id
-               :world-key :frereth/world-key
-               :initial-state ::world/state)
-  :ret ::sessions)
-(defn add-pending-world
-  [sessions session-id world-key cookie]
-  (update sessions
-          session-id
-          (fn [{:keys [::state-id
-                       ::specs/time-in-state
-                       :frereth/worlds]
-                :as current}]
-            (let [worlds
-                  (world/add-pending worlds world-key cookie)]
-              (assoc current
-                     ::state-id (cp-util/random-uuid)
-                     ::specs/time-in-state (java.util.Date.)
-                     :frereth/worlds worlds)))))

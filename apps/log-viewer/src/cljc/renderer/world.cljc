@@ -1,11 +1,15 @@
 (ns renderer.world
+  ;; FIXME: Move this ns under shared
   (:require [clojure.spec.alpha :as s]
+            ;;
+            [frereth.apps.login-viewer.specs]
             [shared.specs :as specs]))
 
-(s/def ::connection-state #{::active   ; we've ACKed the browser's fork
-                            ::forked   ; Q: diff between this and forking?
-                            ::forking  ; received source code. Ready to fork
-                            ::pending  ; browser would like to fork
+(s/def ::connection-state #{::active     ; we've ACKed the browser's fork
+                            ::forked     ; Q: diff between this and forking?
+                            ::forking    ; received source code. Ready to fork
+                            ::fsm-error  ; Tried an illegal state transition
+                            ::pending    ; browser would like to fork
                             })
 ;; This is whatever makes sense for the world implementation.
 ;; This seems like it will probably always be a map?, but it could very
@@ -14,7 +18,8 @@
 (s/def ::internal-state any?)
 (s/def ::world (s/keys :req [::specs/time-in-state
                              ::connection-state
-                             ::internal-state]))
+                             ::internal-state]
+                       :opt [:frereth/renderer->client]))
 
 (s/def :frereth/world-key :frereth/pid)
 (s/def :frereth/worlds (s/map-of :frereth/world-key ::world))
@@ -59,6 +64,32 @@
 (defn get-active
   [world-map world-key]
   (get-world-in-state world-map world-key ::active))
+
+(s/fdef activate-pending
+  :args (s/cat :world ::world
+               :client :frereth/renderer->client)
+  :fn (s/and #(= ::pending (-> % :args :world ::connection-state))
+             #(or (= ::active (:ret %))
+                  (= ::fsm-error (:ret %))))
+  :ret ::world)
+(defn activate-pending
+  [world client]
+  (-> world
+      (update ::connection-state
+              (fn [current]
+                (if (= ::pending current)
+                  ::active
+                  (let []
+                    (println "")
+                    ::fsm-error))))
+      (assoc ::specs/time-in-state
+             ;; This is the 4th time I'm calling this.
+             ;; It's tough to remember.
+             ;; TODO: Isolate/generalize all of them
+             ;; Bigger TODO: either make this usable from cljs or move
+             ;; it to an unshared ns
+             (java.util.Date.)
+             :frereth/renderer->client client)))
 
 (s/fdef add-pending
   :args (s/cat :world-map :frereth/worlds

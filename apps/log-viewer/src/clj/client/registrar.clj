@@ -1,31 +1,9 @@
 (ns client.registrar
-  (:require [clojure.spec.alpha :as s]))
+  (:require [clojure.spec.alpha :as s]
+            [frereth.apps.login-viewer.specs]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Specs
-
-;; Called to disconnect renderer from a running world
-(s/def :frereth/disconnect! (s/fspec :args nil :ret any?))
-
-;; Not quite `any?`.
-;; But anything that can be serialized to transit.
-;; TODO: Find a spec for this
-(s/def :frereth/message any?)
-
-(s/def :frereth/message-sender!
-  (s/fspec :args (s/cat :message :frereth/message)
-           :ret any?))
-
-(s/def :frereth/renderer->client (s/keys :req [:frereth/disconnect!
-                                               :frereth/message-sender!]))
-
-(s/def :frereth/world-stop-signal (s/or :symbol symbol?
-                                        :uuid uuid?
-                                        :int integer?))
-(s/def :frereth/world-connector
-  (s/fspec :args (s/cat :world-stop-signal :frereth/world-stop-signal
-                        :send-message! :frereth/message-sender!)
-           :ret :frereth/renderer->client))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Globals
@@ -53,9 +31,13 @@
 
   Returns falsey if the command is already registered"
   ;; This is overly simplified.
-  ;; At the very least, need a permissions system.
+
+  ;; We need a permissions/authorization system.
+
   ;; Obvious approach: each command includes a set of
-  ;; permissions that allows a user to run it.
+  ;; permissions that allows a user to run it. (Like
+  ;; an ACL).
+  ;; TODO: Look at the way Buddy handles this.
 
   ;; There's another problem: there are really 2
   ;; pieces to this.

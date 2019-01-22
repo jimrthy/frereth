@@ -211,6 +211,11 @@
   (setup-monitor! {})
   (go)
 
+  (-> ig-state/system
+      keys)
+  (-> ig-state/system
+      :shared.lamport/clock
+      deref)
   (->> ig-state/system
        ::sessions/session-atom
        deref)

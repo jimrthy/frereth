@@ -9,13 +9,16 @@
              [stream :as strm]]
             [clojure.java.io :as io]
             [clojure.core.async :as async]
+            [frereth.apps.login-viewer.specs]
             [renderer
              [marshalling :as marshall]
-             [sessions :as sessions]]
+             [sessions :as sessions]
+             [world :as world]]
             [shared
-             [specs]
-             [lamport :as lamport]]
-            [frereth.weald.logging :as log])
+             [lamport :as lamport]
+             [specs]]
+            [frereth.weald.logging :as log]
+            [renderer.world :as world])
   (:import clojure.lang.ExceptionInfo
            java.util.Base64))
 
@@ -174,72 +177,6 @@
                      dissoc
                      world-key)))
 
-(s/fdef assoc-active-world
-  :args (s/cat :sessions ::sessions/sessions
-               :session-id :frereth/session-id
-               :world-key :frereth/world-key
-               ;; Well, any immutable value.
-               ;; Although, in practice, this will probably generally be
-               ;; keyword?
-               ;; Note that this is really a leftover from the initial
-               ;; implementation that assumed the world state would be a
-               ;; hashmap.
-               ;; I've since come to the realization that that
-               ;; assumption isn't really a valid starting point for
-               ;; generic usefulness.
-               ;; It probably covers 90-95% of use cases, but it isn't
-               ;; universal.
-               ;; Many end-users, for example, will want to use a Record
-               ;; instead.
-               ;; It seems likely that others will want to use a mutable
-               ;; java Object.
-               ;; So it probably doesn't make sense to take this any
-               ;; further.
-               ;; However:
-               ;; It probably does make sense to write an update
-               ;; function that lets callers supply a callable.
-               ;; And, for that matter, this still makes sense for
-               ;; worlds that are represented by hashmaps. Or that want
-               ;; to just overwrite one of a Record's properties.
-               ;; From that perspective, this should really allow the
-               ;; capability to update multiple key/value pairs at once.
-               ;; Furthermore:
-               ;; This really isn't for the arbitrary world-state.
-               ;; This is for the sake of associating things at this
-               ;; abstraction layer. Such as a ::client.
-               :key any?
-               :value any?)
-  :ret ::sessions/sessions)
-(defn assoc-active-world
-  "Add a key/value pair to an active world"
-  [sessions session-id world-key k v]
-  (let [key-chain [::active session-id ::worlds ::active world-key]]
-    (assoc-in sessions
-              (conj key-chain k)
-              v)))
-
-(s/fdef activate-pending-world
-  :args (s/cat :sessions ::sessions/sessions
-               :session-id :frereth/session-id
-               :world-key :frereth/world-key)
-  :ret ::sessions/sessions)
-(defn activate-pending-world
-  [sessions session-id world-key]
-  (when-let [world (sessions/get-pending-world sessions session-id world-key)]
-    ;; TODO: Caller is responsible for wrapping this in a swap! call.
-    (throw (RuntimeException. "sessions is no longer an atom"))
-    (swap! sessions
-           (fn [browser-sessions]
-             ;; This is a relic from the time before I decided to
-             ;; track the state inside each individual Session/World.
-             (throw (RuntimeException. "No longer"))
-             (-> browser-sessions
-                 (assoc-in [::active ::worlds ::active world-key]
-                           world)
-                 (update-in [::active ::worlds ::pending]
-                            dissoc
-                            world-key))))))
-
 (s/fdef build-cookie
   :args (s/cat :session-id ::session-id
                :world-key ::world-key
@@ -320,8 +257,10 @@
                                          envelope
                                          500
                                          ::timed-out)]
+              ;; FIXME: Add context about what we just tried to
+              ;; forward
               (dfrd/on-realized success
-                                #(println "forwarded:" %)
+                                #(println "Forwarded:" %)
                                 #(println "Forwarding failed:" %)))
             (catch Exception ex
               (println "Message forwarding failed:" ex))))
@@ -401,6 +340,9 @@
         (let [connector (registrar/lookup session-id constructor-key)
               world-stop-signal (gensym "frereth.stop.")
               client (connector world-stop-signal
+                                ;; FIXME: Refactor this into its own
+                                ;; top-level function to reduce some of
+                                ;; the noise in here.
                                 (fn [raw-message]
                                   (if (not= raw-message world-stop-signal)
                                     (post-message! sessions
@@ -422,13 +364,10 @@
                          session-id
                          world-key
                          :frereth/ack-forked)
-          (let [session-map (activate-pending-world sessions
-                                                    session-id
-                                                    world-key)]
-            (assoc-active-world sessions
-                                session-id
-                                world-key
-                                ::client client)))
+          (sessions/activate-pending-world sessions
+                                           session-id
+                                           world-key
+                                           client))
         ;; This could be a misbehaving World.
         ;; Or it could be a nasty bug in the rendering code.
         ;; Well, it would have to be a nasty bug for a World to misbehave
@@ -462,7 +401,6 @@
                ::world-key-class (class world-key)})
       sessions)))
 
-;; FIXME: Check the return values for the rest of these.
 (defmethod dispatch :frereth/forking
   [sessions
    lamport
@@ -475,25 +413,50 @@
     (when-let [session (sessions/get-active-session sessions session-id)]
       (let [worlds (:frereth/worlds session)]
         (if (and worlds
-                 (not (contains? worlds pid)))
+                 (not (world/get-world worlds pid)))
           ;; TODO: Need to check with the Client registry
           ;; to verify that command is legal for the current
-          ;; session.
+          ;; session (at the very least, this means authorization)
           (let [cookie (build-cookie session-id pid command)]
-            (post-message! sessions
-                           lamport
-                           session-id
-                           pid
-                           :frereth/ack-forking
-                           {:frereth/cookie cookie}))
-          (println "Error: trying to re-fork pid" pid
-                   "\namong\n"
-                   worlds))))
-    (println (str "Missing either/both of '"
-                  command
-                  "' or/and '"
-                  pid
-                  "'"))))
+            (try
+              (post-message! sessions
+                             lamport
+                             session-id
+                             pid
+                             :frereth/ack-forking
+                             {:frereth/cookie cookie})
+              (catch Exception ex
+                (println "Error:" ex
+                         "\nTrying to post :frereth/ack-forking to"
+                         session-id
+                         "\nabout"
+                         pid)))
+            ;; It's tempting to add the world to the session here.
+            ;; Actually, there doesn't seem like any good reason
+            ;; not to.
+            ;; There are lots of places for things to break along
+            ;; the way, but this is an important starting point.
+            ;; It's also very tempting to set up an Actor model
+            ;; sort of thing inside the Session to handle this
+            ;; World that we're trying to create.
+            ;; This makes me think this this is working at too high
+            ;; a layer in the abstraction tree.
+            ;; We should really be running something like update-in
+            ;; with just the piece that's being changed here (in
+            ;; this case, the appropriate Session).
+            sessions)
+          (do
+            (println "Error: trying to re-fork pid" pid
+                     "\namong\n"
+                     worlds)
+            sessions))))
+    (do
+      (println (str "Missing either/both of '"
+                    command
+                    "' or/and '"
+                    pid
+                    "'"))
+      sessions)))
 
 (s/fdef login-finalized!
   :args (s/cat :lamport ::lamport/clock

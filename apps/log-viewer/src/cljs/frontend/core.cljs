@@ -132,10 +132,12 @@
   ([world-key from to additional]
    (if-let [current (get @worlds world-key)]
      (do
-       (console.log "Planning to switch" current
+       (console.log ::adjust-world-state!
+                    "Planning to switch" current
                     "state from" from
-                    "to" to
-                    "and adjust state by" additional)
+                    "to" to)
+       (when additional
+         (console.log "and adjust state by" additional))
        (if (= (::state current) from)
          (let [added (condp (fn [test-expr expr]
                               (test-expr expr))
@@ -267,6 +269,7 @@
       ;; What I remember about core.match seems like overkill, but it
       ;; also seems tailor-made for this. Assuming it is available in
       ;; cljs.
+      ;; (It is, but it still seems like overkill for these purposes)
       (condp = action
         :frereth/ack-forked
         (if-let [{:keys [::worker]} (do-get-world world-key ::forked)]

@@ -6,6 +6,8 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Specs
 
+;; It's really very tempting to extend this into a
+;; map and add a wall-clock #inst member.
 (s/def :frereth/lamport integer?)
 
 (s/def ::clock (s/and #?(:clj #(instance? clojure.lang.Atom %))

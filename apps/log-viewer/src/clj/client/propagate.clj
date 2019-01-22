@@ -2,6 +2,7 @@
   "Forward tap objects to the log viewer web socket"
   (:require [clojure.core.async :as async]
             [clojure.spec.alpha :as s]
+            [frereth.apps.login-viewer.specs]
             [integrant.core :as ig]
             [renderer.lib :as lib]
             [client.registrar :as registrar]))
