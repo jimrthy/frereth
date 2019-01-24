@@ -78,11 +78,20 @@
                                ::client-state/server-security {::shared-specs/srvr-name server-binary-name
                                                                ::shared-specs/srvr-port server-port
                                                                ::shared-specs/public-long server-long-term-public-key}}
+                              ;; TODO: Need to update cp.client.state.
+                              ;; ctor expects a function it can call to create the logger.
                               logger)]
       ;; This implementation is almost copy/pasted from the raw-client function in tests/frereth_cp/test_factory.clj
       ;; It cannot suffer the limitations that has of running synchronously in the same thread as the server.
       (client/start! result)
       result)))
+
+(comment
+  (let [key-dir "client-sample"
+        nonce-key-resource (io/resource (str key-dir
+                                             "/.expertsonly/noncekey"))]
+    nonce-key-resource)
+  (io/resource "client-sample/.experts-only"))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Public

@@ -233,9 +233,14 @@
                  (-> % :ret ::subject)))
   :ret :frereth/session)
 (defn log-in
+  ;; Note that this is distinct from logging into a World.
+  ;; That's really more of a frereth-server thing, probably
+  ;; going through a client.
+  ;; This is really about authenticating a direct browser
+  ;; connection.
   "Change Session state.
 
-  Handle the authentication elsewhere"
+  Handle the authentication elsewhere."
   [session-state subject]
   (assoc session-state
          ::state ::pending
@@ -270,7 +275,7 @@
   [sessions session-id world-key client]
   (if-let [world (get-pending-world sessions session-id world-key)]
     (update-in sessions
-               [session-id world-key]
+               [session-id :frereth/worlds world-key]
                world/activate-pending
                client)
     (do

@@ -51,9 +51,13 @@ and open a browser tab pointed to the
 
 I haven't put much thought into the order yet
 
+### core.cljs needs to be idempotent
+
+It's setting up a new World connection with every file save.
+
 ### Go back to CP handshake
 
-See what happens with these latest changes
+This *is* the actual point.
 
 ### Rearrange namespaces
 

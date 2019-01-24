@@ -67,7 +67,8 @@
 (def base-url (atom ""))
 
 (def idle-worker-pool
-  "Workers were designed to be heavyweight. How dangerous to pool?"
+  "Workers were designed to be heavyweight.
+  Do the [hypothetical] advantages to pooling outweigh the isolation loss?"
   (atom []))
 (comment
   (println idle-worker-pool)
@@ -796,8 +797,7 @@
 
   (connect-web-socket! fork-shell! session-id-from-server))
 
-;; FIXME: This seems as though it should be protected behind the
-;; equivalent of defonce
+;; TODO: Protect this behind something we can defonce
 (when js/window
   (start!))
 

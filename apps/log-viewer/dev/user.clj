@@ -60,59 +60,6 @@
 (def server-port 32156)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;; Server
-
-(defn build-server-cfg
-  [monitor]
-  (require 'backend.system :reload)
-  (let [ctor (resolve 'backend.system/server-ctor)]
-    (ctor monitor)))
-
-(defn build-server
-  [monitor]
-  (let [config (build-server-cfg monitor)]
-    (ig/init config)))
-
-(comment
-  ig-state/system
-  (keys ig-state/system)
-  (-> ig-state/system
-      :backend.system/log-chan
-      :backend.system/ch)
-  (async/put! (-> ig-state/system
-                  :backend.system/log-chan
-                  :backend.system/ch)
-              "log message"
-              (fn [success?]
-                (println "Putting log message succeeded?" success?)))
-  (-> ig-state/system
-      :client.propagate/monitor
-      :client.propagate/registration-handler)
-
-  ;; UDP port creation is blocking. Experiment to see
-  ;; what the smallest use-case really looks like.
-  (def sample-port (udp/socket {:port 47659}))
-  @sample-port
-  (.close @sample-port)
-
-  (def server-cfg (build-server-cfg ig-state/system))
-  server-cfg
-  (keys server-cfg)
-  (def server (build-server (assoc server-cfg
-                                   :backend.system/socket {:backend.system/server-port server-port})))
-  server
-  (keys server)
-  (:server.networking/server server)
-  (-> server :server.networking/server keys)
-  (-> server :server.networking/server :server.networking/cp-server keys)
-  (-> server :server.networking/server :server.networking/cp-server ::cp-shared/my-keys ::cp-shared/long-pair .getPublicKey)
-  (ig/halt! server)
-
-  @registrar/registry-1
-
-  @renderer/sessions)
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Client
 
 (defn build-client-config
@@ -144,6 +91,7 @@
   client-description
   (-> client-description :client.networking/connection ::weald/logger keys)
   (def client (ig/init client-description))
+  (ig/halt! client)
   client
   (class client)
   (nil? client)
@@ -153,7 +101,6 @@
   (-> client :client.networking/connection ::client-state/state ::weald/logger :subordinates
       (get 0))
   (-> client :client.networking/connection ::client-state/state ::weald/logger)
-  (ig/halt! client)
 
   (let [log-state (-> client :client.networking/connection ::client-state/state ::weald/state)
         logger (-> client :client.networking/connection ::client-state/state ::weald/logger)]
@@ -176,6 +123,58 @@
     (async/alts!! [ch (async/timeout 100)] :default ::beat-timeout))
   )
 
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; Server
+
+(defn build-server-cfg
+  [monitor]
+  (require 'backend.system :reload)
+  (let [ctor (resolve 'backend.system/server-ctor)]
+    (ctor monitor)))
+
+(defn build-server
+  [monitor]
+  (let [config (build-server-cfg monitor)]
+    (ig/init config)))
+
+(comment
+  ig-state/system
+  (keys ig-state/system)
+  (-> ig-state/system
+      :backend.system/log-chan
+      :backend.system/ch)
+  (async/put! (-> ig-state/system
+                  :backend.system/log-chan
+                  :backend.system/ch)
+              "log message"
+              (fn [success?]
+                (println "Putting log message succeeded?" success?)))
+  (-> ig-state/system
+      :client.propagate/monitor
+      :client.propagate/registration-handler)
+
+  ;; UDP port creation blocks when a dangling socket retains control.
+  ;; Experiment to see what the smallest use-case really looks like.
+  (def sample-port (udp/socket {:port 47659}))
+  @sample-port
+  (.close @sample-port)
+
+  ;;; To actually put that to use and create a server
+  (def server-cfg (build-server-cfg ig-state/system))
+  server-cfg
+  (keys server-cfg)
+  (def server (build-server (assoc server-cfg
+                                   :backend.system/socket {:backend.system/server-port server-port})))
+  server
+  (keys server)
+  (:server.networking/server server)
+  (-> server :server.networking/server keys)
+  (-> server :server.networking/server :server.networking/cp-server keys)
+  (-> server :server.networking/server :server.networking/cp-server ::cp-shared/my-keys ::cp-shared/long-pair .getPublicKey vec)
+  (ig/halt! server)
+
+  @registrar/registry-1)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Upper Management
@@ -230,15 +229,45 @@
   (->> ig-state/system
        ::sessions/session-atom
        deref
+       first)
+  (->> ig-state/system
+       ::sessions/session-atom
+       deref
        vals)
   (->> ig-state/system
        ::sessions/session-atom
        deref
        vals
-       (filter #(= (::sessions/session-state %) ::sessions/pending)))
+       first
+       keys)
   (->> ig-state/system
        ::sessions/session-atom
        deref
        vals
-       (filter #(= (::sessions/session-state %) ::sessions/active)))
+       first
+       :frereth/worlds
+       keys)
+  (->> ig-state/system
+       ::sessions/session-atom
+       deref
+       vals
+       first
+       :frereth/worlds
+       keys
+       count)
+  (->> ig-state/system
+       ::sessions/session-atom
+       deref
+       vals
+       first
+       :frereth/worlds
+       vals)
+  (-> ig-state/system
+      ::sessions/session-atom
+      deref
+      (sessions/get-by-state ::sessions/pending))
+  (-> ig-state/system
+      ::sessions/session-atom
+      deref
+      (sessions/get-by-state ::sessions/active))
   )

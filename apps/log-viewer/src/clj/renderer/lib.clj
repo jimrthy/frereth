@@ -171,9 +171,8 @@
 (defn deactivate-world!
   [session-atom session-id world-key]
   ;; TODO: Refactor/move this into the sessions ns
-  (throw (RuntimeException. "Rearranged the way session state as managed"))
   (swap! session-atom
-         #(update-in % [::active session-id ::worlds ::active]
+         #(update-in % [session-id :frereth/worlds]
                      dissoc
                      world-key)))
 
@@ -352,7 +351,9 @@
                                                    :frereth/forward
                                                    raw-message)
                                     (do
-                                      (deactivate-world! session-id world-key)
+                                      (deactivate-world! sessions
+                                                         session-id
+                                                         world-key)
                                       (post-message! sessions
                                                      lamport
                                                      session-id

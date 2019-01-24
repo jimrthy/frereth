@@ -162,7 +162,7 @@
           ;; Q: Do I want to add "resources" to this?
           ;; Both it and target seem to have gone dormant in October.
           ;; Which might or might not mean anything.
-          :resource-paths #{"src/clj" "src/cljc"}
+          :resource-paths #{"resources" "src/clj" "src/cljc"}
           ;; Test path can be included here as source-files are not included in JAR
           ;; Just be careful to not AOT them
           :source-paths   #{"dev" "src/cljs" "src/less" "src/scss" "test/clj" "test/cljs"})

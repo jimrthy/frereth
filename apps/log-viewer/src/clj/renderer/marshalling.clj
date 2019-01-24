@@ -26,6 +26,36 @@
                            ;; serialize this recursively?
                            (pr-str @o))))
 
+(def exception-write-handler
+  (transit/write-handler "exception"
+                         (fn [ex]
+                           (println ::exception-write-handler
+                                    "WARNING: Trying to serialize a(n)"
+                                    (class ex))
+                           ;; Just as I was starting to think that a
+                           ;; macro would make a lot of sense here,
+                           ;; I feel like a lot more details are justified.
+                           ;; Then again...they really should all be getting
+                           ;; added already by the log handler.
+                           (pr-str ex))))
+
+(def manifold-stream-handler
+  (transit/write-handler "manifold-stream"
+                         (fn [s]
+                           (println ::manifold-stream-handler
+                                    "WARNING: Trying to serialize a(n)"
+                                    (class s))
+                           (pr-str s))))
+
+(def nacl-key-pair-handler
+  (transit/write-handler "nacl-key-pair"
+                         (fn [pair]
+                           (println ::nacl-key-pair-handler
+                                    "WARNING: Trying to serialize a" (class pair))
+                           ;; It's tempting to also log the private key.
+                           ;; That would be a terrible mistake.
+                           {::public-key (vec (.getPublicKey pair))})))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Public
 
@@ -52,7 +82,10 @@
           handler-map {:handlers {async-protocols/ReadPort async-chan-write-handler
                                   clojure.core.async.impl.channels.ManyToManyChannel async-chan-write-handler
                                   clojure.lang.Atom atom-write-handler
-                                  clojure.lang.Agent atom-write-handler}}
+                                  clojure.lang.Agent atom-write-handler
+                                  com.iwebpp.crypto.TweetNaclFast$Box$KeyPair nacl-key-pair-handler
+                                  java.lang.Exception exception-write-handler
+                                  manifold.stream.SplicedStream manifold-stream-handler}}
           writer (transit/writer result
                                  :json
                                  handler-map)]
