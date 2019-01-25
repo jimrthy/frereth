@@ -1,4 +1,4 @@
-(ns frontend.core
+(ns frereth.apps.log-viewer.frontend.core
   (:require-macros [cljs.core.async.macros :refer [go]]
                    [frontend.macro :refer [foobar]])
   ;; cemerick.url is very tempting, but it hasn't been updated
@@ -11,7 +11,7 @@
             [clojure.string]
             [cognitect.transit :as transit]
             [foo.bar]
-            [frontend.system :as sys]
+            [frereth.apps.log-viewer.frontend.system :as sys]
             ;; Start by at least partially supporting this, since it's
             ;; so popular
             [reagent.core :as r]

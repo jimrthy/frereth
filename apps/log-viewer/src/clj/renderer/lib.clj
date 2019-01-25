@@ -12,13 +12,12 @@
             [frereth.apps.login-viewer.specs]
             [renderer
              [marshalling :as marshall]
-             [sessions :as sessions]
-             [world :as world]]
+             [sessions :as sessions]]
             [shared
              [lamport :as lamport]
-             [specs]]
-            [frereth.weald.logging :as log]
-            [renderer.world :as world])
+             [specs]
+             [world :as world]]
+            [frereth.weald.logging :as log])
   (:import clojure.lang.ExceptionInfo
            java.util.Base64))
 

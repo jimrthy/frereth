@@ -10,8 +10,9 @@
             [frereth.cp.shared.util :as cp-util]
             [integrant.core :as ig]
             [manifold.stream :as strm]
-            [renderer.world :as world]
-            [shared.specs :as specs]))
+            [shared
+             [specs :as specs]
+             [world :as world]]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Specs

@@ -1,4 +1,4 @@
-(ns frontend.worker
+(ns frereth.apps.log-viewer.worker.core
   ;; This really should be a stand-alone project supplied by Server
   "Generate DOM structure and manage state"
   (:require [cljs.reader]

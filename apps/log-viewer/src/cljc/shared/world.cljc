@@ -1,4 +1,4 @@
-(ns renderer.world
+(ns shared.world
   ;; FIXME: Move this ns under shared
   (:require [clojure.spec.alpha :as s]
             ;;
