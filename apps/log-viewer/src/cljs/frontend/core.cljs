@@ -11,6 +11,7 @@
             [clojure.string]
             [cognitect.transit :as transit]
             [foo.bar]
+            [frontend.system :as sys]
             ;; Start by at least partially supporting this, since it's
             ;; so popular
             [reagent.core :as r]
@@ -28,6 +29,7 @@
 
 ;; Instance of ArrayBuffer
 (s/def ::array-buffer any?)
+;; TODO: better than this
 (s/def ::jwk map?)
 ;; Something like crypto/Key
 (s/def ::crypto-key any?)
