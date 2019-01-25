@@ -167,14 +167,6 @@
                                       ::sessions/pending)
                "\nat" @clock))))
 
-(defn deactivate-world!
-  [session-atom session-id world-key]
-  ;; TODO: Refactor/move this into the sessions ns
-  (swap! session-atom
-         #(update-in % [session-id :frereth/worlds]
-                     dissoc
-                     world-key)))
-
 (s/fdef build-cookie
   :args (s/cat :session-id ::session-id
                :world-key ::world-key
@@ -350,15 +342,15 @@
                                                    :frereth/forward
                                                    raw-message)
                                     (do
-                                      (deactivate-world! sessions
-                                                         session-id
-                                                         world-key)
                                       (post-message! sessions
                                                      lamport
                                                      session-id
                                                      world-key
                                                      :frereth/disconnect
-                                                     true)))))]
+                                                     true)
+                                      (sessions/deactivate-world sessions
+                                                                 session-id
+                                                                 world-key)))))]
           (post-message! sessions
                          lamport
                          session-id
@@ -531,7 +523,7 @@
                                        sessions/deactivate
                                        session-id)))))
         (do
-          (println ::login-dinalized! "Not found")
+          (println ::login-realized! "Not found")
           (throw (ex-info "Browser trying to complete non-pending connection"
                           {::attempt session-id
                            ::sessions/sessions @session-atom})))))

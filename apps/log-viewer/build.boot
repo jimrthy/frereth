@@ -45,7 +45,9 @@
 (set-env! :dependencies   '[[adzerk/boot-cljs "2.1.5" :scope "test"]
                             [adzerk/boot-cljs-repl "0.4.0" :scope "test"]
                             [adzerk/boot-reload "0.6.0" :scope "test"]
-                            [bidi "2.1.4"]
+                            ;; Q: Will this make any sense after switching the server
+                            ;; to pedestal?
+                            [bidi "2.1.5"]
                             [boot/core "2.8.2" :scope "provided"]
                             [buddy/buddy-auth "2.1.0"]
                             [cider/piggieback "0.3.10" :scope "test" :exclusions [com.google.guava/guava
@@ -67,7 +69,7 @@
                             [com.cemerick/url "0.1.1"]
                             [com.cognitect/transit-clj "0.8.313" :exclusions [commons-codec]]
                             [com.cognitect/transit-cljs "0.8.256"]
-                            [com.nimbusds/nimbus-jose-jwt "6.5"]
+                            [com.nimbusds/nimbus-jose-jwt "6.7"]
                             [com.nimbusds/srp6a "2.0.2"]
                             [crisptrutski/boot-cljs-test "0.3.4" :scope "test"]
                             [deraen/boot-sass "0.3.1" :scope "test"]
@@ -102,6 +104,7 @@
                             [org.clojure/core.async "0.4.490"]
                             [org.clojure/spec.alpha "0.2.176" :exclusions [org.clojure/clojure]]
                             [org.clojure/test.check "0.10.0-alpha3" :scope "test" :exclusions [org.clojure/clojure]]
+                            [org.clojure/tools.reader "1.3.2"]
                             ;; Required by boot-less
                             [org.slf4j/slf4j-nop "1.7.25" :scope "test"]
                             ;; This is the task that combines all the linters
@@ -148,13 +151,14 @@
                                                                         org.clojure/spec.alpha]]
                             ;; Ironically, this really is for the sake of the front-end.
                             ;; It has something to do with the clojurescript watcher.
-                            [http-kit "2.3.0" :scope "test"]
+                            #_[http-kit "2.3.0" :scope "test"]
+                            [http-kit "2.4.0-alpha2" :scope "test"]
                             [binaryage/devtools "0.9.10" :scope "test" :exclusions [org.clojure/tools.reader]]
                             ;; Q: Why?
                             [cljsjs/babel-standalone "6.18.1-3" :scope "test" :exclusions [org.clojure/clojure]]
-                            ;; This has been upgraded to 4.1.3, but that version doesn't work
+                            ;; This has been upgraded to 4.2.1, but that version doesn't work
                             ;; (the file bootstrap/less/bootstrap.less no longer exists).
-                            ;; TODO: Consider changing this.
+                            ;; TODO: Consider changing this and whatever depends on it.
                             [org.webjars/bootstrap "3.3.7-1"]
                             ;; SASS
                             [org.webjars.bower/bootstrap "4.1.3" :exclusions [org.webjars.bower/jquery]]]

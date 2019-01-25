@@ -11,7 +11,7 @@
                 [:button.btn.btn-danger
                  {:type "button"
                   ;; This would lead to sanitation
-                  ;; :on-click :frontend.worken/button-+
+                  ;; :on-click :frontend.worker/button-+
                   }
                  "+"]
                 [:button.btn.btn-success

@@ -324,6 +324,18 @@
   ;; approach
   (dissoc sessions session-id))
 
+(s/fdef deactivate-world
+  :args (s/cat :sessions ::sessions
+               :session-id :frereth/session-id
+               :world-key :frereth/world-key)
+  :ret ::sessions)
+(defn deactivate-world
+  [session-map session-id world-key]
+  (update-in session-map
+             [session-id :frereth/worlds]
+             dissoc
+             world-key))
+
 (s/fdef get-active-world
   :args (s/cat :sessions ::sessions
                :session-id :frereth/session-id
