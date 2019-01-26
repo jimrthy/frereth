@@ -274,15 +274,12 @@
   ;; This feels more than a little ridiculous.
   "Transition World from pending to active"
   [sessions session-id world-key client]
-  (if-let [world (get-pending-world sessions session-id world-key)]
-    (update-in sessions
-               [session-id :frereth/worlds world-key]
-               world/activate-pending
-               client)
+  (if-let [session (get-active-session sessions session-id)]
+    (update session
+            :frereth/worlds
+            world/activate-pending world-key client)
     (do
-      (println "No pending world"
-               world-key
-               "to activate for session"
+      (println "No active session"
                session-id
                "\namong")
       (pprint sessions)
@@ -322,7 +319,15 @@
   ;; a global.
   ;; For starters, just go with the simplest possible
   ;; approach
-  (dissoc sessions session-id))
+
+  ;; I definitely do want to do something along these lines
+  #_(dissoc sessions session-id)
+  ;; But for now, hack around the "real" life cycle
+  ;; so I don't have to add anything like authentication.
+  ;; Yet.
+  ;; FIXME: Don't leave it this way.
+  (update sessions session-id
+          log-in {}))
 
 (s/fdef deactivate-world
   :args (s/cat :sessions ::sessions
@@ -333,8 +338,7 @@
   [session-map session-id world-key]
   (update-in session-map
              [session-id :frereth/worlds]
-             dissoc
-             world-key))
+             world/deactivate))
 
 (s/fdef get-active-world
   :args (s/cat :sessions ::sessions
