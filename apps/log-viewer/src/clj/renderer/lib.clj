@@ -149,6 +149,19 @@
         ;; It's easy to miss this in the middle of the error handling.
         ;; Which is one reason this is worth keeping separate from the
         ;; dispatching code.
+        ;; Doing this inside a swap! seems iffy.
+        ;; Realistically, dispatch should return something like
+        ;; a) the new state
+        ;; b) seq of functions to call to trigger side-effects
+        ;; That isn't quite right. The side-effecting functions
+        ;; could result in a different end state for this...call
+        ;; it a transaction.
+        ;; But it's better than having a big, synchronous
+        ;; transformation that seems very likely to either block
+        ;; updates or trigger multiple side-effects.
+        ;; This
+        ;; TODO: Review how atoms really work. Especially in terms
+        ;; of conflict resolution.
         (swap! session-atom dispatch clock session-id body))
       (catch Exception ex
         (println ex "trying to deserialize/dispatch" message-string)))

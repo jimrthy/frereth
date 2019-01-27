@@ -1,16 +1,18 @@
 (ns shared.world
-  (:require [clojure.spec.alpha :as s]
-            ;;
+  (:require [clojure.pprint :refer [pprint]]
+            [clojure.spec.alpha :as s]
             [frereth.apps.login-viewer.specs]
             [shared.specs :as specs]))
 
 (s/def ::connection-state #{::active      ; we've ACKed the browser's fork
+                            ::created     ; preliminary, ready to go
                             ::deactivated ; Web socket has been closed
                             ::forked      ; Q: diff between this and forking?
                             ::forking     ; received source code. Ready to fork
                             ::fsm-error   ; Tried an illegal state transition
                             ::pending     ; browser would like to fork
                             })
+(s/def ::cookie bytes?)
 ;; This is whatever makes sense for the world implementation.
 ;; This seems like it will probably always be a map?, but it could very
 ;; easily also be a mutable Object (though that seems like a terrible
@@ -19,7 +21,8 @@
 (s/def ::world-without-history (s/keys :req [::specs/time-in-state
                                              ::connection-state
                                              ::internal-state]
-                                       :opt [:frereth/renderer->client]))
+                                       :opt [::cookie
+                                             :frereth/renderer->client]))
 (s/def ::history (s/coll-of ::world-without-history))
 (s/def ::world (s/merge ::world-without-history
                         (s/keys :req [::history])))
@@ -30,6 +33,21 @@
 (s/def ::fsm-transition
   (s/fspec :args (s/cat :world ::world)
            :ret ::world))
+;; It seems almost silly to include the next-state.
+;; As currently written, the caller knows exactly what that is,
+;; because it explicitly requests that in this same function
+;; call.
+;; On the other hand, it should really be sending a state
+;; transition signal. Then the FSM's lifecycle graph can
+;; make this decision.
+;; But, rather than "go to ::active, but make sure it's currently
+;; ::pending first" that will be more along the lines of "send
+;; ::activate signal"...the next state in that case isn't
+;; necessarily known in advance. But it also makes this function
+;; pointless.
+;; FIXME: Decide what to do about this.
+;; (current implementation doesn't use the :next-state parameter,
+;; so this is a lie)
 (s/def ::legal-transition?
   (s/nilable (s/fspec :args (s/cat :world ::world
                                    :next-state ::connection-state)
@@ -38,8 +56,18 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Internal Implementation
 
+(s/fdef ctor
+  :args (s/cat :initial-state ::internal-state)
+  :ret ::world)
+(defn ctor
+  [initial-state]
+  {::connection-state  ::created
+   ::history []
+   ::internal-state initial-state
+   ::specs/time-in-state (java.util.Date.)})
+
 ;;; FIXME: Add a fsm.cljc and make the state graph declarative.
-(s/fdef update-world-state
+(s/fdef update-world-connection-state
   :args (s/or :simple (s/cat :world-map :frereth/worlds
                              :world-key :frereth/world-key
                              :connection-state ::connection-state)
@@ -52,31 +80,42 @@
                              :connection-state ::connection-state
                              :pre-check ::legal-transition?
                              :transition ::fsm-transition)))
-(defn update-world-state
+(defn update-world-connection-state
+  ;; The importance of keeping this distinct from changes to the
+  ;; world's internal state cannot be overemphasized.
+  "Trigger change in connection FSM"
   ([world-map world-key connection-state]
+   (println ::update-world-connection-state
+            "Updating world connection-state to"
+            connection-state)
    (update world-map world-key
            (fn [world]
              (let [history (::history world)
-                   current (dissoc world ::history)]
+                   previous (dissoc world ::history)]
                (-> world
-                   (assoc {::specs/time-in-state (java.util.Date.)
-                           ::connection-state connection-state})
-                   (update ::history conj current))))))
+                   (assoc ::specs/time-in-state (java.util.Date.)
+                          ::connection-state connection-state)
+                   (update ::history conj previous))))))
   ([world-map world-key connection-state pre-check]
+   (when pre-check
+     (println ::update-world-connection-state "Verifying legal FSM transition"))
    (let [current (get world-map world-key)
          next-state
          (if (or (not pre-check)
-                 (pre-check current connection-state))
+                 (pre-check current))
            connection-state
            ::fsm-error)]
-     (update-world-state world-map world-key next-state)))
+     (update-world-connection-state world-map world-key next-state)))
   ([world-map world-key connection-state pre-check transition]
    (let [updated
-         (update-world-state world-map
+         (update-world-connection-state world-map
                              world-key
                              connection-state
                              pre-check)]
-     (update world-map world-key transition))))
+     (println ::update-world-connection-state
+              "Calling transition function on world")
+     (pprint (get world-map world-key))
+     (update updated world-key transition))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Public
@@ -125,28 +164,27 @@
   :ret ::world)
 (defn activate-pending
   [world-map world-key client]
-  (update-world-state world-map world-key ::active
-                      (fn [world]
-                        (= (::connection-state world) ::pending))
-                      (fn  [world]
-                        (assoc world :frereth/renderer->client client))))
+  (update-world-connection-state world-map world-key ::active
+                                 (fn [world]
+                                   (= (::connection-state world) ::pending))
+                                 (fn  [world]
+                                   (assoc world :frereth/renderer->client client))))
 
 (s/fdef add-pending
   :args (s/cat :world-map :frereth/worlds
                :world-key :frereth/world-key
+               :cookie ::cookie
                :initial-state ::internal-state)
   :ret :frereth/worlds)
 (defn add-pending
   "Set up a new world that's waiting for the connection signal"
-  [world-map world-key initial-state]
-  ;; time-in-state is set in at least 3 different places now.
-  ;; TODO: Refactor this into its own function so I don't have
-  ;; to update multiple places if/when I decide to change its
-  ;; implementation again.
-  (update-world-state world-map world-key ::pending
-                      nil
-                      #(assoc %
-                              ::internal-state initial-state)))
+  [world-map world-key cookie initial-state]
+  (let [world-map (assoc world-map
+                         world-key (ctor initial-state))]
+    (update-world-connection-state world-map world-key ::pending
+                                   nil
+                                   #(assoc %
+                                           ::cookie cookie))))
 
 (s/fdef deactivate
   :args (s/cat :world-map :frereth/worlds
@@ -154,7 +192,7 @@
   :ret :frereth/worlds)
 (defn deactivate
   [world-map world-key]
-  (update-world-state world-map world-key ::deactivated))
+  (update-world-connection-state world-map world-key ::deactivated))
 
 (s/fdef get-pending
   :args (s/cat :world-map :frereth/worlds

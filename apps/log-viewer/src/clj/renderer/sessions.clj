@@ -300,7 +300,7 @@
                        :frereth/worlds]
                 :as current}]
             (let [worlds
-                  (world/add-pending worlds world-key cookie)]
+                  (world/add-pending worlds world-key cookie {})]
               (assoc current
                      ::state-id (cp-util/random-uuid)
                      ::specs/time-in-state (java.util.Date.)
@@ -338,7 +338,7 @@
   [session-map session-id world-key]
   (update-in session-map
              [session-id :frereth/worlds]
-             world/deactivate))
+             world/deactivate world-key))
 
 (s/fdef get-active-world
   :args (s/cat :sessions ::sessions

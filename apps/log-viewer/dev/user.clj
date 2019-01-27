@@ -215,6 +215,8 @@
   (-> ig-state/system
       :shared.lamport/clock
       deref)
+  (-> ig-state/system
+      :client.propagate/monitor)
   (->> ig-state/system
        ::sessions/session-atom
        deref)
@@ -238,21 +240,36 @@
        ::sessions/session-atom
        deref
        vals
+       count)
+  (->> ig-state/system
+       ::sessions/session-atom
+       deref
+       :frereth/worlds)
+  (->> ig-state/system
+       ::sessions/session-atom
+       deref
+       :frereth/worlds
+       vals
+       count)
+  (->> ig-state/system
+       ::sessions/session-atom
+       deref
+       :frereth/worlds
+       vals
+       first)
+  (->> ig-state/system
+       ::sessions/session-atom
+       deref
+       :frereth/worlds
+       vals
        first
        keys)
   (->> ig-state/system
        ::sessions/session-atom
        deref
+       :frereth/worlds
        vals
        first
-       :frereth/worlds
-       keys)
-  (->> ig-state/system
-       ::sessions/session-atom
-       deref
-       vals
-       first
-       :frereth/worlds
        keys
        count)
   (->> ig-state/system
@@ -262,6 +279,17 @@
        first
        :frereth/worlds
        vals)
+  (->> ig-state/system
+       ::sessions/session-atom
+       deref
+       vals
+       first
+       :frereth/worlds
+       vals
+       first
+       :shared.world/internal-state
+       #_vec
+       String.)
   (-> ig-state/system
       ::sessions/session-atom
       deref
