@@ -150,7 +150,8 @@
         ;; Which is one reason this is worth keeping separate from the
         ;; dispatching code.
         ;; Doing this inside a swap! seems iffy.
-        ;; Realistically, dispatch should return something like
+        ;; Realistically, dispatch should return something like a
+        ;; tuple of:
         ;; a) the new state
         ;; b) seq of functions to call to trigger side-effects
         ;; That isn't quite right. The side-effecting functions
@@ -159,7 +160,7 @@
         ;; But it's better than having a big, synchronous
         ;; transformation that seems very likely to either block
         ;; updates or trigger multiple side-effects.
-        ;; This
+        ;; (Q: Isn't it?)
         ;; TODO: Review how atoms really work. Especially in terms
         ;; of conflict resolution.
         (swap! session-atom dispatch clock session-id body))

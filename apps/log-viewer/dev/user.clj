@@ -244,33 +244,15 @@
   (->> ig-state/system
        ::sessions/session-atom
        deref
+       vals
+       first
        :frereth/worlds)
   (->> ig-state/system
        ::sessions/session-atom
        deref
-       :frereth/worlds
-       vals
-       count)
-  (->> ig-state/system
-       ::sessions/session-atom
-       deref
-       :frereth/worlds
-       vals
-       first)
-  (->> ig-state/system
-       ::sessions/session-atom
-       deref
-       :frereth/worlds
        vals
        first
-       keys)
-  (->> ig-state/system
-       ::sessions/session-atom
-       deref
        :frereth/worlds
-       vals
-       first
-       keys
        count)
   (->> ig-state/system
        ::sessions/session-atom
@@ -286,8 +268,34 @@
        first
        :frereth/worlds
        vals
+       first)
+  (->> ig-state/system
+       ::sessions/session-atom
+       deref
+       vals
        first
-       :shared.world/internal-state
+       :frereth/worlds
+       vals
+       first
+       keys)
+  (->> ig-state/system
+       ::sessions/session-atom
+       deref
+       vals
+       first
+       :frereth/worlds
+       vals
+       first
+       :shared.world/internal-state)
+  (->> ig-state/system
+       ::sessions/session-atom
+       deref
+       vals
+       first
+       :frereth/worlds
+       vals
+       first
+       :shared.world/cookie
        #_vec
        String.)
   (-> ig-state/system

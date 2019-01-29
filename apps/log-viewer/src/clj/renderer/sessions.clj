@@ -275,8 +275,9 @@
   "Transition World from pending to active"
   [sessions session-id world-key client]
   (if-let [session (get-active-session sessions session-id)]
-    (update session
-            :frereth/worlds
+    (update-in sessions
+               [session-id
+                :frereth/worlds]
             world/activate-pending world-key client)
     (do
       (println "No active session"
