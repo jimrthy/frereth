@@ -6,7 +6,7 @@
 
 (s/def ::connection-state #{::active      ; we've ACKed the browser's fork
                             ::created     ; preliminary, ready to go
-                            ::deactivated ; Web socket has been closed
+                            ::disconnected ; Web socket has been closed
                             ::forked      ; Q: diff between this and forking?
                             ::forking     ; received source code. Ready to fork
                             ::fsm-error   ; Tried an illegal state transition
@@ -190,9 +190,9 @@
   :args (s/cat :world-map :frereth/worlds
                :world-key :frereth/world-key)
   :ret :frereth/worlds)
-(defn deactivate
+(defn disconnect
   [world-map world-key]
-  (update-world-connection-state world-map world-key ::deactivated))
+  (update-world-connection-state world-map world-key ::disconnected))
 
 (s/fdef get-pending
   :args (s/cat :world-map :frereth/worlds

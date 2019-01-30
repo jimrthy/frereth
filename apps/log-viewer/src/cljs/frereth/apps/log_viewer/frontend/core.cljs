@@ -79,11 +79,16 @@
   (.postMessage (-> idle-worker-pool deref first) ::abc)
   )
 
+;; FIXME: Don't hard-code this. It should really be something like
+;; an encrypted JWT that we received at login
 (def session-id-from-server
   "Need something we can use for authentication and validation
 
-  There are multiple levels to this. Each World instance needs its own
-  key [pair?]"
+  There are multiple levels to this.
+
+  There's one for the SESSION (this).
+
+  And also a pair for each World instance"
   [-39 -55 106 103
    -31 117 120 57
    -102 12 -102 -36
@@ -94,10 +99,14 @@
    66 43 39 -61])
 
 ;;; Q: Put these globals into a single atom?
+;;; A: No. Put them into a system.
 
-(def shared-socket (atom nil))
+(def shared-socket
+  "This is being replaced by the ::sock in frontend.socket/wrapper"
+  (atom nil))
 
 ;; Maps of world-keys to state
+;; FIXME: This is getting replaced by :frereth/worlds in frontend.session/manager
 ;; TODO: Move this somewhere less accessible. Then pass that through
 ;; to all event handlers which need access.
 ;; Note that, in the case of messages from a World, the handler should
@@ -778,6 +787,7 @@
               ;; log-viewer Worker)
               (shell-forker ws session-id)))
       (set! (.-onmessage ws) recv-message!)
+      ;; FIXME: These next two need to update the system
       (set! (.-onclose ws)
             (fn [event]
               (console.warn "Frereth Connection closed:" event)))
@@ -791,7 +801,7 @@
 ;;;; Public
 
 (defn start! []
-  (println "Starting the app")
+  (println "(Re)starting the app")
 
   (when-not (repl/alive?)
     (println "Trying to connect REPL websocket")
@@ -799,8 +809,18 @@
 
   (connect-web-socket! fork-shell! session-id-from-server))
 
-;; TODO: Protect this behind something we can defonce
+;; The js/window check protects against trying to do this
+;; inside the web worker.
+;; The weirdness really stems from the way I've bundled the
+;; two together.
+;; TODO: Move the web worker code somewhere totally different.
+;; Think of this part as the terminal you're using to interact
+;; with an OS while the worker is the UI portion of some app
+;; that got installed on it.
 (when js/window
+  ;; FIXME: Switch to this...
+  #_(system/begin!)
+  ;; ...and make the code that supports this go away
   (start!))
 
 (comment
