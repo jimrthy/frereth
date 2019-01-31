@@ -12,7 +12,8 @@
                             ::fsm-error   ; Tried an illegal state transition
                             ::pending     ; browser would like to fork
                             })
-(s/def ::cookie bytes?)
+(s/def ::cookie #?(:clj bytes?
+                   :cljs any?))
 ;; This is whatever makes sense for the world implementation.
 ;; This seems like it will probably always be a map?, but it could very
 ;; easily also be a mutable Object (though that seems like a terrible

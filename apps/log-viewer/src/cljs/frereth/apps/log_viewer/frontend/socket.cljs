@@ -7,6 +7,11 @@
 
 (s/def ::wrapper (s/keys :req [::sock]))
 
+(defn close
+  [{:keys [::sock]
+    :as socket}]
+  (.close sock))
+
 (s/fdef wrapper
   :args nil
   :ret ::wrapper)

@@ -17,6 +17,6 @@
   [_ {:keys [:frereth/worlds
              ::web-socket/sock]}]
   (when worlds
-    (throw (RuntimeException! "Need to disconnect each World")))
+    (throw (js/Error "Need to disconnect each World")))
   (when sock
     (web-socket/close sock)))
