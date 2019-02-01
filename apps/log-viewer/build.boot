@@ -97,7 +97,7 @@
                             ;; Q: Does 0.4.5 play more nicely?
                             [nrepl "0.5.3" :exclusions [org.clojure/clojure]]
                             [org.clojure/clojure "1.10.0"]
-                            [org.clojure/clojurescript "1.10.439" :scope "test" :exclusions [commons-codec
+                            [org.clojure/clojurescript "1.10.516" :scope "test" :exclusions [commons-codec
                                                                                              com.cognitect/transit-clj
                                                                                              com.cognitect/transit-java
                                                                                              org.clojure/clojure]]

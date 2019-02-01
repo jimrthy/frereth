@@ -187,12 +187,12 @@
                                    #(assoc %
                                            ::cookie cookie))))
 
-(s/fdef deactivate
+(s/fdef disconnect
   :args (s/cat :world-map :frereth/worlds
                :world-key :frereth/world-key)
   :ret :frereth/worlds)
 (defn disconnect
-  [world-map world-key]
+  [world-map world-key ch]
   (update-world-connection-state world-map world-key ::disconnected))
 
 (s/fdef get-pending
@@ -202,3 +202,14 @@
 (defn get-pending
   [world-map world-key]
   (get-world-in-state world-map world-key ::pending))
+
+
+(s/fdef trigger-disconnection!
+  :args (s/cat :world ::world
+               ;; FIXME: I know I've specced out core.async channels before
+               :ch any?))
+(defn trigger-disconnection!
+  [world ch]
+  ;; Need to send a signal to the world to do whatever it needs to
+  ;; disconnect.
+  (throw (ex-info "write this" {})))
