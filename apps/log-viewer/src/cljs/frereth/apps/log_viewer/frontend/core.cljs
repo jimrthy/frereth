@@ -11,6 +11,7 @@
             [clojure.string]
             [cognitect.transit :as transit]
             [foo.bar]
+            [frereth.apps.log-viewer.frontend.session :as session]
             [frereth.apps.log-viewer.frontend.system :as sys]
             ;; Start by at least partially supporting this, since it's
             ;; so popular
@@ -819,8 +820,9 @@
 ;; that got installed on it.
 (when js/window
   ;; FIXME: Switch to this...
-  #_(system/begin!)
-  ;; ...and make the code that supports this go away
+  (sys/begin! sys/state
+              {::session/manager {::session/session-id session-id-from-server}})
+  ;; ...and make the code that supports the original version go away
   (start!))
 
 (comment

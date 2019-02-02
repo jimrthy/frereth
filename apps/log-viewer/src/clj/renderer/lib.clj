@@ -14,6 +14,7 @@
              [marshalling :as marshall]
              [sessions :as sessions]]
             [shared
+             [connection :as connection]
              [lamport :as lamport]
              [specs]
              [world :as world]]
@@ -253,7 +254,7 @@
                 "\nin\n"
                 session-id))
   (if-let [session (get sessions session-id)]
-    (if (= ::sessions/active (::sessions/state session))
+    (if (= ::connection/active (::connection/state session))
       (try
         (let [envelope (marshall/serialize wrapper)]
           (try
