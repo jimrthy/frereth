@@ -258,7 +258,7 @@
       (try
         (let [envelope (marshall/serialize wrapper)]
           (try
-            (let [success (strm/try-put! (::sessions/web-socket session)
+            (let [success (strm/try-put! (::connection/web-socket session)
                                          envelope
                                          500
                                          ::timed-out)]
@@ -468,7 +468,7 @@
 (s/fdef login-finalized!
   :args (s/cat :lamport ::lamport/clock
                :session-atom ::sessions/session-atom
-               :websocket ::sessions/web-socket
+               :websocket ::connection/web-socket
                :wrapper string?)
   :ret any?)
 (defn login-finalized!

@@ -3,6 +3,9 @@
             [clojure.spec.alpha :as s]
             [frereth.apps.log-viewer.frontend.socket :as web-socket]
             [integrant.core :as ig]
+            ;; It seems highly likely that everything that's currently
+            ;; in here will move there.
+            [shared.connection :as connection]
             [shared.world :as world])
   (:require-macros [cljs.core.async.macros :as async-macros :refer [go]]))
 
@@ -11,6 +14,8 @@
                                :frereth/worlds]))
 
 (defn do-disconnect
+  "Signal a world to disconnect and tell us when done"
+  ;; This was really refactored out of an inline reduce
   [acc [world-key world]]
   (let [ch (async/chan)]
     (world/trigger-disconnection! world ch)

@@ -25,6 +25,8 @@
                                        :opt [::cookie
                                              :frereth/renderer->client]))
 (s/def ::history (s/coll-of ::world-without-history))
+;; This leads to other namespaces referencing ::world/world
+;; which is just weird.
 (s/def ::world (s/merge ::world-without-history
                         (s/keys :req [::history])))
 

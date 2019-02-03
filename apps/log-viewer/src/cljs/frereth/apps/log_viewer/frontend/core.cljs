@@ -820,8 +820,9 @@
 ;; that got installed on it.
 (when js/window
   ;; FIXME: Switch to this...
-  (sys/begin! sys/state
-              {::session/manager {::session/session-id session-id-from-server}})
+  (comment
+    (sys/begin! sys/state
+                {::session/manager {::session/session-id session-id-from-server}}))
   ;; ...and make the code that supports the original version go away
   (start!))
 

@@ -2,13 +2,14 @@
   ;; Q: Is it worth just moving that to a shared .cljc ns instead?
   ;; ::subject probably doesn't make sense on the browser side,
   ;; but the rest of it (plus history) seems pretty relevant.
-  "This seems very suspiciously like what I did originally with sessions.clj"
-  ;; One major difference:
-  ;; The original was designed to handle multiple Connections.
-  ;; We definitely don't need that on the browser side.
-  ;; So this approach makes sense.
+  "Cope with the details of a single web socket connection"
   (:require [clojure.spec.alpha :as s]
-            #?(:clj [frereth.cp.shared.util :as cp-util])))
+            [#?(:cljs frereth.apps.log-viewer.frontend.socket
+                :clj frereth.apps.log-viewer.renderer.socket)
+             :as web-socket]
+            #?(:clj [frereth.cp.shared.util :as cp-util])
+            [shared.specs :as specs]
+            [shared.world :as world]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Specs
@@ -63,8 +64,59 @@
 
 (s/def ::time-in-state inst?)
 
+;; Q: What is this?
+;; (another alias for :frereth/pid is tempting.
+;; So is a java.security.auth.Subject)
+#?(:clj (s/def ::subject any?))
+
+(s/def :frereth/session-sans-history (s/keys :req [::session-id
+                                                   ::state
+                                                   ::state-id
+                                                   ::specs/time-in-state
+                                                   :frereth/worlds]
+                                             :opt [#?(:clj ::subject)
+                                                   ::web-socket/wrapper]))
+
+
+(s/def ::history (s/map-of ::state-id :frereth/session-sans-history))
+
+(s/def :frereth/session (s/merge :frereth/session-sans-history
+                                 (s/keys :req [::history])))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Public
+
+(s/fdef activate
+  :args (s/cat :state :frereth/session
+               :web-socket ::web-socket)
+  :fn (s/and #(= (-> % :args :state ::state)
+                 ::pending)
+             #(= (-> % :ret ::state)
+                 ::active)
+             #(= (-> % :args :state (dissoc ::state))
+                 (-> % :ret (dissoc ::state
+                                    ::web-socket))))
+  :ret :frereth/session)
+(defn activate
+  "Web socket is ready to interact"
+  [session web-socket]
+  (assoc session
+         ::state ::active
+         ::web-socket web-socket))
+
+(s/fdef activate-pending-world
+        :args (s/cat :session :frereth/session
+                     :world-key :frereth/world-key
+                     ;; FIXME: There should probably be a browser-
+                     ;; side equivalent, to forward messages to
+                     ;; the worker.
+                     #?@(:clj [:client :frereth/renderer->client]))
+        :ret :frereth/session)
+(defn activate-pending-world
+  "Transition World from pending to active"
+  [session world-key #?(:clj client)]
+  (update session :frereth/worlds
+          world/activate-pending world-key #?(:clj client)))
 
 (s/fdef create
   :args nil
@@ -82,7 +134,7 @@
   "Create a new anonymous SESSION"
   []
   {::state-id #?(:cljs (random-uuid)
-                 :clj (cp-utils/random-uuid))
+                 :clj (cp-util/random-uuid))
    ::state ::connected
    ;; So we can time out the oldest connection if/when we get
    ;; overloaded.
@@ -96,3 +148,34 @@
    ::time-in-state #?(:clj (java.util.Date.)
                       :cljs (js/Date.))
    :frereth/worlds {}})
+
+(s/fdef get-world
+  :args (s/cat :session ::session
+               :world-key :frereth/world-key)
+  :ret (s/nilable ::world/world))
+(defn get-world
+  [session world-key]
+  (world/get-world (:frereth/worlds session) world-key))
+
+(s/fdef log-in
+  :args (s/cat :state :frereth/state
+               #?@(:clj [:subject ::subject]))
+  :fn (s/and #(= (-> % :args :state ::state)
+                 ::connected)
+             #(= (-> % :ret ::state) ::pending)
+             #(= (-> % :args :subject)
+                 (-> % :ret ::subject)))
+  :ret :frereth/session)
+(defn log-in
+  ;; Note that this is distinct from logging into a World.
+  ;; That's really more of a frereth-server thing, probably
+  ;; going through a client.
+  ;; This is really about authenticating a direct browser
+  ;; connection.
+  "Change Session state.
+
+  Handle the authentication elsewhere."
+  [session-state #?(:clj subject)]
+  (assoc session-state
+         ::state ::pending
+         #?@(:clj [::subject subject])))
