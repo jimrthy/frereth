@@ -58,6 +58,17 @@
 ;; instead.
 ;; So this does make sense.
 (s/def ::state #{::connected  ; ready to log in
+                 ;; This next state really shouldn't be retained
+                 ;; for very long.
+                 ;; If the websocket drops and doesn't disconnect
+                 ;; very quickly, the end-user should probably
+                 ;; just need to log back in.
+                 ;; This expectation needs to be tempered by the
+                 ;; consideration that this is generally expected to
+                 ;; happen as close to localhost as possible...right
+                 ;; next to the acceptance of the reality that it isn't
+                 ;; going to work out that way in practice.
+                 ::disconnected ; websocket went away
                  ::pending  ; Awaiting web socket
                  ::active  ; web socket active
                  })
@@ -84,6 +95,43 @@
                                  (s/keys :req [::history])))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; Internal Implementation
+
+(s/fdef update-state
+  :args (s/or :updating (s/cat :state :frereth/session
+                               :new-state ::state
+                               :update-fn (s/fspec :args (s/cat :current :frereth/session)
+                                                   :ret :frereth/session))
+              :simple (s/cat :state :frereth/session
+                             :new-state ::state))
+  :ret :frereth/session)
+(defn update-state
+  "This smells fishy. update-fn seems like something that should
+  apply to an internal-state.
+
+  The more I write in here, the more inclined I am to think that the
+  connection is really just a meta-world."
+  ([current new-state update-fn]
+   (update-fn
+    (assoc (if-not new-state current
+                   (assoc current ::state new-state))
+           ::state-id #?(:clj (cp-util/random-uuid)
+                         :cljs (random-uuid))
+           ;; So we can time out the oldest connection if/when we get
+           ;; overloaded.
+           ;; Although that isn't a great algorithm. Should also
+           ;; track session sources so we can prune back ones that
+           ;; are being too aggressive and trying to open too many
+           ;; world at the same time.
+           ;; (Then again, that's probably exactly what I'll do when
+           ;; I recreate a session, so there are nuances to
+           ;; consider).
+           ::specs/time-in-state #?(:clj (java.util.Date.)
+                                    :cljs (js/Date.)))))
+  ([current new-state]
+   (update-state current new-state identity)))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Public
 
 (s/fdef activate
@@ -100,23 +148,44 @@
 (defn activate
   "Web socket is ready to interact"
   [session web-socket]
-  (assoc session
-         ::state ::active
-         ::web-socket web-socket))
+  (update-state session ::active
+                #(assoc % ::web-socket web-socket)))
 
 (s/fdef activate-pending-world
         :args (s/cat :session :frereth/session
                      :world-key :frereth/world-key
-                     ;; FIXME: There should probably be a browser-
-                     ;; side equivalent, to forward messages to
-                     ;; the worker.
-                     #?@(:clj [:client :frereth/renderer->client]))
+                     :message-forwarder
+                     #?(:clj :frereth/renderer->client
+                        :cljs :frereth/browser->worker))
         :ret :frereth/session)
 (defn activate-pending-world
   "Transition World from pending to active"
-  [session world-key #?(:clj client)]
-  (update session :frereth/worlds
-          world/activate-pending world-key #?(:clj client)))
+  [session world-key message-forwarder]
+  (update-state session nil
+                #(update % :frereth/worlds
+                         world/activate-pending world-key message-forwarder)))
+
+(s/fdef add-pending-world
+  :args (s/cat :current :frereth/session
+               :world-key :frereth/world-key
+               :cookie ::world/cookie)
+  :ret :frereth/session)
+(defn add-pending-world
+  [{:keys [::state-id
+           ::specs/time-in-state
+           :frereth/worlds]
+    :as current}
+   world-key
+   cookie]
+  (update-state current
+                nil
+                (fn [current]
+                  (assoc current
+                         :frereth/worlds (world/add-pending
+                                          worlds
+                                          world-key
+                                          cookie
+                                          {})))))
 
 (s/fdef create
   :args nil
@@ -133,21 +202,23 @@
   ;; And it gets trickier when we get into the websocket interactions.
   "Create a new anonymous SESSION"
   []
-  {::state-id #?(:cljs (random-uuid)
-                 :clj (cp-util/random-uuid))
-   ::state ::connected
-   ;; So we can time out the oldest connection if/when we get
-   ;; overloaded.
-   ;; Although that isn't a great algorithm. Should also
-   ;; track session sources so we can prune back ones that
-   ;; are being too aggressive and trying to open too many
-   ;; world at the same time.
-   ;; (Then again, that's probably exactly what I'll do when
-   ;; I recreate a session, so there are nuances to
-   ;; consider).
-   ::time-in-state #?(:clj (java.util.Date.)
-                      :cljs (js/Date.))
-   :frereth/worlds {}})
+  (update-state {} ::connected
+                #(assoc % :frereth/worlds {})))
+
+(s/fdef disconnect-all
+  :args (s/cat :session ::session)
+  :ret (s/cat :session ::session))
+(defn disconnect-all
+  [{:keys [:frereth/worlds]
+    :as session}]
+  (update-state session
+                ::disconnected
+                #(update %
+                         :frereth/worlds
+                         (fn [worlds]
+                           map
+                           (partial world/disconnect worlds)
+                           (keys worlds)))))
 
 (s/fdef get-world
   :args (s/cat :session ::session
@@ -176,6 +247,6 @@
 
   Handle the authentication elsewhere."
   [session-state #?(:clj subject)]
-  (assoc session-state
-         ::state ::pending
-         #?@(:clj [::subject subject])))
+  (update-state session-state
+                ::pending
+                #?(:clj #(assoc % ::subject subject))))

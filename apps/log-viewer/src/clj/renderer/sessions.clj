@@ -4,8 +4,7 @@
   ;; But, really, the browser shouldn't know anything about this
   ;; abstraction layer.
   ;; Each Session here really represents a browser connection/websocket.
-  (:require [clojure.pprint :refer (pprint)]
-            [clojure.spec.alpha :as s]
+  (:require [clojure.spec.alpha :as s]
             [frereth.apps.login-viewer.specs]
             [frereth.cp.shared.util :as cp-util]
             [integrant.core :as ig]
@@ -137,8 +136,8 @@
     (do
       (println "No active session"
                session-id
-               "\namong")
-      (pprint sessions)
+               "\namong"
+               (cp-util/pretty sessions))
       sessions)))
 
 (s/fdef add-pending-world
@@ -148,26 +147,17 @@
                :initial-state ::world/state)
   :ret ::sessions)
 (defn add-pending-world
-  [sessions session-id world-key cookie]
+  [sessions session-id world-key initial-state]
   (update sessions
           session-id
-          ;; FIXME: Start back here.
-          ;; Refactor this into connection.
-          (fn [{:keys [::connection/state-id
-                       ::specs/time-in-state
-                       :frereth/worlds]
-                :as current}]
-            (let [worlds
-                  (world/add-pending worlds world-key cookie {})]
-              (assoc current
-                     ::connection/state-id (cp-util/random-uuid)
-                     ::specs/time-in-state (java.util.Date.)
-                     :frereth/worlds worlds)))))
-(s/fdef deactivate
+          connection/add-pending-world world-key initial-state))
+
+(s/fdef disconnect
   :args (s/cat :sessions ::sessions
                :session-id :frereth/session-id)
   :ret ::sessions)
-(defn deactivate
+(defn disconnect
+  "Web socket connection dropped"
   [sessions session-id]
   ;; It's very tempting to collect these.
   ;; Possibly in a ::deactivated bucket in sessions.
@@ -177,6 +167,16 @@
   ;; a global.
   ;; For starters, just go with the simplest possible
   ;; approach
+
+  (update sessions session-id
+          (fn [session]
+            (if session
+              (connection/disconnect-all session)
+              (do
+                (println "Trying to disconnect missing session"
+                         session-id
+                         "among"
+                         (cp-util/pretty sessions))))))
 
   ;; I definitely do want to do something along these lines
   #_(dissoc sessions session-id)

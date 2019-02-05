@@ -526,7 +526,7 @@
                                               ": "
                                               succeeded))
                                 (swap! session-atom
-                                       sessions/deactivate
+                                       sessions/disconnect
                                        session-id))
                               (fn [failure]
                                 (println ::login-finalized!
@@ -535,7 +535,7 @@
                                          ":"
                                          failure)
                                 (swap! session-atom
-                                       sessions/deactivate
+                                       sessions/disconnect
                                        session-id)))))
         (do
           (println ::login-realized! "Not found")

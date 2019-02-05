@@ -16,8 +16,9 @@
   (s/fspec :args (s/cat :message :frereth/message)
            :ret any?))
 
-(s/def :frereth/renderer->client (s/keys :req [:frereth/disconnect!
-                                               :frereth/message-sender!]))
+(s/def #?(:clj :frereth/renderer->client
+          :cljs :frereth/browser->worker) (s/keys :req [:frereth/disconnect!
+                                                        :frereth/message-sender!]))
 
 (s/def :frereth/world-stop-signal (s/or :symbol symbol?
                                         :uuid uuid?
