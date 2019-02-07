@@ -3,13 +3,16 @@
   ;; ::subject probably doesn't make sense on the browser side,
   ;; but the rest of it (plus history) seems pretty relevant.
   "Cope with the details of a single web socket connection"
-  (:require [clojure.spec.alpha :as s]
+  (:require [#?(:clj clojure.core.async
+                :cljs cljs.core.async) :as async #?@(:clj [:refer [go]])]
+            [clojure.spec.alpha :as s]
             [#?(:cljs frereth.apps.log-viewer.frontend.socket
                 :clj frereth.apps.log-viewer.renderer.socket)
              :as web-socket]
             #?(:clj [frereth.cp.shared.util :as cp-util])
             [shared.specs :as specs]
-            [shared.world :as world]))
+            [shared.world :as world])
+  #?(:cljs (:require-macros [cljs.core.async.macros :refer [go]])))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Specs
@@ -207,7 +210,12 @@
 
 (s/fdef disconnect-all
   :args (s/cat :session ::session)
-  :ret (s/cat :session ::session))
+  ;; FIXME: This spec is wrong.
+  ;; As written, this really returns a ::session where the
+  ;; :frereth/worlds key has been replaced with an async chan
+  ;; (although manifold.deferred is very tempting) that will
+  ;; eventually resolve to
+  :ret any?)
 (defn disconnect-all
   [{:keys [:frereth/worlds]
     :as session}]
@@ -216,9 +224,37 @@
                 #(update %
                          :frereth/worlds
                          (fn [worlds]
-                           map
-                           (partial world/disconnect worlds)
-                           (keys worlds)))))
+                           ;; This needs to trigger side-effects.
+                           ;; And probably needs to happen asynchronously.
+                           ;; For the "real" thing, each disconnect can/
+                           ;; should involve modifying a connection to some
+                           ;; remote Server.
+                           (let [channel-map
+                                 (reduce
+                                  (fn [acc world-key]
+                                    (let [ch (async/chan)]
+                                      (world/disconnect worlds world-key ch)
+                                      (assoc acc ch world-key)))
+                                  {}
+                                  (keys worlds))]
+                             (go
+                               ;; Q: What makes sense for the timeout here?
+                               (loop [worlds worlds
+                                      channel-map channel-map]
+                                 (let [[val port] (async/alts! (conj (keys channel-map)
+                                                                     (async/timeout 500)))]
+                                   (if val
+                                     ;; World sent its disconnected state
+                                     (throw (#?(:clj RuntimeException.
+                                                :cljs js/Error) "Write happy-path"))
+                                     (do
+                                       (println "Timed out waiting for responses from"
+                                                #?(:clj (cp-util/pretty channel-map)
+                                                   :cljs channel-map))
+                                       (reduce (fn [worlds world-key]
+                                                 (world/mark-disconnect-timeout worlds world-key))
+                                               worlds
+                                               (vals channel-map))))))))))))
 
 (s/fdef get-world
   :args (s/cat :session ::session

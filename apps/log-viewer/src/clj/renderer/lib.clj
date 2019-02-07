@@ -498,7 +498,7 @@
           (swap! session-atom
                  (fn [sessions]
                    (update sessions session-id
-                           sessions/activate
+                           connection/activate
                            websocket)))
           (println ::login-finalized! "Swapped:")
           (pprint websocket)

@@ -171,7 +171,11 @@
   (update sessions session-id
           (fn [session]
             (if session
-              (connection/disconnect-all session)
+              (do
+                (connection/disconnect-all session)
+                ;; Still need that call directly below to log-in,
+                ;; which (as things stand) is going to break a lot.
+                (throw (RuntimeException. "Roll back a bit")))
               (do
                 (println "Trying to disconnect missing session"
                          session-id
@@ -185,7 +189,7 @@
   ;; Yet.
   ;; FIXME: Don't leave it this way.
   (update sessions session-id
-          log-in {}))
+          connection/log-in {}))
 
 (s/fdef deactivate-world
   :args (s/cat :sessions ::sessions

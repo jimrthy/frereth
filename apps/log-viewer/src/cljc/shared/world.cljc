@@ -4,13 +4,14 @@
             [frereth.apps.login-viewer.specs]
             [shared.specs :as specs]))
 
-(s/def ::connection-state #{::active      ; we've ACKed the browser's fork
-                            ::created     ; preliminary, ready to go
-                            ::disconnected ; Web socket has been closed
-                            ::forked      ; Q: diff between this and forking?
-                            ::forking     ; received source code. Ready to fork
-                            ::fsm-error   ; Tried an illegal state transition
-                            ::pending     ; browser would like to fork
+(s/def ::connection-state #{::active                ; we've ACKed the browser's fork
+                            ::created               ; preliminary, ready to go
+                            ::disconnected          ; Web socket has been closed
+                            ::disconnect-timed-out  ; Timed out waiting for a response from disconnection signal
+                            ::forked                ; Q: diff between this and forking?
+                            ::forking               ; received source code. Ready to fork
+                            ::fsm-error             ; Tried an illegal state transition
+                            ::pending               ; browser would like to fork
                             })
 (s/def ::cookie #?(:clj bytes?
                    :cljs any?))
@@ -205,6 +206,9 @@
   [world-map world-key]
   (get-world-in-state world-map world-key ::pending))
 
+(defn mark-disconnect-timeout
+  [world-map world-key]
+  (update-world-connection-state world-map world-key ::disconnect-time-out))
 
 (s/fdef trigger-disconnection!
   :args (s/cat :world ::world
