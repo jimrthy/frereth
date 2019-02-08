@@ -6,8 +6,9 @@
 
 (s/def ::connection-state #{::active                ; we've ACKed the browser's fork
                             ::created               ; preliminary, ready to go
-                            ::disconnected          ; Web socket has been closed
+                            ::disconnected          ; Still active after a websocket close
                             ::disconnect-timed-out  ; Timed out waiting for a response from disconnection signal
+                            ::disconnecting         ; Web socket has been closed
                             ::forked                ; Q: diff between this and forking?
                             ::forking               ; received source code. Ready to fork
                             ::fsm-error             ; Tried an illegal state transition
@@ -24,7 +25,8 @@
                                              ::connection-state
                                              ::internal-state]
                                        :opt [::cookie
-                                             :frereth/renderer->client]))
+                                             #?(:clj :frereth/renderer->client
+                                                :cljs :frereth/browser->worker)]))
 (s/def ::history (s/coll-of ::world-without-history))
 ;; This leads to other namespaces referencing ::world/world
 ;; which is just weird.

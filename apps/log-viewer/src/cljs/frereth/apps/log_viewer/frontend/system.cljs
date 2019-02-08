@@ -35,6 +35,7 @@
 
 (defmethod ig/init-key ::repl
   [_ opts]
+  ;; Q: Is this worth its own ns?
   (when-not (repl/alive?)
     (println "Trying to connect REPL websocket")
     ;; FIXME: Pass in the host/port as opts

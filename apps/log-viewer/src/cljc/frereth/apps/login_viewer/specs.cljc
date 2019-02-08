@@ -26,4 +26,5 @@
 (s/def :frereth/world-connector
   (s/fspec :args (s/cat :world-stop-signal :frereth/world-stop-signal
                         :send-message! :frereth/message-sender!)
-           :ret :frereth/renderer->client))
+           :ret #?(:clj :frereth/renderer->client
+                   :cljs :frereth/browser->worker)))

@@ -1,13 +1,10 @@
 (ns frereth.apps.log-viewer.frontend.core
   (:require-macros [cljs.core.async.macros :refer [go]]
                    [frontend.macro :refer [foobar]])
-  ;; cemerick.url is very tempting, but it hasn't been updated
-  ;; in years. There are 2 or 3 "Is this project still active?"
-  ;; issues filed against it, and ~30 forks.
-  ;; Plus...does it really add all that much?
   (:require [cemerick.url :as url]
             [cljs.core.async :as async]
             [clojure.spec.alpha :as s]
+            ;; FIXME: This can go away with connect-web-socket!
             [clojure.string]
             [cognitect.transit :as transit]
             [foo.bar]

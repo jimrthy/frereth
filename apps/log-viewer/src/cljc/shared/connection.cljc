@@ -14,6 +14,8 @@
             [shared.world :as world])
   #?(:cljs (:require-macros [cljs.core.async.macros :refer [go]])))
 
+#?(:cljs (enable-console-print!))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Specs
 
@@ -222,40 +224,19 @@
     :as session}]
   (update-state session
                 ::disconnecting
-                #(update %
-                         :frereth/worlds
-                         (fn [worlds]
-                           ;; This needs to trigger side-effects.
-                           ;; And probably needs to happen asynchronously.
-                           ;; For the "real" thing, each disconnect can/
-                           ;; should involve modifying a connection to some
-                           ;; remote Server.
-                           (let [channel-map
-                                 (reduce
-                                  (fn [acc world-key]
-                                    (let [ch (async/chan)]
-                                      (world/disconnect worlds world-key ch)
-                                      (assoc acc ch world-key)))
-                                  {}
-                                  (keys worlds))]
-                             (go
-                               ;; Q: What makes sense for the timeout here?
-                               (loop [worlds worlds
-                                      channel-map channel-map]
-                                 (let [[val port] (async/alts! (conj (keys channel-map)
-                                                                     (async/timeout 500)))]
-                                   (if val
-                                     ;; World sent its disconnected state
-                                     (throw (#?(:clj RuntimeException.
-                                                :cljs js/Error) "Write happy-path"))
-                                     (do
-                                       (println "Timed out waiting for responses from"
-                                                #?(:clj (cp-util/pretty channel-map)
-                                                   :cljs channel-map))
-                                       (reduce (fn [worlds world-key]
-                                                 (world/mark-disconnect-timeout worlds world-key))
-                                               worlds
-                                               (vals channel-map))))))))))))
+                (fn [{:keys [:frereth/worlds]
+                      :as session}]
+                  ;; FIXME: Need to cope with the disconnected signal from all workers.
+                  (doseq [{{:keys [:frereth/disconnect!]
+                            :as forwarder} #?(:clj :frereth/renderer->client
+                                        :cljs :frereth/browser->worker)
+                           :as world} worlds]
+                    (if disconnect!
+                      (disconnect!)
+                      (println "Missing disconnect! among"
+                               #?(:clj (cp-util/pretty world)
+                                  :cljs world))))
+                  session)))
 
 (s/fdef get-world
   :args (s/cat :session ::session
