@@ -159,37 +159,20 @@
 (defn disconnect
   "Web socket connection dropped"
   [sessions session-id]
-  ;; It's very tempting to collect these.
-  ;; Possibly in a ::deactivated bucket in sessions.
-  ;; Possibly just by transitioning the ::connection/state to
-  ;; ::connection/deactivated.
-  ;; It's even a bit tempting to just store this in
-  ;; a global.
-  ;; For starters, just go with the simplest possible
-  ;; approach
-
   (update sessions session-id
           (fn [session]
             (if session
-              (do
-                (connection/disconnect-all session)
-                ;; Still need that call directly below to log-in,
-                ;; which (as things stand) is going to break a lot.
-                (throw (RuntimeException. "Roll back a bit")))
+              (let [session (connection/disconnect-all session)]
+                ;; For now, hack around the "real" life cycle
+                ;; so I don't have to add anything like authentication.
+                ;; Yet.
+                ;; FIXME: Don't leave it this way.
+                (connection/log-in session {}))
               (do
                 (println "Trying to disconnect missing session"
                          session-id
                          "among"
-                         (cp-util/pretty sessions))))))
-
-  ;; I definitely do want to do something along these lines
-  #_(dissoc sessions session-id)
-  ;; But for now, hack around the "real" life cycle
-  ;; so I don't have to add anything like authentication.
-  ;; Yet.
-  ;; FIXME: Don't leave it this way.
-  (update sessions session-id
-          connection/log-in {}))
+                         (cp-util/pretty sessions)))))))
 
 (s/fdef deactivate-world
   :args (s/cat :sessions ::sessions
