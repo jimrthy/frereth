@@ -71,7 +71,8 @@
                  ;; happen as close to localhost as possible...right
                  ;; next to the acceptance of the reality that it isn't
                  ;; going to work out that way in practice.
-                 ::disconnected ; websocket went away
+                 ::disconnected  ; worlds have disconnected
+                 ::disconnecting  ; websocket went away: need to disconnect worlds
                  ::pending  ; Awaiting web socket
                  ::active  ; web socket active
                  })
@@ -116,23 +117,23 @@
   connection is really just a meta-world."
   ([current new-state update-fn]
    (update-fn
-    (assoc (if-not new-state current
-                   (assoc current ::state new-state))
-           ::state-id #?(:clj (cp-util/random-uuid)
-                         :cljs (random-uuid))
-           ;; So we can time out the oldest connection if/when we get
-           ;; overloaded.
-           ;; Although that isn't a great algorithm. Should also
-           ;; track session sources so we can prune back ones that
-           ;; are being too aggressive and trying to open too many
-           ;; world at the same time.
-           ;; (Then again, that's probably exactly what I'll do when
-           ;; I recreate a session, so there are nuances to
-           ;; consider).
-           ::specs/time-in-state #?(:clj (java.util.Date.)
-                                    :cljs (js/Date.)))))
+    (update-state current new-state)))
   ([current new-state]
-   (update-state current new-state identity)))
+   (assoc (if-not new-state current
+                  (assoc current ::state new-state))
+          ::state-id #?(:clj (cp-util/random-uuid)
+                        :cljs (random-uuid))
+          ;; So we can time out the oldest connection if/when we get
+          ;; overloaded.
+          ;; Although that isn't a great algorithm. Should also
+          ;; track session sources so we can prune back ones that
+          ;; are being too aggressive and trying to open too many
+          ;; world at the same time.
+          ;; (Then again, that's probably exactly what I'll do when
+          ;; I recreate a session, so there are nuances to
+          ;; consider).
+          ::specs/time-in-state #?(:clj (java.util.Date.)
+                                   :cljs (js/Date.)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Public
@@ -220,7 +221,7 @@
   [{:keys [:frereth/worlds]
     :as session}]
   (update-state session
-                ::disconnected
+                ::disconnecting
                 #(update %
                          :frereth/worlds
                          (fn [worlds]
