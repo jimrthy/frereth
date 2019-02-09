@@ -9,92 +9,40 @@
             [shared.world :as world])
   (:require-macros [cljs.core.async.macros :as async-macros :refer [go]]))
 
-(s/def ::manager (s/keys :req [::session-id
-                               ::web-socket/sock
-                               :frereth/worlds]))
+(s/def ::world-atom (s/and #(= (type %) Atom)
+                           #(s/valid? :frereth/worlds (deref %))))
 
-(defn do-disconnect
-  "Signal a world to disconnect and tell us when done"
-  ;; This was really refactored out of an inline reduce
-  [acc [world-key world]]
-  (let [ch (async/chan)]
-    (world/trigger-disconnection! world ch)
-    (assoc acc
-           ch [world-key
-               (go
-                 [world-key
-                  ;; Current plan:
-                  ;; pull the world
-                  ;; state alteration
-                  ;; function off
-                  ;; the channel.
-                  ;; This is neither
-                  ;; feasible nor
-                  ;; realistic.
-                  ;; What really has
-                  ;; to happen here
-                  ;; is to signal each
-                  ;; world (a
-                  ;; WebWorker) to
-                  ;; update
-                  ;; its own state to
-                  ;; do whatever it
-                  ;; needs to cope with
-                  ;; the disconnection.
-                  ;; At this level,
-                  ;; we're only
-                  ;; concerned with the
-                  ;; connection
-                  ;; status.
-                  ;; It would be good
-                  ;; to do something
-                  ;; like
-                  ;; worlds.foreach
-                  ;; 1 send disconnect
-                  ;; 2 update state to
-                  ;; disconnecting
-                  ;; 3 update state to
-                  ;; disconnected upon
-                  ;; response
-                  (async/<! ch)])])))
+;;; TODO: ::session-state
+(s/def ::manager (s/keys :req [::session-id
+                               ;; TODO: Try to move anything that refers
+                               ;; to this into session-socket
+                               ::web-socket/sock
+                               ::world-atom]))
+
+(s/fdef do-disconnect-all
+  :args (s/cat :this ::manager)
+  :ret ::manager)
+(defn do-disconnect-all
+  [{:keys [::world-atom]
+    :as this}]
+  (swap! this ::world-atom
+         (fn [worlds]
+           (reduce (fn [world-map world-key]
+                     (let [world (world/get-world world-map world-key)]
+                       (world/trigger-disconnection! world)
+                       (update world-map world-key
+                               (fn [_]
+                                 (world/disconnecting world-map world-key)))))
+                   worlds
+                   (keys worlds)))))
 
 (defmethod ig/init-key ::manager
-  [_ {:keys [::web-socket/sock]
+  [_ {:keys [:frereth/worlds]
       :as opts}]
-  (atom (into {::web-socket/sock sock
-               :frereth/worlds {}}
+  (atom (into {:frereth/worlds (or worlds {})}
               opts)))
 
 (defmethod ig/halt-key! ::manager
   [_ {:keys [::session-id
-             ::web-socket/sock
              :frereth/worlds]}]
-  (when (< 0 (count worlds))
-    (let [altered-worlds (atom worlds)]
-      (go
-        (loop [disconnections (reduce do-disconnect
-                                      {}
-                                      worlds)]
-          (when (> 0 (count disconnections))
-            (let [timeout (async/timeout 1000)
-                  [val ch] (async/alts! (conj (keys disconnections)
-                                              timeout))]
-              (if val
-                (let [[[world-key world-updater]] val]
-                  (swap! altered-worlds
-                         (fn [world-map]
-                           (update-in world-map
-                                      [world-key ::world/internal-state]
-                                      world-updater)))
-                  (recur (dissoc disconnections ch)))
-                (do
-                  ;; FIXME: This should go to...where?
-                  ;; Need a logger/state.
-                  (println "Problem: World(s) update timed out")
-                  ;; Need to update the remaining worlds to indicate
-                  ;; that there was a state-changing problem
-                  (throw (ex-info "Deal with this" (disconnections)))))))
-          @altered-worlds)))
-    (throw (js/Error "Need to disconnect each World")))
-  (when sock
-    (web-socket/close sock)))
+  (do-disconnect-all worlds))

@@ -1,19 +1,25 @@
 (ns frereth.apps.log-viewer.frontend.core
-  (:require-macros [cljs.core.async.macros :refer [go]]
-                   [frontend.macro :refer [foobar]])
-  (:require [cemerick.url :as url]
-            [cljs.core.async :as async]
-            [clojure.spec.alpha :as s]
-            ;; FIXME: This can go away with connect-web-socket!
-            [clojure.string]
-            [cognitect.transit :as transit]
-            [foo.bar]
-            [frereth.apps.log-viewer.frontend.session :as session]
-            [frereth.apps.log-viewer.frontend.system :as sys]
-            ;; Start by at least partially supporting this, since it's
-            ;; so popular
-            [reagent.core :as r]
-            [weasel.repl :as repl]))
+  (:require-macros
+   [cljs.core.async.macros :refer [go]]
+   [frontend.macro :refer [foobar]])
+  (:require
+   [cemerick.url :as url]
+   [cljs.core.async :as async]
+   [clojure.spec.alpha :as s]
+   ;; FIXME: This can go away with connect-web-socket!
+   [clojure.string]
+   ;; FIXME: This really should go away also.
+   ;; Though we'll also have to break the web workers
+   ;; out into their own component.
+   [cognitect.transit :as transit]
+   [foo.bar]
+   [frereth.apps.log-viewer.frontend.session :as session]
+   [frereth.apps.log-viewer.frontend.socket :as socket]
+   [frereth.apps.log-viewer.frontend.system :as sys]
+   ;; Start by at least partially supporting this, since it's
+   ;; so popular
+   [reagent.core :as r]
+   [weasel.repl :as repl]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Specs
@@ -818,8 +824,21 @@
 (when js/window
   ;; FIXME: Switch to this...
   (comment
-    (sys/begin! sys/state
-                {::session/manager {::session/session-id session-id-from-server}}))
+    (let [location (.-location js/window)
+          origin-protocol (.-protocol location)
+          protocol-length (count origin-protocol)
+          protocol (if (= \s
+                          (clojure.string/lower-case (aget origin-protocol
+                                                           (- protocol-length 2))))
+                     "wss:"
+                     "ws:")
+          local-base-suffix (str "//" (.-host location))
+          base-url (url/url (str origin-protocol local-base-suffix))
+          ws-url (str protocol local-base-suffix  "/ws")]
+      (sys/do-begin sys/state
+                    {::session/manager {::session/session-id session-id-from-server}
+                     ::socket/sock {::socket/base-url base-url}
+                     :ws-url ws-url})))
   ;; ...and make the code that supports the original version go away
   (start!))
 

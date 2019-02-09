@@ -3,6 +3,7 @@
   (:require [clojure.spec.alpha :as s]
             [frereth.apps.log-viewer.frontend.session :as session]
             [frereth.apps.log-viewer.frontend.socket :as web-socket]
+            [frereth.apps.shared.session-socket :as session<->socket]
             [integrant.core :as ig]
             [shared.lamport :as lamport]
             [shared.specs :as specs]
@@ -44,24 +45,28 @@
 (defn configure
   "Create System definition that's ready to ig/init"
   [{:keys [::lamport/clock
+           ::session<->socket/connection
            ::session/manager
            ::repl
            ::web-socket/sock]
     :as current}]
   {::lamport/clock clock
-   ::session/manager (into {::web-socket/sock (ig/ref ::web-socket/sock)}
-                           manager)
+   ::session<->socket/connection (into {::lamport/clock (ig/ref ::lamport/clock)
+                                        ::web-socket/sock (ig/ref ::web-socket/sock)}
+                                  connection)
+   ::session/manager manager
    ::repl repl
-   ::web-socket/sock sock})
+   ::web-socket/sock (into {::lamport/clock (ig/ref ::lamport/clock)}
+                           sock)})
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Public
 
-(s/fdef begin!
+(s/fdef do-begin
   :args (s/cat :state ::state-atom
                :initial ::opts)
   :ret ::state)
-(defn begin!
+(defn do-begin
   [state-atom initial]
   (swap! state
          (fn [current]

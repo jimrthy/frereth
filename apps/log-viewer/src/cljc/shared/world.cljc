@@ -9,6 +9,7 @@
                             ::disconnected          ; Still active after a websocket close
                             ::disconnect-timed-out  ; Timed out waiting for a response from disconnection signal
                             ::disconnecting         ; Web socket has been closed
+                            ::failed                ; Error escaped from here
                             ::forked                ; Q: diff between this and forking?
                             ::forking               ; received source code. Ready to fork
                             ::fsm-error             ; Tried an illegal state transition
@@ -142,6 +143,16 @@
   (= (::connection-state world)
      state))
 
+(s/fdef get-by-state
+  :args (s/cat :world-map :frereth/worlds
+               :world-key :frereth/world-key
+               :connection-state ::connection-state)
+  :ret :frereth/worlds)
+(defn get-by-state
+  [world-map connection-state]
+  (hash-map (filter (fn [[world-id world]]
+                      (state-match? world connection-state)))))
+
 (s/fdef get-world-in-state
   :args (s/cat :world-map :frereth/worlds
                :world-key :frereth/world-key
@@ -174,7 +185,10 @@
                                  (fn [world]
                                    (= (::connection-state world) ::pending))
                                  (fn  [world]
-                                   (assoc world :frereth/renderer->client client))))
+                                   (assoc world
+                                          #?(:clj :frereth/renderer->client
+                                             :cljs :frereth/browser->worker)
+                                          client))))
 
 (s/fdef add-pending
   :args (s/cat :world-map :frereth/worlds
@@ -192,13 +206,23 @@
                                    #(assoc %
                                            ::cookie cookie))))
 
-(s/fdef disconnect
+;; TODO: Rename this to mark-disconnected
+(s/fdef disconnected
   :args (s/cat :world-map :frereth/worlds
                :world-key :frereth/world-key)
   :ret :frereth/worlds)
-(defn disconnect
-  [world-map world-key ch]
+(defn disconnected
+  [world-map world-key]
   (update-world-connection-state world-map world-key ::disconnected))
+
+(s/fdef disconnecting
+  :args (s/cat :world-map :frereth/worlds
+               :world-key :frereth/world-key)
+  :ret :frereth/worlds)
+(defn disconnecting
+  ;; TODO: Rename this to mark-disconnecting
+  [world-map world-key]
+  (update-world-connection-state world-map world-key ::disconnecting))
 
 (s/fdef get-pending
   :args (s/cat :world-map :frereth/worlds
@@ -208,16 +232,20 @@
   [world-map world-key]
   (get-world-in-state world-map world-key ::pending))
 
+;; TODO: Add a macro to define these mark-state functions
+;; and their specs
 (defn mark-disconnect-timeout
   [world-map world-key]
   (update-world-connection-state world-map world-key ::disconnect-time-out))
 
+(defn mark-generic-failure
+  [world-map world-key]
+  (update-world-connection-state world-map world-key ::failed))
+
 (s/fdef trigger-disconnection!
-  :args (s/cat :world ::world
-               ;; FIXME: I know I've specced out core.async channels before
-               :ch any?))
+  :args (s/cat :world ::world))
 (defn trigger-disconnection!
-  [world ch]
+  [world]
   ;; Need to send a signal to the world to do whatever it needs to
   ;; disconnect.
   (throw (ex-info "write this" {})))
