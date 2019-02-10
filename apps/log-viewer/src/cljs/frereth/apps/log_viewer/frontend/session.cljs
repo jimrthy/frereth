@@ -9,15 +9,40 @@
             [shared.world :as world])
   (:require-macros [cljs.core.async.macros :as async-macros :refer [go]]))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; Specs
+
+;; FIXME: Better spec.
+(s/def ::path-to-fork string?)
+
 (s/def ::world-atom (s/and #(= (type %) Atom)
                            #(s/valid? :frereth/worlds (deref %))))
 
 ;;; TODO: ::session-state
-(s/def ::manager (s/keys :req [::session-id
+(s/def ::manager (s/keys :req [::path-to-fork
+                               ::session-id
                                ;; TODO: Try to move anything that refers
                                ;; to this into session-socket
                                ::web-socket/sock
                                ::world-atom]))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; Implementation
+
+(defmethod ig/init-key ::manager
+  [_ {:keys [:frereth/worlds]
+      :as opts}]
+  (atom (into {:frereth/worlds (or worlds {})}
+              opts)))
+
+(declare do-disconnect-all)
+(defmethod ig/halt-key! ::manager
+  [_ {:keys [::session-id
+             :frereth/worlds]}]
+  (do-disconnect-all worlds))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; Public
 
 (s/fdef do-disconnect-all
   :args (s/cat :this ::manager)
@@ -35,14 +60,3 @@
                                  (world/disconnecting world-map world-key)))))
                    worlds
                    (keys worlds)))))
-
-(defmethod ig/init-key ::manager
-  [_ {:keys [:frereth/worlds]
-      :as opts}]
-  (atom (into {:frereth/worlds (or worlds {})}
-              opts)))
-
-(defmethod ig/halt-key! ::manager
-  [_ {:keys [::session-id
-             :frereth/worlds]}]
-  (do-disconnect-all worlds))

@@ -835,8 +835,15 @@
           local-base-suffix (str "//" (.-host location))
           base-url (url/url (str origin-protocol local-base-suffix))
           ws-url (str protocol local-base-suffix  "/ws")]
+      ;; FIXME: This can't *really* happen until after login.
+      ;; That's when we have a session-id and know what "post-login-shell"
+      ;; to "fork."
+      ;; Life gets more complex on a disconnect/reconnect.
       (sys/do-begin sys/state
-                    {::session/manager {::session/session-id session-id-from-server}
+                    ;; FIXME: The path-to-fork is something that should
+                    ;; come back as part of the login handshake.
+                    {::session/manager {::session/path-to-fork "/api/fork"
+                                        ::session/session-id session-id-from-server}
                      ::socket/sock {::socket/base-url base-url}
                      :ws-url ws-url})))
   ;; ...and make the code that supports the original version go away
