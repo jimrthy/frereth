@@ -48,16 +48,16 @@
            ::session<->socket/connection
            ::session/manager
            ::repl
-           ::web-socket/sock]
+           ::web-socket/wrapper]
     :as current}]
   {::lamport/clock clock
    ::session<->socket/connection (into {::lamport/clock (ig/ref ::lamport/clock)
-                                        ::web-socket/sock (ig/ref ::web-socket/sock)}
+                                        ::web-socket/wrapper (ig/ref ::web-socket/wrapper)}
                                   connection)
    ::session/manager manager
    ::repl repl
-   ::web-socket/sock (into {::lamport/clock (ig/ref ::lamport/clock)}
-                           sock)})
+   ::web-socket/wrapper (into {::lamport/clock (ig/ref ::lamport/clock)}
+                              wrapper)})
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Public

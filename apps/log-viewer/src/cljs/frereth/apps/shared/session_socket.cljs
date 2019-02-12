@@ -1,12 +1,12 @@
 (ns frereth.apps.shared.session-socket
   "Wires everything together"
   (:require
-   [cemerick.url :as url]
    [cljs.core.async :as async]
    [clojure.spec.alpha :as s]
-   [cognitect.transit :as transit]
    [frereth.apps.log-viewer.frontend.session :as session]
    [frereth.apps.log-viewer.frontend.socket :as web-socket]
+   [frereth.apps.shared.serialization :as serial]
+   [frereth.apps.shared.worker :as worker]
    [integrant.core :as ig]
    [shared.lamport :as lamport]
    [shared.world :as world]))
@@ -16,12 +16,15 @@
 
 (s/def ::connection (s/keys :required [::lamport/clock
                                        ::session/manager
-                                       ::web-socket/sock]))
+                                       ::web-socket/wrapper
+                                       ::worker/manager]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Implementation
 
 ;;; These duplicate pieces in core
+;;; And most of them should probably move into socket.
+;;; Since this ns is about coordinating those.
 
 (defn array-buffer->string
   "Convert a js/ArrayBuffer to a string"
@@ -65,22 +68,6 @@
                ;; Anything that transit can serialize natively, anyway
                :body any?))
 
-(let [;; Q: msgpack ?
-      ;; A: Not in clojurescript, yet.
-      ;; At least, not "natively"
-      writer (transit/writer :json)]
-
-  (defn serialize
-    "Encode using transit"
-    [o]
-    (transit/write writer o)))
-
-(let [reader (transit/reader :json)]
-  (defn deserialize
-    [s]
-    (console.log "Trying to read" s)
-    (transit/read reader s)))
-
 (defn recv-message!
   [{:keys [::lamport/clock
            ::session/manager]
@@ -93,7 +80,7 @@
                     (js->clj event)))
   (let [raw-bytes (.-data event)
         raw-envelope (array-buffer->string raw-bytes)
-        envelope (deserialize raw-envelope)
+        envelope (serial/deserialize raw-envelope)
         {:keys [:frereth/action
                 :frereth/body  ; Not all messages have a meaningful body
                 :frereth/world-key]
@@ -160,7 +147,7 @@
         :frereth/forward
         (if-let [world (world/get-world-in-state worlds world-key ::world/active)]
           (if-let [worker (::worker world)]
-            (.postMessage worker (serialize body))
+            (.postMessage worker (serial/serialize body))
             (console.error "Message for"
                            world-key
                            "in"
@@ -187,7 +174,7 @@
     ;; to send more
     (try
       (println "Trying to send-message!" envelope)
-      (.send sock (serialize envelope))
+      (.send sock (serial/serialize envelope))
       (println body "sent successfully")
       (catch :default ex
         (console.error "Sending message failed:" ex)))))
@@ -223,227 +210,22 @@
   ;; that, really, gets authorized during login.
   (send-message! this ::login session-id))
 
-;; I'm skeptical that this belongs in here.
-;; It's rapidly turning into a catch-all Swiss army knife.
-;; Putting this sort of actual functionality into a worker-manager
-;; ns seems like it would make more sense.
-;; This this ns can add that to the list of other namespaces that
-;; it coordinates.
-(defn on-worker-message
-  "Cope with message from Worker"
-  [socket world-key worker event]
-  (let [data (.-data event)]
-    (try
-      (let [{:keys [:frereth/action]
-             :as raw-message} (transit/read (transit/reader :json)
-                                            data)]
-        (console.log "Message from" worker ":" action)
-        (condp = action
-          :frereth/render
-          (let [dom (sanitize-scripts worker
-                                      (:frereth/body raw-message))]
-            (r/render-component [(constantly dom)]
-                                (js/document.getElementById "app")))
-          :frereth/forked
-          (let [{:keys [::cookie]
-                 :as world-state} (do-get-world world-key ::forking)
-                decorated (assoc raw-message
-                                 :frereth/cookie cookie
-                                 :frereth/pid world-key)]
-            (if cookie
-              (do
-                (send-message! socket
-                               world-key
-                               ;; send-message! will
-                               ;; serialize this
-                               ;; again.
-                               ;; Which is wasteful.
-                               ;; Would be better to
-                               ;; just have this
-                               ;; :action as a tag,
-                               ;; followed by the
-                               ;; body.
-                               #_data
-                               ;; But that's premature
-                               ;; optimization.
-                               ;; Worry about that
-                               ;; detail later.
-                               ;; Even though this is
-                               ;; the boundary area
-                               ;; where it's probably
-                               ;; the most important.
-                               ;; (Well, not here. But in general)
-                               decorated)
-                (adjust-world-state! world-key
-                                     ::forking
-                                     ::forked
-                                     {::cookie cookie
-                                      ::worker worker}))
-              (console.error "Missing ::cookie among" world-state)))))
-      (catch :default ex
-        (console.error ex "Trying to deserialize" data)))))
-
-(s/fdef spawn-worker!
-  :args (s/cat :crypto ::subtle-crypto
-               :this ::connection
-               :session-id ::session-id
-               :key-pair ::internal-key-pair
-               ;; Actually, this is anything that transit can serialize
-               :public ::jwk
-               :cookie ::cookie)
-  :ret (s/nilable ::web-worker))
-(defn spawn-worker!
-  "Begin promise chain that leads to an ::active World"
-  [crypto
-   {:keys [::session/manager
-           ::web-socket/sock]
-    :as this}
-   session-id
-   {:keys [::secret]}
-   world-key
-   cookie]
-  (when window.Worker
-    (let [base-url (::web-socket/base-url sock)]
-      (console.log "Constructing Worker fork URL based on" base-url
-                   "signing with secret-key" secret)
-      ;; This is missing a layer of indirection.
-      ;; The worker this spawns should return a shadow
-      ;; DOM that combines all the visible Worlds (like
-      ;; an X11 window manager). That worker, in turn,
-      ;; should spawn other workers that communicate
-      ;; with it to supply their shadow DOMs into its.
-      ;; In a lot of ways, this approach is like setting
-      ;; up X11 to run a single app rather than a window
-      ;; manager.
-      ;; That's fine as a first step for a demo, but don't
-      ;; get delusions of grandeur about it.
-      ;; Actually, there's another missing layer here:
-      ;; Each World should really be loaded into its
-      ;; own isolated self-hosted compiler environment.
-      ;; Then available workers should be able to pass them
-      ;; (along with details like window location) around
-      ;; as they have free CPU cycles.
-      ;; Q: Do web workers provide that degree of isolation?
-      ;; Q: Web Workers are designed to be relatively heavy-
-      ;; weight. Is it worth spawning a new one for each
-      ;; world (which are also supposed to be pretty hefty).
-      (let [path-to-shell (::session/path-to-shell manager)
-            url (url/url base-url path-to-shell)
-            initiate {:frereth/cookie cookie
-                      :frereth/session-id session-id
-                      :frereth/world-key world-key}
-            packet-string (serialize initiate)
-            packet-bytes (str->array packet-string)
-            _ (console.log "Signing" packet-bytes)
-            signature-promise (.sign crypto
-                                     #js {:name "ECDSA"
-                                          :hash #js{:name "SHA-256"}}
-                                     secret
-                                     packet-bytes)]
-        ;; TODO: Look at the way promesa handles this
-        ;; Q: Is it really any cleaner?
-        (.then signature-promise
-               (fn [signature]
-                 (let [params {:frereth/initiate packet-string
-                               :frereth/signature (-> signature
-                                                      array-buffer->string
-                                                      serialize)}
-                       ;; Web server uses the cookie to verify that
-                       ;; the request comes from the correct World.
-                       worker (new window.Worker
-                                   (str (assoc url :query params))
-                                   ;; Currently redundant:
-                                   ;; in Chrome, at least, module scripts are not
-                                   ;; supported on DedicatedWorker
-                                   #js{"type" "classic"})]
-                   (set! (.-onmessage worker)
-                         (partial on-worker-message sock world-key worker))
-                   (set! (.-onerror worker)
-                         (fn [problem]
-                           (console.error "FIXME: Need to handle"
-                                          problem
-                                          "from World"
-                                          world-key)))
-                   worker)))))))
-
-(s/fdef export-public-key-and-build-worker!
-
-  :args (s/cat :socket ::web-socket
-               :session-id ::session-id
-               ;; FIXME: Spec this
-               :crypto any?
-               :key-pair ::key-pair)
-  ;; It's tempting to spec that this returns a future.
-  ;; But that's just an implementation detail. This is
-  ;; called for side-effects.
-  ;; Then again, having it return a promise (or whatever
-  ;; promesa does) would have probably been cleaner than
-  ;; dragging core.async into the mix.
-  :ret any?)
-(defn export-public-key-and-build-worker!
-  [{:keys [::web-socket/sock]
-    :as this}
-   session-id crypto key-pair]
-  (let [raw-secret (.-privateKey key-pair)
-        raw-public (.-publicKey key-pair)
-        exported (.exportKey crypto "jwk" raw-public)]
-    (.then exported
-           (fn [public]
-             (build-worker-from-exported-key
-              sock
-              (partial spawn-worker!
-                       crypto
-                       this
-                       session-id
-                       {::public raw-public
-                        ::secret raw-secret}
-                       (js->clj public))
-              key-pair
-              public)))))
-
-(defn fork-shell!
-  [{:keys [::web-socket/sock]
-    :as this}
-   session-id]
-  ;; TODO: Look into using something like
-  ;; https://tweetnacl.js.org/#/
-  ;; instead.
-  ;; It seems like it might be faster, and definitely simpler,
-  ;; but the ability to use a native API that the browser
-  ;; writer optimized probably offsets those advantages.
-  (let [crypto (.-subtle (.-crypto js/window))
-        ;; Q: Any point to encrypting?
-        ;; Q: Are these settings reasonable?
-        ;; As a first step, I really just want a randomly-generated
-        ;; public key that I can use as a PID to make it difficult for
-        ;; other "processes" to interfere.
-        signing-key-promise (.generateKey crypto
-                                          #js {:name "ECDSA"
-                                               :namedCurve "P-384"}
-                                          true
-                                          #js ["sign"
-                                               "verify"])]
-    (.then signing-key-promise (partial export-public-key-and-build-worker!
-                                        this
-                                        session-id
-                                        crypto))))
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Public
 
 (defmethod ig/init-key ::connection
   [_ {:keys [::lamport/clock
              ::session/manager
-             ::web-socket/sock]
+             ::web-socket/wrapper]
       :as this}]
-  (when-let [{:keys [::web-socket/socket]} sock]
+  (when-let [{:keys [::web-socket/socket]} wrapper]
     (let [{:keys [::session/session-id]} manager]
       ;; Q: Worth using a library like sente or haslett to wrap the
       ;; details?
       ;; TODO: Move these into session-socket
-      (set! (.-onopen sock)
+      (set! (.-onopen socket)
             (fn [event]
-              (console.log "Websocket opened:" event sock)
+              (console.log "Websocket opened:" event socket)
               (notify-logged-in! this session-id)
               ;; This is where things like deferreds, core.async,
               ;; and promises come in handy.
@@ -455,15 +237,16 @@
               ;; *is*.
               ;; A: Well, sort-of.
               ;; There are a few more steps before we get to that.
-              (fork-shell! this session-id)))
-      (set! (.-onmessage sock) (partial recv-message! clock))
-      (set! (.-onclose sock)
+              (worker/fork-shell! this session-id)))
+      (set! (.-onmessage socket) (partial recv-message! clock))
+      (set! (.-onclose socket)
             (fn [event]
               ;; Right now, this updates the manager's world-map atom.
               ;; But we should really be tracking the manager's internal
               ;; state also.
               (console.warn "This should really update the manager value")
               (session/do-disconnect-all manager)))
-      (set! (.-onerror sock)
+      (set! (.-onerror socket)
             (fn [event]
-              (console.error "Frereth Connection error:" event))))))
+              (console.error "Frereth Connection error:" event)))
+      (assoc this ::worker/manager (worker/manager clock manager wrapper)))))

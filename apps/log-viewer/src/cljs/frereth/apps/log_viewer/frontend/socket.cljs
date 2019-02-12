@@ -8,14 +8,14 @@
 ;;;; Specs
 
 ;; This is an instance of a js/WebSocket
-(s/def ::sock any?)
+(s/def ::socket any?)
 
-(s/def ::wrapper (s/keys :req [::sock]))
+(s/def ::wrapper (s/keys :req [::socket]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Implementation
 
-(defmethod ig/init-key ::sock
+(defmethod ig/init-key ::wrapper
   [_ {:keys [::ws-url ::shell-forker ::session-id ::lamport/clock]
       :as opts}]
   (console.log "Connecting WebSocket for world interaction")
@@ -28,7 +28,7 @@
     (catch :default ex
       (console.error ex))))
 
-(defmethod ig/halt-key! ::sock
+(defmethod ig/halt-key! ::wrapper
   [_ {:keys [::socket] :as this}]
   (when socket
     (.close socket)))
@@ -37,9 +37,9 @@
 ;;;; Public
 
 (defn close
-  [{:keys [::sock]
-    :as socket}]
-  (.close sock))
+  [{:keys [::socket]
+    :as wrapper}]
+  (.close socket))
 
 (s/fdef wrapper
   :args nil
@@ -47,4 +47,4 @@
 (defn wrapper
   "Returns a wrapper ready to abstract around a web-socket"
   []
-  {::sock nil})
+  {::socket nil})

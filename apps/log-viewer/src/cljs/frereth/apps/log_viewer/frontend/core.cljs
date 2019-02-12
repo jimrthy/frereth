@@ -638,7 +638,8 @@
   :args (s/cat :socket ::web-socket
                :spawner ::work-spawner
                :raw-key-pair ::key-pair)
-  ;; Returns a core.async channel
+  ;; Returns a core.async channel...but that seems like an
+  ;; implementation detail
   :ret any?)
 (defn build-worker-from-exported-key
   "Spawn worker based on newly exported public key."
@@ -696,7 +697,6 @@
   (send-message! socket ::login session-id))
 
 (s/fdef export-public-key-and-build-worker!
-
   :args (s/cat :socket ::web-socket
                :session-id ::session-id
                ;; FIXME: Spec this

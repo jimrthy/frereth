@@ -1,4 +1,5 @@
 (ns shared.world
+  ;; TODO: Refactor move this to frereth.apps.shared.worlds
   (:require [clojure.pprint :refer [pprint]]
             [clojure.spec.alpha :as s]
             [frereth.apps.login-viewer.specs]
