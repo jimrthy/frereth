@@ -1,5 +1,7 @@
 (ns frereth.apps.shared.worker
   "Handle the various web workers"
+  (:require-macros
+   [cljs.core.async.macros :refer [go]])
   (:require
    [cemerick.url :as url]
    [cljs.core.async :as async]
@@ -119,7 +121,7 @@
                    body))))))
 
 (s/fdef send-message!
-  :args (s/cat :socket any?
+  :args (s/cat :this ::manager
                ;; should be bytes? but cljs doesn't have the concept
                ;; Q: Is it a string?
                ;; A: Actually, it should be a map of a JWK
@@ -196,11 +198,7 @@
                                ;; the most important.
                                ;; (Well, not here. But in general)
                                decorated)
-                (adjust-world-state! world-key
-                                     ::forking
-                                     ::forked
-                                     {::cookie cookie
-                                      ::worker worker}))
+                (world/mark-forked worlds world-key cookie worker))
               (console.error "Missing ::cookie among" world-state)))))
       (catch :default ex
         (console.error ex "Trying to deserialize" data)))))
@@ -255,8 +253,8 @@
             initiate {:frereth/cookie cookie
                       :frereth/session-id session-id
                       :frereth/world-key world-key}
-            packet-string (serialize initiate)
-            packet-bytes (str->array packet-string)
+            packet-string (serial/serialize initiate)
+            packet-bytes (serial/str->array packet-string)
             _ (console.log "Signing" packet-bytes)
             signature-promise (.sign crypto
                                      #js {:name "ECDSA"
@@ -269,8 +267,8 @@
                (fn [signature]
                  (let [params {:frereth/initiate packet-string
                                :frereth/signature (-> signature
-                                                      array-buffer->string
-                                                      serialize)}
+                                                      serial/array-buffer->string
+                                                      serial/serialize)}
                        ;; Web server uses the cookie to verify that
                        ;; the request comes from the correct World.
                        worker (new window.Worker
@@ -289,8 +287,68 @@
                                           world-key)))
                    worker)))))))
 
+(s/fdef do-build-actual-worker
+  :args (s/cat :this ::manager
+               :ch ::async-chan
+               :spawner ::work-spawner
+               :raw-key-pair ::key-pair
+               :full-pk ::public-key)
+  :ret ::async-chan)
+(defn do-build-actual-worker
+  [{:keys [:session/manager]
+    :as this}
+   response-ch spawner raw-key-pair full-pk]
+  (go
+    ;; FIXME: Use alts! with a timeout
+    ;; Don't care what the actual response was. The dispatcher should
+    ;; have filtered that before writing to this channel.
+    ;; Although, realistically, the response should include something
+    ;; like the public key for this World on the Client. Or at least on
+    ;; the web server.
+    (let [response (async/<! response-ch)
+          cookie (:frereth/cookie response)]
+      (console.log "Received signal to fork worker:" response)
+      (if-let [worker-promise (spawner cookie)]
+        (.then worker-promise
+               ;; The comment below is mostly speculation from when I was
+               ;; designing this on the fly.
+               ;; TODO: Clean it up and move it into documentation
+               (fn [worker]
+                 ;; Honestly, that should be something that gets
+                 ;; assigned here. It's independent of whatever key the
+                 ;; Worker might actually use.
+                 ;; It's really just for routing messages to/from that
+                 ;; Worker.
+                 ;; Q: How about this approach?
+                 ;; We query the web server for a shell URL. Include our
+                 ;; version of the worker ID as a query param.
+                 ;; Q: Worth using the websocket for that? (it doesn't
+                 ;; seem likely).
+                 ;; The web server creates a pending-world (keyed to
+                 ;; our worker-id), and
+                 ;; its response includes the actual URL to load that
+                 ;; Worker.
+                 ;; Then each Worker could be responsible for tracking
+                 ;; its own signing key.
+                 ;; Except that sharing the responsibility would be
+                 ;; silly.
+                 ;; Want the signing key out here at this level, so we
+                 ;; don't have to duplicate the signing code
+                 ;; everywhere.
+                 ;; So, generate the short-term key pair here. Send
+                 ;; the public half to the web server for validation.
+                 ;; Possibly sign that request with the Session key.
+                 ;; Then use the public key to dispatch messages.
+                 (let [worlds (session/get-worlds manager)]
+                   (world/mark-forking worlds
+                                       full-pk
+                                       cookie
+                                       raw-key-pair
+                                       worker))))
+        (.warn js/console "Spawning shell failed")))))
+
 (s/fdef build-worker-from-exported-key
-  :args (s/cat :socket ::web-socket
+  :args (s/cat :this ::manager
                :spawner ::work-spawner
                :raw-key-pair ::key-pair)
   ;; Returns a core.async channel...but that seems like an
@@ -298,19 +356,26 @@
   :ret any?)
 (defn build-worker-from-exported-key
   "Spawn worker based on newly exported public key."
-  [socket spawner raw-key-pair public]
-  (let [signing-key (atom nil)
+  [{:keys [::web-socket/wrapper
+           ::session/manager]
+    :as this}
+   spawner raw-key-pair public]
+  (let [{:keys [::web-socket/socket]} wrapper
+        worlds (session/get-worlds manager)
+        signing-key (atom nil)
         full-pk (js->clj public)
         ch (async/chan)
         ;; This seems like it's putting the cart before the horse, but
         ;; it returns a go block that's waiting for something
         ;; to write to ch to trigger the creation of the WebWorker.
-        actual-work (do-build-actual-worker ch
+        actual-work (do-build-actual-worker this
+                                            ch
                                             spawner
                                             raw-key-pair
                                             full-pk)]
     (console.log "cljs JWK:" full-pk)
     ;; Q: Is this worth a standalone function?
+    ;; A: It makes more sense in worlds
     (swap! worlds
            assoc
            full-pk

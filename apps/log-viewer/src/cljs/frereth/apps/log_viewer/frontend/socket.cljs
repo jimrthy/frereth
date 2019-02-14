@@ -7,8 +7,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Specs
 
-;; This is an instance of a js/WebSocket
-(s/def ::socket any?)
+(s/def ::socket #(instance? js/WebSocket %))
 
 (s/def ::wrapper (s/keys :req [::socket]))
 

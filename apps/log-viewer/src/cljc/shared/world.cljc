@@ -28,7 +28,8 @@
                                              ::internal-state]
                                        :opt [::cookie
                                              #?(:clj :frereth/renderer->client
-                                                :cljs :frereth/browser->worker)]))
+                                                :cljs :frereth/browser->worker)
+                                             #?(:cljs :frereth/worker)]))
 (s/def ::history (s/coll-of ::world-without-history))
 ;; This leads to other namespaces referencing ::world/world
 ;; which is just weird.
@@ -238,6 +239,45 @@
 (defn mark-disconnect-timeout
   [world-map world-key]
   (update-world-connection-state world-map world-key ::disconnect-time-out))
+
+(s/fdef mark-forked
+  :args (s/cat :world-map :frereth/worlds
+               :world-key :frereth/world-key)
+  :ret (s/nilable ::world))
+(defn mark-forked
+  [world-map world-key cookie worker]
+  (update-world-connection-state world-map world-key
+                                 (fn [{:keys [::connection-state]
+                                       :as world}]
+                                   (= connection-state ::forked))
+                                 (fn [transitioned]
+                                   ;; There's some duplicated effort
+                                   ;; between this and mark-forking.
+                                   ;; It's silly to assoc the cookie
+                                   ;; and worker in both.
+                                   ;; Though possibly worth verifying
+                                   ;; that they match.
+                                   (assoc transitioned
+                                          :frereth/cookie cookie
+                                          :frereth/worker worker))))
+
+(defn mark-forking
+  [world-map world-key cookie raw-key-pair worker]
+  (update-world-connection-state world-map world-key
+                                 (fn [{:keys [::connection-state]
+                                       :as world}]
+                                   (= connection-state ::pending))
+                                 (fn [transitioned]
+                                   ;; There's some duplicated effort
+                                   ;; between this and mark-forking.
+                                   ;; It's silly to assoc the cookie
+                                   ;; and worker in both.
+                                   ;; Though possibly worth verifying
+                                   ;; that they match.
+                                   (assoc transitioned
+                                          :frereth/cookie cookie
+                                          ::key-pair raw-key-pair
+                                          :frereth/worker worker))))
 
 (defn mark-generic-failure
   [world-map world-key]

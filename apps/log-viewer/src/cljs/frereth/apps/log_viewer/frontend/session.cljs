@@ -60,3 +60,10 @@
                                  (world/disconnecting world-map world-key)))))
                    worlds
                    (keys worlds)))))
+
+(s/fdef get-worlds
+  :args (s/cat :this ::manager)
+  :ret :frereth/worlds)
+(defn get-worlds
+  [{:keys [::world-atom]}]
+  @world-atom)

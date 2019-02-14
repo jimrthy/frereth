@@ -20,6 +20,8 @@
           :cljs :frereth/browser->worker) (s/keys :req [:frereth/disconnect!
                                                         :frereth/message-sender!]))
 
+#?(:cljs (s/def :frereth/worker #(instance? js/Worker %)))
+
 (s/def :frereth/world-stop-signal (s/or :symbol symbol?
                                         :uuid uuid?
                                         :int integer?))
