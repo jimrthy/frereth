@@ -1,4 +1,4 @@
-(ns frereth.apps.login-viewer.specs
+(ns frereth.apps.shared.specs
   ;; FIXME: This ns is just busted.
   ;; frereth.apps.log-viewer.specs might have been
   ;; reasonable.

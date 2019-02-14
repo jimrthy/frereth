@@ -9,7 +9,7 @@
              [stream :as strm]]
             [clojure.java.io :as io]
             [clojure.core.async :as async]
-            [frereth.apps.login-viewer.specs]
+            [frereth.apps.shared.specs]  ; Q: How does this overlap w/ shared.specs?
             [renderer
              [marshalling :as marshall]
              [sessions :as sessions]]

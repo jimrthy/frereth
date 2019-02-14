@@ -2,7 +2,7 @@
   ;; TODO: Refactor move this to frereth.apps.shared.worlds
   (:require [clojure.pprint :refer [pprint]]
             [clojure.spec.alpha :as s]
-            [frereth.apps.login-viewer.specs]
+            [frereth.apps.shared.specs]
             [shared.specs :as specs]))
 
 (s/def ::connection-state #{::active                ; we've ACKed the browser's fork

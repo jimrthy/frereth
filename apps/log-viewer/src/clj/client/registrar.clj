@@ -1,6 +1,6 @@
 (ns client.registrar
   (:require [clojure.spec.alpha :as s]
-            [frereth.apps.login-viewer.specs]))
+            [frereth.apps.shared.specs]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Specs
