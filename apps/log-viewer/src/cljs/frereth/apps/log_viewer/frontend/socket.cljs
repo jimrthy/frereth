@@ -17,7 +17,8 @@
 (defmethod ig/init-key ::wrapper
   [_ {:keys [::ws-url ::shell-forker ::session-id ::lamport/clock]
       :as opts}]
-  (console.log "Connecting WebSocket for world interaction")
+  (console.log "Connecting WebSocket for world interaction based on"
+               opts)
   (try
     (let [ws (js/WebSocket. ws-url)]
       ;; A blob is really just a file handle. Have to jump through an
@@ -25,7 +26,9 @@
       (set! (.-binaryType ws) "arraybuffer")
       (assoc opts ::socket ws))
     (catch :default ex
-      (console.error ex))))
+      (console.error "Initializing wrapper failed:" ex
+                     "\nbased on" opts)
+      nil)))
 
 (defmethod ig/halt-key! ::wrapper
   [_ {:keys [::socket] :as this}]

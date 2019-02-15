@@ -1,5 +1,8 @@
 (ns renderer.marshalling
-  ;; FIXME: Convert this into a .cljc file
+  ;; FIXME: Convert everything that calls this
+  ;; to use
+  ;; frereth.apps.shared.serialization
+  ;; instead
   (:require [clojure.core.async.impl.protocols :as async-protocols]
             [clojure.spec.alpha :as s]
             [cognitect.transit :as transit])

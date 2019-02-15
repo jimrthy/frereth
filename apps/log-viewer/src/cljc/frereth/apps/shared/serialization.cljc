@@ -1,11 +1,82 @@
 (ns frereth.apps.shared.serialization
   (:require
+   [clojure.core.async.impl.protocols :as async-protocols]
    [clojure.spec.alpha :as s]
-   [cognitect.transit :as transit]))
+   [cognitect.transit :as transit])
+  #?(:clj (:import [java.io
+                    ByteArrayInputStream
+                    ByteArrayOutputStream])))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; Specs
 
 (s/def ::array-buffer #?(:clj bytes?
                          :cljs #(instance? js/ArrayBuffer %)))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; Serialization handlers
+
+(def async-chan-write-handler
+  "This really shouldn't be needed"
+  (transit/write-handler "async-chan"
+                         (fn [o]
+                           (println ::async-chan-write-handler
+                                    "WARNING: trying to serialize a(n)"
+                                    (type o))
+                           (pr-str o))))
+
+(def atom-write-handler
+  (transit/write-handler "clojure-atom"
+                         (fn [o]
+                           (println ::atom-write-handler
+                                    "WARNING: Trying to serialize a(n)"
+                                    (type o))
+                           ;; Q: What's the proper way to
+                           ;; serialize this recursively?
+                           (pr-str @o))))
+
+(def exception-write-handler
+  (transit/write-handler "exception"
+                         (fn [ex]
+                           (println ::exception-write-handler
+                                    "WARNING: Trying to serialize a(n)"
+                                    (type ex))
+                           ;; Just as I was starting to think that a
+                           ;; macro would make a lot of sense here,
+                           ;; I feel like a lot more details are justified.
+                           ;; Then again...they really should all be getting
+                           ;; added already by the log handler.
+                           (pr-str ex))))
+
+;;; Technically, it might make sense to try to make this work
+;;; on the browser side.
+;;; Since there *is* a cljs version of manifold that I've
+;;; considered using.
+#?(:clj
+   (def manifold-stream-handler
+     (transit/write-handler "manifold-stream"
+                            (fn [s]
+                              (println ::manifold-stream-handler
+                                       "WARNING: Trying to serialize a(n)"
+                                       (type s))
+                              (pr-str s)))))
+
+;;; It's also very tempting to make this actually work, so
+;;; I can pass public keys back and forth efficiently.
+#?(:clj
+   (def nacl-key-pair-handler
+     (transit/write-handler "nacl-key-pair"
+                            (fn [pair]
+                              (println ::nacl-key-pair-handler
+                                       "WARNING: Trying to serialize a" (type pair))
+                              ;; It's tempting to also log the private key.
+                              ;; That would be a terrible mistake.
+                              {::public-key (vec (.getPublicKey pair))}))))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; Internal Implementation
+
+;; Q: Isn't this used publicly?
 (s/fdef str->array
   :args (s/cat :s string?)
   :ret ::array-buffer)
@@ -41,19 +112,67 @@
      :clj (String. bs)))
 
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; Public
 
-(let [;; Q: msgpack ?
-      ;; A: Not in clojurescript, yet.
-      ;; At least, not "natively"
-      writer (transit/writer :json)]
+(s/fdef serialize
+           ;; body isn't *really* anything. It has to be something that's
+           ;; directly serializable via transit.
+           :args (s/cat :body any?)
+           :ret ::array-buffer)
 
-  (defn serialize
-    "Encode using transit"
-    [o]
-    (transit/write writer o)))
+#?(:clj
+   (defn serialize
+     [body]
+     ;; Q: Useful size?
+     (try
+       (let [result (ByteArrayOutputStream. 4096)
+             handler-map {:handlers {async-protocols/ReadPort async-chan-write-handler
+                                     clojure.core.async.impl.channels.ManyToManyChannel async-chan-write-handler
+                                     clojure.lang.Atom atom-write-handler
+                                     clojure.lang.Agent atom-write-handler
+                                     com.iwebpp.crypto.TweetNaclFast$Box$KeyPair nacl-key-pair-handler
+                                     java.lang.Exception exception-write-handler
+                                     manifold.stream.SplicedStream manifold-stream-handler}}
+             writer (transit/writer result
+                                    :json
+                                    handler-map)]
+         (transit/write writer body)
+         (.toByteArray result))))
 
-(let [reader (transit/reader :json)]
-  (defn deserialize
-    [s]
-    (console.log "Trying to read" s)
-    (transit/read reader s)))
+   :cljs (let [;; Q: msgpack ?
+               ;; A: Not in clojurescript, yet.
+               ;; At least, not "natively"
+               writer (transit/writer :json)]
+
+           (defn serialize
+             "Encode using transit"
+             [o]
+             (transit/write writer o))))
+
+(s/fdef deserialize
+  :args (s/cat :message-string string?)
+  :ret ::array-buffer)
+#?(:clj (defn deserialize
+          [message-string]
+          (let [message-bytes (.getBytes message-string)
+                in (ByteArrayInputStream. message-bytes)
+                reader (transit/reader in :json)]
+            (transit/read reader)))
+
+   :cljs (let [reader (transit/reader :json)]
+           (defn deserialize
+             [s]
+             (console.log "Trying to read" s)
+             (transit/read reader s))))
+
+(comment
+  (String. (serialize "12345" {:a 1 :b 2 :c 3}))
+  (try
+    (let [result (ByteArrayOutputStream. 4096)
+          writer (transit/writer result :json)]
+      (transit/write writer {::ch (async/chan)})
+      (.toByteArray result))
+    (catch RuntimeException ex
+      (println "Caught" ex)))
+  )

@@ -217,15 +217,6 @@
   [world-map world-key]
   (update-world-connection-state world-map world-key ::disconnected))
 
-(s/fdef disconnecting
-  :args (s/cat :world-map :frereth/worlds
-               :world-key :frereth/world-key)
-  :ret :frereth/worlds)
-(defn disconnecting
-  ;; TODO: Rename this to mark-disconnecting
-  [world-map world-key]
-  (update-world-connection-state world-map world-key ::disconnecting))
-
 (s/fdef get-pending
   :args (s/cat :world-map :frereth/worlds
                :world-key :frereth/world-key)
@@ -239,6 +230,14 @@
 (defn mark-disconnect-timeout
   [world-map world-key]
   (update-world-connection-state world-map world-key ::disconnect-time-out))
+
+(s/fdef mark-disconnecting
+  :args (s/cat :world-map :frereth/worlds
+               :world-key :frereth/world-key)
+  :ret :frereth/worlds)
+(defn mark-disconnecting
+  [world-map world-key]
+  (update-world-connection-state world-map world-key ::disconnecting))
 
 (s/fdef mark-forked
   :args (s/cat :world-map :frereth/worlds

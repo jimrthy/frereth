@@ -1,14 +1,19 @@
 (ns renderer.sessions-test
-  (:require [renderer.sessions :as sessions]
-            [clojure.test :as t :refer [are
-                                        deftest
-                                        is
-                                        testing]]))
+  (:require
+   [clojure.test :as t :refer [are
+                               deftest
+                               is
+                               testing]]
+   [integrant.core :as ig]
+   [renderer.sessions :as sessions]
+   [shared.connection :as connection]))
 
 (deftest lifecycle
-  (let [initial (sessions/create)
+  (let [system-definition {::sessions/session-atom nil}
+        initial (ig/init)
         principal "test user"
-        logged-in (sessions/log-in initial principal)
+        logged-in (connection/log-in initial principal)
+        ;; Q: What did this do?
         activated (sessions/activate logged-in "web socket")]
     ;; This approach demonstrates the chicken/egg non-problem that I
     ;; keep thinking I'm running into:

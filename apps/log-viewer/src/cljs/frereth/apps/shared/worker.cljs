@@ -9,6 +9,7 @@
    [frereth.apps.log-viewer.frontend.session :as session]
    [frereth.apps.log-viewer.frontend.socket :as web-socket]
    [frereth.apps.shared.serialization :as serial]
+   [frereth.apps.shared.specs :as specs]
    ;; Start by at least partially supporting this, since it's
    ;; so popular
    [reagent.core :as r]
@@ -289,11 +290,11 @@
 
 (s/fdef do-build-actual-worker
   :args (s/cat :this ::manager
-               :ch ::async-chan
+               :ch ::specs/async-chan
                :spawner ::work-spawner
                :raw-key-pair ::key-pair
                :full-pk ::public-key)
-  :ret ::async-chan)
+  :ret ::specs/async-chan)
 (defn do-build-actual-worker
   [{:keys [:session/manager]
     :as this}

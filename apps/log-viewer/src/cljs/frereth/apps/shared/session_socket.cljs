@@ -35,25 +35,6 @@
         decoder (js/TextDecoder. "utf-8")]
     (.decode decoder data-view)))
 
-(s/fdef str->array
-  :args (s/cat :s string?)
-  :ret ::array-buffer)
-(defn str->array
-  "Convert a string to a js/ArrayBuffer"
-  [s]
-  ;; Translated from https://gist.github.com/andreburgaud/6f73fd2d690b629346b8
-  ;; There's an inverse function there named arrayBufferToString which
-  ;; is worth contrasting with array-buffer->string in terms of
-  ;; performance.
-  ;; Javascript:
-  ;; String.fromCharCode.apply(null, new Uint16Array(buf));
-  (let [buf (js/ArrayBuffer. (* 2 (count s)))
-        buf-view (js/Uint16Array. buf)]
-    (dorun (map-indexed (fn [idx ch]
-                          (aset buf-view idx (.charCodeAt ch)))
-                        s))
-    buf))
-
 (s/fdef recv-message!
   ;; Q: What *is* event?
   :args (s/cat :this ::connection

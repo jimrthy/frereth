@@ -9,6 +9,8 @@
             [shared.world :as world])
   (:require-macros [cljs.core.async.macros :as async-macros :refer [go]]))
 
+(enable-console-print!)
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Specs
 
@@ -30,16 +32,19 @@
 ;;;; Implementation
 
 (defmethod ig/init-key ::manager
-  [_ {:keys [:frereth/worlds]
+  [_ {:keys [:frereth/world-atom]
       :as opts}]
-  (atom (into {:frereth/worlds (or worlds {})}
-              opts)))
+  (assoc opts
+         :frereth/world-atom (atom (if world-atom
+                                     @world-atom
+                                     {}))))
 
 (declare do-disconnect-all)
 (defmethod ig/halt-key! ::manager
   [_ {:keys [::session-id
-             :frereth/worlds]}]
-  (do-disconnect-all worlds))
+             :frereth/world-atom]
+      :as this}]
+  (do-disconnect-all this))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Public
@@ -50,6 +55,7 @@
 (defn do-disconnect-all
   [{:keys [::world-atom]
     :as this}]
+  (println "Disconnecting all worlds in" @world-atom)
   (swap! this ::world-atom
          (fn [worlds]
            (reduce (fn [world-map world-key]
@@ -57,7 +63,7 @@
                        (world/trigger-disconnection! world)
                        (update world-map world-key
                                (fn [_]
-                                 (world/disconnecting world-map world-key)))))
+                                 (world/mark-disconnecting world-map world-key)))))
                    worlds
                    (keys worlds)))))
 

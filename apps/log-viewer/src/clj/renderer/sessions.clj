@@ -183,7 +183,7 @@
   [session-map session-id world-key]
   (update-in session-map
              [session-id :frereth/worlds]
-             world/disconnect world-key))
+             world/mark-disconnecting world-key))
 
 (s/fdef get-active-world
   :args (s/cat :sessions ::sessions
