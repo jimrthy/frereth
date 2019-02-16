@@ -97,6 +97,12 @@
 
 (s/def ::history (s/map-of ::state-id :frereth/session-sans-history))
 
+;; This name warns me that I have a botched-up abstraction
+;; layer.
+;; Or maybe just an incomplete refactoring.
+;; This *does* represent an individual browser session.
+;; But it's very confusing to call it that here in the
+;; connection ns.
 (s/def :frereth/session (s/merge :frereth/session-sans-history
                                  (s/keys :req [::history])))
 

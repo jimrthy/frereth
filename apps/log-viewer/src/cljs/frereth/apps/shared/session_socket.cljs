@@ -11,6 +11,7 @@
    [shared.lamport :as lamport]
    [shared.world :as world]))
 
+(enable-console-print!)
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Specs
 
@@ -154,9 +155,9 @@
     ;; TODO: Check that bufferedAmount is low enough
     ;; to send more
     (try
-      (println "Trying to send-message!" envelope)
+      (console.log "Trying to send-message!" envelope "to" sock)
       (.send sock (serial/serialize envelope))
-      (println body "sent successfully")
+      (console.log body "sent successfully")
       (catch :default ex
         (console.error "Sending message failed:" ex)))))
 
@@ -167,7 +168,7 @@
   :ret any?)
 (defn notify-logged-in!
   ;; TODO: Auth before this. Probably using some kind of PAKE.
-  "Let the web socket handler which session just connected"
+  "Tell the web socket handler that a session just connected"
   [this session-id]
   ;; Probably reasonable to base this on something like the
   ;; CurveCP handshake.
@@ -177,18 +178,28 @@
   ;; c.f. https://www.owasp.org/index.php/Authentication_Cheat_Sheet
 
   ;; Honestly, the server could/should inject a "long-term" key-pair
-  ;; at the top of this file before serving it.
+  ;; at the top of main.js before serving it.
   ;; For now, it doesn't much matter.
   ;; However:
   ;; There really needs to be an intermediate login step that
   ;; handles this for real.
-  ;; In terms of a linux ssh connection, opening the
-  ;; websocket is similar to connecting to a pty.
-  ;; We need a login "process" that authenticates the user,
-  ;; using this (I'm starting to think of it as a "session
-  ;; key) to help the server side correlate between the
-  ;; original http request and the websocket connection
-  ;; that, really, gets authorized during login.
+  ;; In terms of a linux ssh connection, loading the
+  ;; web page is similar to connecting to a pty.
+  ;; It's constantly tempting to allow anonymous connections
+  ;; there.
+  ;; That temptation is wrong: this is like logging into
+  ;; your local computer (and, no matter what Macs might
+  ;; allow, doing that without authentication is wrong).
+  ;; This is like the login "process" that authenticates the user.
+  ;; Once that's done, there will be something like a JWT cookie
+  ;; that we can check during the websocket connection.
+  ;; We should be able to associate that JWT with the websocket
+  ;; handler to let it know who has connected.
+  ;; That JWT is probably what I was planning to use as the
+  ;; session-id here.
+  ;; Which makes this approach even more incorrect: that should
+  ;; really be an http-only cookie to which we don't have any
+  ;; access.
   (send-message! this ::login session-id))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

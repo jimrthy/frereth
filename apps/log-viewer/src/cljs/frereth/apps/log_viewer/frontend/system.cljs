@@ -50,6 +50,7 @@
            ::repl
            ::web-socket/wrapper]
     :as current}]
+  (console.log "Configuring system based on" current)
   {::lamport/clock clock
    ::session<->socket/connection (into {::lamport/clock (ig/ref ::lamport/clock)
                                         ::web-socket/wrapper (ig/ref ::web-socket/wrapper)}
@@ -73,3 +74,6 @@
            (ig/init
             (or current
                 (configure initial))))))
+
+(comment
+  (println state))

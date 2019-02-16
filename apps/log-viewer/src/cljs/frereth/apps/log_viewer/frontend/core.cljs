@@ -835,6 +835,7 @@
         local-base-suffix (str "//" (.-host location))
         base-url (url/url (str origin-protocol local-base-suffix))
         ws-url (str protocol local-base-suffix  "/ws")]
+    (println "Configuring system, starting with ws-url:" ws-url)
     ;; FIXME: This can't *really* happen until after login.
     ;; That's when we have a session-id and know what "post-login-shell"
     ;; to "fork."
@@ -844,8 +845,8 @@
                   ;; come back as part of the login handshake.
                   {::session/manager {::session/path-to-fork "/api/fork"
                                       ::session/session-id session-id-from-server}
-                   ::socket/sock {::socket/base-url base-url
-                                  ::socket/ws-url ws-url}}))
+                   ::socket/wrapper {::socket/base-url base-url
+                                     ::socket/ws-url ws-url}}))
   ;; ...and make the code that supports the original version go away
   (comment
     (start!)))
