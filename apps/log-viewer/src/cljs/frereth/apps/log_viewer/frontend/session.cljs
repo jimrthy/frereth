@@ -35,19 +35,26 @@
   [_ {:keys [:frereth/world-atom]
       :as opts}]
   (assoc opts
-         :frereth/world-atom (atom (if world-atom
-                                     @world-atom
-                                     {}))))
+         ::world-atom (or world-atom
+                          (atom {}))))
 
 (declare do-disconnect-all)
 (defmethod ig/halt-key! ::manager
   [_ {:keys [::session-id
-             :frereth/world-atom]
+             ::world-atom]
       :as this}]
   (do-disconnect-all this))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Public
+
+(defn add-pending-world
+  [{:keys [::world-atom]
+    :as this}
+   full-pk ch initial-state]
+  (swap! world-atom
+         (fn [world-map]
+           (world/add-pending world-map full-pk ch initial-state))))
 
 (s/fdef do-disconnect-all
   :args (s/cat :this ::manager)

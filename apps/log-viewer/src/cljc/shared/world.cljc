@@ -2,8 +2,10 @@
   ;; TODO: Refactor move this to frereth.apps.shared.worlds
   (:require [clojure.pprint :refer [pprint]]
             [clojure.spec.alpha :as s]
-            [frereth.apps.shared.specs]
-            [shared.specs :as specs]))
+            [frereth.apps.shared.specs :as specs]))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; Specs
 
 (s/def ::connection-state #{::active                ; we've ACKed the browser's fork
                             ::created               ; preliminary, ready to go
@@ -65,6 +67,15 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Internal Implementation
 
+;; Q: Worth making this generally available?
+(s/fdef now
+  :args nil
+  :ret inst?)
+(defn now
+  []
+  #?(:clj (java.util.Date.)
+     :cljs (js/Date.)))
+
 (s/fdef ctor
   :args (s/cat :initial-state ::internal-state)
   :ret ::world)
@@ -73,9 +84,10 @@
   {::connection-state  ::created
    ::history []
    ::internal-state initial-state
-   ::specs/time-in-state (java.util.Date.)})
 
-;;; FIXME: Add a fsm.cljc and make the state graph declarative.
+   ::specs/time-in-state (now)})
+
+;;; TODO: Add a fsm.cljc and make the state graph declarative.
 (s/fdef update-world-connection-state
   :args (s/or :simple (s/cat :world-map :frereth/worlds
                              :world-key :frereth/world-key
@@ -102,7 +114,7 @@
              (let [history (::history world)
                    previous (dissoc world ::history)]
                (-> world
-                   (assoc ::specs/time-in-state (java.util.Date.)
+                   (assoc ::specs/time-in-state (now)
                           ::connection-state connection-state)
                    (update ::history conj previous))))))
   ([world-map world-key connection-state pre-check]
@@ -195,7 +207,8 @@
 (s/fdef add-pending
   :args (s/cat :world-map :frereth/worlds
                :world-key :frereth/world-key
-               :cookie ::cookie
+               #?@(:clj [:cookie ::cookie]
+                   :cljs [:async-ch ::specs/async-chan])
                :initial-state ::internal-state)
   :ret :frereth/worlds)
 (defn add-pending

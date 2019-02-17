@@ -27,28 +27,10 @@
 ;;; And most of them should probably move into socket.
 ;;; Since this ns is about coordinating those.
 
-(defn array-buffer->string
-  "Convert a js/ArrayBuffer to a string"
-  [bs]
-  (let [data-view (js/DataView. bs)
-        ;; Q: What encoding is appropriate here?
-        ;; (apparently javascript strings are utf-16)
-        decoder (js/TextDecoder. "utf-8")]
-    (.decode decoder data-view)))
-
 (s/fdef recv-message!
   ;; Q: What *is* event?
   :args (s/cat :this ::connection
                :event any?))
-
-(s/fdef send-message!
-  :args (s/cat :socket any?
-               ;; should be bytes? but cljs doesn't have the concept
-               ;; Q: Is it a string?
-               ;; A: Actually, it should be a map of a JWK
-               :world-id any?
-               ;; Anything that transit can serialize natively, anyway
-               :body any?))
 
 (defn recv-message!
   [{:keys [::lamport/clock
@@ -61,7 +43,7 @@
                     ": "
                     (js->clj event)))
   (let [raw-bytes (.-data event)
-        raw-envelope (array-buffer->string raw-bytes)
+        raw-envelope (serial/array-buffer->string raw-bytes)
         envelope (serial/deserialize raw-envelope)
         {:keys [:frereth/action
                 :frereth/body  ; Not all messages have a meaningful body
@@ -140,10 +122,18 @@
           ;; This is impossible: it will throw an exception
           (console.error "Missing world" world-key "inside" worlds))))))
 
+(s/fdef send-message!
+  :args (s/cat :this ::connection
+               ;; should be bytes? but cljs doesn't have the concept
+               ;; Q: Is it a string?
+               ;; A: Actually, it should be a map of a JWK
+               :world-id any?
+               ;; Anything that transit can serialize natively, anyway
+               :body any?))
 (defn send-message!
   "Send `body` over `socket` for `world-id`"
   [{:keys [::lamport/clock
-           ::web-socket/sock]
+           ::web-socket/wrapper]
     :as this}
    world-id
    body]
@@ -151,12 +141,13 @@
   (let [envelope {:frereth/body body
                   :frereth/lamport @clock
                   :frereth/wall-clock (.now js/Date)
-                  :frereth/world world-id}]
+                  :frereth/world world-id}
+        {:keys [::web-socket/socket]} wrapper]
     ;; TODO: Check that bufferedAmount is low enough
     ;; to send more
     (try
-      (console.log "Trying to send-message!" envelope "to" sock)
-      (.send sock (serial/serialize envelope))
+      (console.log "Trying to send-message!" envelope "to" socket)
+      (.send socket (serial/serialize envelope))
       (console.log body "sent successfully")
       (catch :default ex
         (console.error "Sending message failed:" ex)))))
@@ -207,11 +198,16 @@
 
 (defmethod ig/init-key ::connection
   [_ {:keys [::lamport/clock
-             ::session/manager
              ::web-socket/wrapper]
+      session-manager ::session/manager
       :as this}]
+  (console.log "init:" ::connection
+               "session-manager:" session-manager
+               "\namong:" (keys this)
+               "\nin:" this)
   (when-let [{:keys [::web-socket/socket]} wrapper]
-    (let [{:keys [::session/session-id]} manager]
+    (let [worker-manager (worker/manager clock session-manager wrapper)
+          {:keys [::session/session-id]} session-manager]
       ;; Q: Worth using a library like sente or haslett to wrap the
       ;; details?
       ;; TODO: Move these into session-socket
@@ -229,16 +225,16 @@
               ;; *is*.
               ;; A: Well, sort-of.
               ;; There are a few more steps before we get to that.
-              (worker/fork-shell! this session-id)))
-      (set! (.-onmessage socket) (partial recv-message! clock))
+              (worker/fork-shell! worker-manager session-id)))
+      (set! (.-onmessage socket) (partial recv-message! this))
       (set! (.-onclose socket)
             (fn [event]
               ;; Right now, this updates the manager's world-map atom.
               ;; But we should really be tracking the manager's internal
               ;; state also.
               (console.warn "This should really update the manager value")
-              (session/do-disconnect-all manager)))
+              (session/do-disconnect-all session-manager)))
       (set! (.-onerror socket)
             (fn [event]
               (console.error "Frereth Connection error:" event)))
-      (assoc this ::worker/manager (worker/manager clock manager wrapper)))))
+      (assoc this ::worker/manager worker-manager))))

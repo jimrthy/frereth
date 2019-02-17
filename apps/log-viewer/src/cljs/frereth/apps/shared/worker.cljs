@@ -22,6 +22,9 @@
 ;; This is actually an instance of js/WebWorker
 (s/def ::worker any?)
 
+;; Q: What is this really?
+(s/def ::exported-public-key any?)
+
 (s/def ::worker-map (s/map-of :frereth/world-id ::worker))
 
 (s/def ::workers (s/and #(instance? Atom %)
@@ -351,9 +354,8 @@
 (s/fdef build-worker-from-exported-key
   :args (s/cat :this ::manager
                :spawner ::work-spawner
-               :raw-key-pair ::key-pair)
-  ;; Returns a core.async channel...but that seems like an
-  ;; implementation detail
+               :raw-key-pair ::key-pair
+               :public ::exported-public-key)
   :ret any?)
 (defn build-worker-from-exported-key
   "Spawn worker based on newly exported public key."
@@ -361,9 +363,10 @@
            ::session/manager]
     :as this}
    spawner raw-key-pair public]
+  (console.log "Setting up worker 'fork' in worlds inside the manager in"
+               this "\namong" (keys this))
   (let [{:keys [::web-socket/socket]} wrapper
         worlds (session/get-worlds manager)
-        signing-key (atom nil)
         full-pk (js->clj public)
         ch (async/chan)
         ;; This seems like it's putting the cart before the horse, but
@@ -374,54 +377,29 @@
                                             spawner
                                             raw-key-pair
                                             full-pk)]
-    (console.log "cljs JWK:" full-pk)
-    ;; Q: Is this worth a standalone function?
-    ;; A: It makes more sense in worlds
-    (swap! worlds
-           assoc
-           full-pk
-           {::waiting-ack ch
-            ::state ::pending})
+    (console.log "cljs JWK:" full-pk
+                 "\nworlds: " worlds)
+    (session/add-pending-world manager full-pk ch {})
     (console.log "Set up pending World. Notify about pending fork.")
-    (send-message! socket full-pk {:frereth/action :frereth/forking
-                                   :frereth/command 'shell
-                                   :frereth/pid full-pk})
-    (reset! signing-key full-pk)))
+    (send-message! this full-pk {:frereth/action :frereth/forking
+                                 :frereth/command 'shell
+                                 :frereth/pid full-pk})
+    full-pk))
 
-(s/fdef export-public-key-and-build-worker!
-
-  :args (s/cat :socket ::web-socket
+(s/fdef export-public-key!
+  :args (s/cat :this ::manager
                :session-id ::session-id
                ;; FIXME: Spec this
                :crypto any?
                :key-pair ::key-pair)
-  ;; It's tempting to spec that this returns a future.
-  ;; But that's just an implementation detail. This is
-  ;; called for side-effects.
-  ;; Then again, having it return a promise (or whatever
-  ;; promesa does) would have probably been cleaner than
-  ;; dragging core.async into the mix.
-  :ret any?)
-(defn export-public-key-and-build-worker!
-  [{:keys [::web-socket/sock]
+  :ret js/Promise)
+(defn export-public-key!
+  [{{:keys [::web-socket/socket]} ::web-socket/wrapper
     :as this}
    session-id crypto key-pair]
   (let [raw-secret (.-privateKey key-pair)
-        raw-public (.-publicKey key-pair)
-        exported (.exportKey crypto "jwk" raw-public)]
-    (.then exported
-           (fn [public]
-             (build-worker-from-exported-key
-              sock
-              (partial spawn-worker!
-                       crypto
-                       this
-                       session-id
-                       {::public raw-public
-                        ::secret raw-secret}
-                       (js->clj public))
-              key-pair
-              public)))))
+        raw-public (.-publicKey key-pair)]
+    (.exportKey crypto "jwk" raw-public)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Public
@@ -430,7 +408,7 @@
   :args (s/cat :this ::manager)
   :ret any?)
 (defn fork-shell!
-  [{:as this}
+  [this
    session-id]
   ;; TODO: Look into using something like
   ;; https://tweetnacl.js.org/#/
@@ -449,11 +427,31 @@
                                                :namedCurve "P-384"}
                                           true
                                           #js ["sign"
-                                               "verify"])]
-    (.then signing-key-promise (partial export-public-key-and-build-worker!
-                                        this
-                                        session-id
-                                        crypto))))
+                                               "verify"])
+        key-pair-atom (atom nil)
+        export-pk-promise (.then signing-key-promise
+                                 (fn [key-pair]
+                                   (reset! key-pair-atom key-pair)
+                                   (export-public-key!
+                                    this
+                                    session-id
+                                    crypto
+                                    key-pair)))]
+    (.then export-pk-promise (fn [exported]
+                               (let [key-pair @key-pair-atom
+                                     raw-public (.-publicKey key-pair)
+                                     raw-secret (.-privateKey key-pair)]
+                                 (build-worker-from-exported-key
+                                  this
+                                  (partial spawn-worker!
+                                           crypto
+                                           this
+                                           session-id
+                                           {::public raw-public
+                                            ::secret raw-secret}
+                                           (js->clj exported))
+                                  @key-pair-atom
+                                  exported))))))
 
 (s/fdef manager
   :args (s/cat :clock ::lamport/clock
@@ -462,6 +460,7 @@
   :ret ::manager)
 (defn manager
   [clock session-manager web-sock-wrapper]
+  {:pre [clock session-manager web-sock-wrapper]}
   {::lamport/clock clock
    ::session/manager session-manager
    ::web-socket/wrapper web-sock-wrapper

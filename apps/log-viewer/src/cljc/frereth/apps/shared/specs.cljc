@@ -1,11 +1,5 @@
 (ns frereth.apps.shared.specs
-  ;; FIXME: This ns is just busted.
-  ;; frereth.apps.log-viewer.specs might have been
-  ;; reasonable.
-  ;; frereth.apps.shared.specs would make real sense.
   "These are really  more general"
-  ;; i.e. they deserve to live somewhere more like
-  ;; frereth.rendererer.specs
   (:require [clojure.spec.alpha :as s]))
 
 ;; Q: Worth converting to a real spec?
@@ -26,6 +20,13 @@
 (s/def #?(:clj :frereth/renderer->client
           :cljs :frereth/browser->worker) (s/keys :req [:frereth/disconnect!
                                                         :frereth/message-sender!]))
+
+;; These are really anything that's
+;; a) immutable (and thus suitable for use as a key in a map)
+;; and b) directly serializable via transit
+(s/def :frereth/pid any?)
+
+(s/def ::time-in-state inst?)
 
 #?(:cljs (s/def :frereth/worker #(instance? js/Worker %)))
 

@@ -53,6 +53,7 @@
   (console.log "Configuring system based on" current)
   {::lamport/clock clock
    ::session<->socket/connection (into {::lamport/clock (ig/ref ::lamport/clock)
+                                        ::session/manager (ig/ref ::session/manager)
                                         ::web-socket/wrapper (ig/ref ::web-socket/wrapper)}
                                   connection)
    ::session/manager manager
