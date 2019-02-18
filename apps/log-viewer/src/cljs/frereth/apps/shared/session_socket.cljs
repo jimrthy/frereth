@@ -49,78 +49,86 @@
                 :frereth/body  ; Not all messages have a meaningful body
                 :frereth/world-key]
          remote-lamport :frereth/lamport
-         :or [remote-lamport 0]} envelope]
+         :or {remote-lamport 0}} envelope
+        {:keys [::session/world-atom]} manager
+        worlds @world-atom]
     (console.log "Read:" envelope)
     (lamport/do-tick clock remote-lamport)
 
-    (let [{:keys [::session/world-atom]} manager
-          worlds @world-atom]
-      ;; Using condp for this is weak. Should probably use a defmethod,
-      ;; at least. Or possibly even something like bidi.
-      ;; What I remember about core.match seems like overkill, but it
-      ;; also seems tailor-made for this. Assuming it is available in
-      ;; cljs.
-      ;; (It is, but it still seems like overkill for these purposes)
-      (condp = action
-        :frereth/ack-forked
-        (if-let [{:keys [::worker]} (world/get-world-in-state worlds
-                                                              world-key
-                                                              ::world/forked)]
-          (swap! world-atom
-                 (fn [worlds]
-                   (try
-                     (throw (js/Error "Need the client connection parameter"))
-                     (world/activate-pending worlds world-key nil)
-                     (catch :default ex
-                       (console.error "Forked ACK failed to adjust world state:" ex
-                                      "TODO: Transition the offender to an error state")
-                       ;; FIXME: This is wrong.
-                       ;; Need to transition the offending world into an error state
-                       worlds))))
+    ;; Using condp for this is weak. Should probably use a defmethod,
+    ;; at least. Or possibly even something like bidi.
+    ;; What I remember about core.match seems like overkill, but it
+    ;; also seems tailor-made for this. Assuming it is available in
+    ;; cljs.
+    ;; (It is, but it still seems like overkill for these purposes)
+    (condp = action
+      :frereth/ack-forked
+      (if-let [{:keys [::worker]} (world/get-world-in-state worlds
+                                                            world-key
+                                                            ::world/forked)]
+        (swap! world-atom
+               (fn [worlds]
+                 (try
+                   (throw (js/Error "Need the client connection parameter"))
+                   (world/activate-pending worlds world-key nil)
+                   (catch :default ex
+                     (console.error "Forked ACK failed to adjust world state:" ex
+                                    "TODO: Transition the offender to an error state")
+                     ;; FIXME: This is wrong.
+                     ;; Need to transition the offending world into an error state
+                     worlds))))
 
-          (console.error "Missing forked worker"
-                         {::problem envelope
-                          ::world/forked (world/get-by-state worlds ::world/forked)
-                          ::world-id world-key}))
+        (console.error "Missing forked worker"
+                       {::problem envelope
+                        ::world/forked (world/get-by-state worlds ::world/forked)
+                        ::world-id world-key}))
 
-        :frereth/ack-forking
-        (try
-          (if-let [ack-chan (::waiting-ack (world/get-world-in-state worlds
-                                                                     world-key
-                                                                     ::world/pending))]
+      :frereth/ack-forking
+      (try
+        (console.log "Calling get-world-in-state")
+        (if-let [world (world/get-world-in-state worlds
+                                                 world-key
+                                                 ::world/pending)]
+          (if-let [ack-chan (::world/notification-channel world)]
             (let [success (async/put! ack-chan body)]
               (console.log (str "Message put onto " ack-chan
                                 ": " success)))
-            (console.error "ACK about non-pending world"
-                           {::problem envelope
-                            ::world/pending (world/get-by-state worlds ::world/pending)
-                            ::world-id world-key}))
-          (catch :default ex
-            (console.error "Failed to handle :frereth/ack-forking" ex body)))
+            (console.error "Missing ACK channel among\n"
+                           (keys world)
+                           "\nin\n"
+                           world))
+          (console.error "ACK about non-pending world"
+                         {::count (count worlds)
+                          ::world/world-map worlds
+                          ::problem envelope
+                          ::world/pending (world/get-by-state worlds ::world/pending)
+                          ::world-id world-key}))
+        (catch :default ex
+          (console.error "Failed to handle :frereth/ack-forking" ex body)))
 
-        :frereth/disconnect
-        (if-let [worker (::worker (world/get-world worlds world-key))]
-          (.postMessage worker raw-envelope)
-          (console.error "Disconnect message for"
+      :frereth/disconnect
+      (if-let [worker (::worker (world/get-world worlds world-key))]
+        (.postMessage worker raw-envelope)
+        (console.error "Disconnect message for"
+                       world-key
+                       "in"
+                       envelope
+                       ". No match in"
+                       @worlds))
+
+      :frereth/forward
+      (if-let [world (world/get-world-in-state worlds world-key ::world/active)]
+        (if-let [worker (::worker world)]
+          (.postMessage worker (serial/serialize body))
+          (console.error "Message for"
                          world-key
                          "in"
                          envelope
-                         ". No match in"
-                         @worlds))
-
-        :frereth/forward
-        (if-let [world (world/get-world-in-state worlds world-key ::world/active)]
-          (if-let [worker (::worker world)]
-            (.postMessage worker (serial/serialize body))
-            (console.error "Message for"
-                           world-key
-                           "in"
-                           envelope
-                           ". Missing worker"
-                           (keys world)
-                           "among" world))
-          ;; This is impossible: it will throw an exception
-          (console.error "Missing world" world-key "inside" worlds))))))
+                         ". Missing worker"
+                         (keys world)
+                         "among" world))
+        ;; This is impossible: it will throw an exception
+        (console.error "Missing world" world-key "inside" worlds)))))
 
 (s/fdef send-message!
   :args (s/cat :this ::connection

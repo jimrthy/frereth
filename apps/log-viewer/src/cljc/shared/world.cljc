@@ -4,6 +4,7 @@
             [clojure.spec.alpha :as s]
             [frereth.apps.shared.specs :as specs]))
 
+#?(:cljs (enable-console-print!))
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Specs
 
@@ -25,10 +26,14 @@
 ;; easily also be a mutable Object (though that seems like a terrible
 ;; idea).
 (s/def ::internal-state any?)
+
+(s/def ::notification-channel ::specs/async-chan)
+
 (s/def ::world-without-history (s/keys :req [::specs/time-in-state
                                              ::connection-state
                                              ::internal-state]
                                        :opt [::cookie
+                                             ::notification-channel
                                              #?(:clj :frereth/renderer->client
                                                 :cljs :frereth/browser->worker)
                                              #?(:cljs :frereth/worker)]))
@@ -174,9 +179,21 @@
   :ret (s/nilable ::world))
 (defn get-world-in-state
   [world-map world-key state]
-  (when-let [world (get-world world-map world-key)]
-    (when (state-match? world state)
-      world)))
+  (#?(:clj println :cljs console.log) "Looking for matching" state "world")
+  (if-let [world (get-world world-map world-key)]
+    (do
+      (#?(:clj println :cljs console.log) "Found the world")
+      (if (state-match? world state)
+        (do
+          (#?(:clj println :cljs console.log) "State matches")
+          world)
+        (#?(:clj println :cljs console.log) "Looking for" state
+                                            "\nbut world is in"
+                                            (::connection-state world))))
+    (#? (:clj println :cljs console.log) "No world matching\n"
+                                         world-key
+                                         "\namong\n"
+                                         (keys world-map))))
 
 (s/fdef get-active
   :args (s/cat :world-map :frereth/worlds
@@ -207,19 +224,21 @@
 (s/fdef add-pending
   :args (s/cat :world-map :frereth/worlds
                :world-key :frereth/world-key
+               :notification-channel ::notification-channel
                #?@(:clj [:cookie ::cookie]
                    :cljs [:async-ch ::specs/async-chan])
                :initial-state ::internal-state)
   :ret :frereth/worlds)
 (defn add-pending
   "Set up a new world that's waiting for the connection signal"
-  [world-map world-key cookie initial-state]
+  [world-map world-key notification-channel cookie initial-state]
   (let [world-map (assoc world-map
                          world-key (ctor initial-state))]
     (update-world-connection-state world-map world-key ::pending
                                    nil
                                    #(assoc %
-                                           ::cookie cookie))))
+                                           ::cookie cookie
+                                           ::notification-channel notification-channel))))
 
 ;; TODO: Rename this to mark-disconnected
 (s/fdef disconnected

@@ -51,10 +51,10 @@
 (defn add-pending-world
   [{:keys [::world-atom]
     :as this}
-   full-pk ch initial-state]
+   full-pk ch cookie initial-state]
   (swap! world-atom
          (fn [world-map]
-           (world/add-pending world-map full-pk ch initial-state))))
+           (world/add-pending world-map full-pk ch cookie initial-state))))
 
 (s/fdef do-disconnect-all
   :args (s/cat :this ::manager)

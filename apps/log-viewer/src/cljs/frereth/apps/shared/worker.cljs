@@ -299,57 +299,63 @@
                :full-pk ::public-key)
   :ret ::specs/async-chan)
 (defn do-build-actual-worker
-  [{:keys [:session/manager]
+  [{:keys [::session/manager]
     :as this}
    response-ch spawner raw-key-pair full-pk]
   (go
-    ;; FIXME: Use alts! with a timeout
     ;; Don't care what the actual response was. The dispatcher should
     ;; have filtered that before writing to this channel.
     ;; Although, realistically, the response should include something
     ;; like the public key for this World on the Client. Or at least on
     ;; the web server.
-    (let [response (async/<! response-ch)
-          cookie (:frereth/cookie response)]
-      (console.log "Received signal to fork worker:" response)
-      (if-let [worker-promise (spawner cookie)]
-        (.then worker-promise
-               ;; The comment below is mostly speculation from when I was
-               ;; designing this on the fly.
-               ;; TODO: Clean it up and move it into documentation
-               (fn [worker]
-                 ;; Honestly, that should be something that gets
-                 ;; assigned here. It's independent of whatever key the
-                 ;; Worker might actually use.
-                 ;; It's really just for routing messages to/from that
-                 ;; Worker.
-                 ;; Q: How about this approach?
-                 ;; We query the web server for a shell URL. Include our
-                 ;; version of the worker ID as a query param.
-                 ;; Q: Worth using the websocket for that? (it doesn't
-                 ;; seem likely).
-                 ;; The web server creates a pending-world (keyed to
-                 ;; our worker-id), and
-                 ;; its response includes the actual URL to load that
-                 ;; Worker.
-                 ;; Then each Worker could be responsible for tracking
-                 ;; its own signing key.
-                 ;; Except that sharing the responsibility would be
-                 ;; silly.
-                 ;; Want the signing key out here at this level, so we
-                 ;; don't have to duplicate the signing code
-                 ;; everywhere.
-                 ;; So, generate the short-term key pair here. Send
-                 ;; the public half to the web server for validation.
-                 ;; Possibly sign that request with the Session key.
-                 ;; Then use the public key to dispatch messages.
-                 (let [worlds (session/get-worlds manager)]
-                   (world/mark-forking worlds
-                                       full-pk
-                                       cookie
-                                       raw-key-pair
-                                       worker))))
-        (.warn js/console "Spawning shell failed")))))
+    (let [[response port] (async/alts! [response-ch (async/timeout 1000)])]
+      (if response
+        (let [cookie (:frereth/cookie response)]
+          (console.log "Received signal to fork worker:" response)
+          (if-let [worker-promise (spawner cookie)]
+            (.then worker-promise
+                   ;; The comment below is mostly speculation from when I was
+                   ;; designing this on the fly.
+                   ;; TODO: Clean it up and move it into documentation
+                   (fn [worker]
+                     ;; Honestly, that should be something that gets
+                     ;; assigned here. It's independent of whatever key the
+                     ;; Worker might actually use.
+                     ;; It's really just for routing messages to/from that
+                     ;; Worker.
+                     ;; Q: How about this approach?
+                     ;; We query the web server for a shell URL. Include our
+                     ;; version of the worker ID as a query param.
+                     ;; Q: Worth using the websocket for that? (it doesn't
+                     ;; seem likely).
+                     ;; The web server creates a pending-world (keyed to
+                     ;; our worker-id), and
+                     ;; its response includes the actual URL to load that
+                     ;; Worker.
+                     ;; Then each Worker could be responsible for tracking
+                     ;; its own signing key.
+                     ;; Except that sharing the responsibility would be
+                     ;; silly.
+                     ;; Want the signing key out here at this level, so we
+                     ;; don't have to duplicate the signing code
+                     ;; everywhere.
+                     ;; So, generate the short-term key pair here. Send
+                     ;; the public half to the web server for validation.
+                     ;; Possibly sign that request with the Session key.
+                     ;; Then use the public key to dispatch messages.
+                     (try
+                       (let [worlds (session/get-worlds manager)]
+                         (world/mark-forking worlds
+                                             full-pk
+                                             cookie
+                                             raw-key-pair
+                                             worker))
+                       (catch :default ex
+                         (console.error ex
+                                        "\nTrying to mark world as forking starting in\n"
+                                        manager)))))
+            (.warn js/console "Spawning shell failed")))
+        (.error js/console "Timed out waiting for forking ACK")))))
 
 (s/fdef build-worker-from-exported-key
   :args (s/cat :this ::manager
@@ -376,10 +382,11 @@
                                             ch
                                             spawner
                                             raw-key-pair
-                                            full-pk)]
+                                            full-pk)
+        cookie ::what-should-this-be?]
     (console.log "cljs JWK:" full-pk
                  "\nworlds: " worlds)
-    (session/add-pending-world manager full-pk ch {})
+    (session/add-pending-world manager full-pk ch cookie {})
     (console.log "Set up pending World. Notify about pending fork.")
     (send-message! this full-pk {:frereth/action :frereth/forking
                                  :frereth/command 'shell
