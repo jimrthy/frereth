@@ -22,6 +22,13 @@
   (let [port (or port 10555)
         ;; FIXME: Switch to pedestal. It's supported aleph as a backend
         ;; since 0.5.0.
+        ;; Note that there's a bug in the current implementation:
+        ;; Querying for a bogus URL returns a 204 "No Content"
+        ;; rather than a 404.
+        ;; That converts this from a nice-to-have nuisance into a
+        ;; correctness issue.
+        ;; Plus, being able to change the handlers on the fly without
+        ;; a reset is a very nice feature.
         handler (ring/make-handler (routes/build-routes lamport-clock
                                                         session-atom))
         ;; TODO: add a logger interceptor
