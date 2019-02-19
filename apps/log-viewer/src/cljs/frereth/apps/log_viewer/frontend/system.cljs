@@ -50,7 +50,10 @@
            ::repl
            ::web-socket/wrapper]
     :as current}]
-  (console.log "Configuring system based on" current)
+  (console.log "Configuring system based on\n"
+               (keys current)
+               "\namong\n"
+               current)
   {::lamport/clock clock
    ::session<->socket/connection (into {::lamport/clock (ig/ref ::lamport/clock)
                                         ::session/manager (ig/ref ::session/manager)

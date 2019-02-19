@@ -228,9 +228,10 @@
    cookie]
   (when window.Worker
     (let [sock (::web-socket/socket wrapper)
-          base-url (::web-socket/base-url sock)]
+          base-url (::web-socket/base-url wrapper)]
       (console.log "Constructing Worker fork URL based on" base-url
-                   "signing with secret-key" secret)
+                   "\namong" wrapper
+                   "\nsigning with secret-key" secret)
       ;; This is missing a layer of indirection.
       ;; The worker this spawns should return a shadow
       ;; DOM that combines all the visible Worlds (like
