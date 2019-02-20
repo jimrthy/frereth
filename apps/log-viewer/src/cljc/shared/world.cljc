@@ -224,21 +224,20 @@
 (s/fdef add-pending
   :args (s/cat :world-map :frereth/worlds
                :world-key :frereth/world-key
-               :notification-channel ::notification-channel
-               #?@(:clj [:cookie ::cookie]
-                   :cljs [:async-ch ::specs/async-chan])
+               #?@(:cljs [:notification-channel ::notification-channel])
+               :cookie ::cookie
                :initial-state ::internal-state)
   :ret :frereth/worlds)
 (defn add-pending
   "Set up a new world that's waiting for the connection signal"
-  [world-map world-key notification-channel cookie initial-state]
+  [world-map world-key #?(:cljs notification-channel) cookie initial-state]
   (let [world-map (assoc world-map
                          world-key (ctor initial-state))]
     (update-world-connection-state world-map world-key ::pending
                                    nil
                                    #(assoc %
                                            ::cookie cookie
-                                           ::notification-channel notification-channel))))
+                                           #?@(:cljs [::notification-channel notification-channel])))))
 
 ;; TODO: Rename this to mark-disconnected
 (s/fdef disconnected

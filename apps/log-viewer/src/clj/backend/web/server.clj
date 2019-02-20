@@ -32,6 +32,11 @@
         handler (ring/make-handler (routes/build-routes lamport-clock
                                                         session-atom))
         ;; TODO: add a logger interceptor
+        ;; On an internal error, the 500 response includes a stack
+        ;; trace.
+        ;; This is convenient for debugging, but sucks in terms of
+        ;; security.
+        ;; (That's another reason to switch to pedestal)
         with-middleware (wrap-params handler)]
     (println "Starting web server on http://localhost:" port "from" opts)
     (http/start-server with-middleware {:port port})))

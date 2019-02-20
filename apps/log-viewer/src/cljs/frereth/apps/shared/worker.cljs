@@ -35,6 +35,16 @@
                                ::web-socket/wrapper
                                ::workers]))
 
+(defmulti on-worker-message
+  "Cope with message from Worker"
+  (fn [{:keys [::web-socket/wrapper]
+        :as this}
+       world-key worker event]
+    (let [data (.-data event)
+          {:keys [:frereth/action]} (serial/deserialize data)]
+      (console.log "Message from" worker ":" action)
+      action)))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Internal Implementation
 
@@ -139,6 +149,9 @@
     :as this}
    world-id
    body]
+  (when-not clock
+    (throw (ex-info "Missing clock"
+                    {::problem this})))
   (lamport/do-tick clock)
   (let [envelope {:frereth/body body
                   :frereth/lamport @clock
@@ -153,7 +166,72 @@
       (catch :default ex
         (console.error "Sending message failed:" ex)))))
 
-(defn on-worker-message
+(defmethod on-worker-message :default
+  [{:keys [:web-socket/wrapper]
+    :as this}
+   world-key worker event]
+  (let [data (.-data event)
+        {:keys [::web-socket/socket]} wrapper
+        {:keys [:frereth/action]
+         :as raw-message} (serial/deserialize data)]
+    (console.error "Unhandled action:" action
+                   "\nfrom world:" world-key)))
+
+(defmethod on-worker-message :frereth/forked
+  [{:keys [::web-socket/wrapper
+           ::session/manager]
+    :as this}
+   world-key worker event]
+  (let [worlds (session/get-worlds manager)
+        {:keys [::world/cookie]
+         :as world-state} (world/get-world worlds
+                                           world-key)]
+    (if cookie
+      (let [data (.-data event)
+            raw-message (serial/deserialize data)
+            decorated (assoc raw-message
+                             :frereth/cookie cookie
+                             :frereth/pid world-key)
+            {:keys [::web-socket/socket]} wrapper]
+        (send-message! this
+                       world-key
+                       ;; send-message! will
+                       ;; serialize this
+                       ;; again.
+                       ;; Which is wasteful.
+                       ;; Would be better to
+                       ;; just have this
+                       ;; :action as a tag,
+                       ;; followed by the
+                       ;; body.
+                       #_data
+                       ;; But that's premature
+                       ;; optimization.
+                       ;; Worry about that
+                       ;; detail later.
+                       ;; Even though this is
+                       ;; the boundary area
+                       ;; where it's probably
+                       ;; the most important.
+                       ;; (Well, not here. But in general)
+                       decorated)
+        (world/mark-forked worlds world-key cookie worker))
+      (console.error "Missing ::cookie among" world-state
+                     "\namong" (keys worlds)
+                     "\nin" worlds
+                     "\nfrom" this))))
+
+(defmethod on-worker-message :frereth/render
+  [this world-key worker event]
+  (let [data (.-data event)
+        {:keys [:frereth/action]
+         :as raw-message} (serial/deserialize data)
+        dom (sanitize-scripts worker
+                              (:frereth/body raw-message))]
+    (r/render-component [(constantly dom)]
+                        (js/document.getElementById "app"))))
+
+(defn on-worker-message-obsolete
   "Cope with message from Worker"
   [{:keys [::web-socket/wrapper
            :frereth/worlds]
@@ -180,7 +258,7 @@
                                  :frereth/pid world-key)]
             (if cookie
               (do
-                (send-message! socket
+                (send-message! this
                                world-key
                                ;; send-message! will
                                ;; serialize this
@@ -227,70 +305,77 @@
    world-key
    cookie]
   (when window.Worker
-    (let [sock (::web-socket/socket wrapper)
-          base-url (::web-socket/base-url wrapper)]
-      (console.log "Constructing Worker fork URL based on" base-url
-                   "\namong" wrapper
-                   "\nsigning with secret-key" secret)
-      ;; This is missing a layer of indirection.
-      ;; The worker this spawns should return a shadow
-      ;; DOM that combines all the visible Worlds (like
-      ;; an X11 window manager). That worker, in turn,
-      ;; should spawn other workers that communicate
-      ;; with it to supply their shadow DOMs into its.
-      ;; In a lot of ways, this approach is like setting
-      ;; up X11 to run a single app rather than a window
-      ;; manager.
-      ;; That's fine as a first step for a demo, but don't
-      ;; get delusions of grandeur about it.
-      ;; Actually, there's another missing layer here:
-      ;; Each World should really be loaded into its
-      ;; own isolated self-hosted compiler environment.
-      ;; Then available workers should be able to pass them
-      ;; (along with details like window location) around
-      ;; as they have free CPU cycles.
-      ;; Q: Do web workers provide that degree of isolation?
-      ;; Q: Web Workers are designed to be relatively heavy-
-      ;; weight. Is it worth spawning a new one for each
-      ;; world (which are also supposed to be pretty hefty).
-      (let [path-to-shell (::session/path-to-shell manager)
-            url (url/url base-url path-to-shell)
-            initiate {:frereth/cookie cookie
-                      :frereth/session-id session-id
-                      :frereth/world-key world-key}
-            packet-string (serial/serialize initiate)
-            packet-bytes (serial/str->array packet-string)
-            _ (console.log "Signing" packet-bytes)
-            signature-promise (.sign crypto
-                                     #js {:name "ECDSA"
-                                          :hash #js{:name "SHA-256"}}
-                                     secret
-                                     packet-bytes)]
-        ;; TODO: Look at the way promesa handles this
-        ;; Q: Is it really any cleaner?
-        (.then signature-promise
-               (fn [signature]
-                 (let [params {:frereth/initiate packet-string
-                               :frereth/signature (-> signature
-                                                      serial/array-buffer->string
-                                                      serial/serialize)}
-                       ;; Web server uses the cookie to verify that
-                       ;; the request comes from the correct World.
-                       worker (new window.Worker
-                                   (str (assoc url :query params))
-                                   ;; Currently redundant:
-                                   ;; in Chrome, at least, module scripts are not
-                                   ;; supported on DedicatedWorker
-                                   #js{"type" "classic"})]
-                   (set! (.-onmessage worker)
-                         (partial on-worker-message sock world-key worker))
-                   (set! (.-onerror worker)
-                         (fn [problem]
-                           (console.error "FIXME: Need to handle"
-                                          problem
-                                          "from World"
-                                          world-key)))
-                   worker)))))))
+    ;; This is missing a layer of indirection.
+    ;; The worker this spawns should return a shadow
+    ;; DOM that combines all the visible Worlds (like
+    ;; an X11 window manager). That worker, in turn,
+    ;; should spawn other workers that communicate
+    ;; with it to supply their shadow DOMs into its.
+    ;; In a lot of ways, this approach is like setting
+    ;; up X11 to run a single app rather than a window
+    ;; manager.
+    ;; That's fine as a first step for a demo, but don't
+    ;; get delusions of grandeur about it.
+    ;; Actually, there's another missing layer here:
+    ;; Each World should really be loaded into its
+    ;; own isolated self-hosted compiler environment.
+    ;; Then available workers should be able to pass them
+    ;; (along with details like window location) around
+    ;; as they have free CPU cycles.
+    ;; Q: Do web workers provide that degree of isolation?
+    ;; Q: Web Workers are designed to be relatively heavy-
+    ;; weight. Is it worth spawning a new one for each
+    ;; world (which are also supposed to be pretty hefty).
+    (let [initiate {:frereth/cookie cookie
+                    :frereth/session-id session-id
+                    :frereth/world-key world-key}
+          packet-string (serial/serialize initiate)
+          packet-bytes (serial/str->array packet-string)
+          _ (console.log "Signing" packet-bytes)
+          signature-promise (.sign crypto
+                                   #js {:name "ECDSA"
+                                        :hash #js{:name "SHA-256"}}
+                                   secret
+                                   packet-bytes)]
+      ;; TODO: Look at the way promesa handles this
+      ;; Q: Is it really any cleaner?
+      (.then signature-promise
+             (fn [signature]
+               (let [base-url (::web-socket/base-url wrapper)
+                     sock (::web-socket/socket wrapper)
+                     path-to-shell (::session/path-to-fork manager)
+                     url (url/url base-url path-to-shell)
+                     params {:frereth/initiate packet-string
+                             :frereth/signature (-> signature
+                                                    serial/array-buffer->string
+                                                    serial/serialize)}
+                     _ (console.log "Constructed Worker fork URL based on\n"
+                                    base-url "\namong" wrapper
+                                    "\nadded" path-to-shell
+                                    "\nfrom session-manager" manager
+                                    "\nTrying to trigger worker on\n"
+                                    url
+                                    "\nwith query params:\n"
+                                    params
+                                    "\nsigned with secret-key" secret)
+                     ;; Web server uses the cookie to verify that
+                     ;; the request comes from the correct World.
+                     ;; Q: Can I use window.Worker. instead of `new`?
+                     worker (new window.Worker
+                                 (str (assoc url :query params))
+                                 ;; Currently redundant:
+                                 ;; in Chrome, at least, module scripts are not
+                                 ;; supported on DedicatedWorker
+                                 #js{"type" "classic"})]
+                 (set! (.-onmessage worker)
+                       (partial on-worker-message this world-key worker))
+                 (set! (.-onerror worker)
+                       (fn [problem]
+                         (console.error "FIXME: Need to handle\n"
+                                        problem
+                                        "\nfrom World\n"
+                                        world-key)))
+                 worker))))))
 
 (s/fdef do-build-actual-worker
   :args (s/cat :this ::manager

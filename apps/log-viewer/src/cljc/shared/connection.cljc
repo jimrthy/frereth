@@ -180,6 +180,7 @@
 (s/fdef add-pending-world
   :args (s/cat :current :frereth/session
                :world-key :frereth/world-key
+               #?@(:cljs [:notification-channel ::world/notification-channel])
                :cookie ::world/cookie)
   :ret :frereth/session)
 (defn add-pending-world
@@ -188,16 +189,17 @@
            :frereth/worlds]
     :as current}
    world-key
+   #?(:cljs notification-channel)
    cookie]
   (update-state current
                 nil
                 (fn [current]
                   (assoc current
-                         :frereth/worlds (world/add-pending
-                                          worlds
-                                          world-key
-                                          cookie
-                                          {})))))
+                         :frereth/worlds (world/add-pending worlds
+                                                            world-key
+                                                            #?(:cljs notification-channel)
+                                                            cookie
+                                                            {})))))
 
 (s/fdef create
   :args nil

@@ -9,7 +9,9 @@
 
 (s/def ::socket #(instance? js/WebSocket %))
 
-(s/def ::wrapper (s/keys :req [::socket]))
+(s/def ::wrapper (s/keys :req [::socket]
+                         :opt [::base-url
+                               ::ws-url]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Implementation

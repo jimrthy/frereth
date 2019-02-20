@@ -834,8 +834,9 @@
                    "ws:")
         local-base-suffix (str "//" (.-host location))
         base-url (url/url (str origin-protocol local-base-suffix))
-        ws-url (str protocol local-base-suffix  "/ws")]
-    (println "Configuring system, starting with ws-url:" ws-url)
+        ws-path (str protocol local-base-suffix  "/ws")
+        ws-url (url/url ws-path)]
+    (console.log "Configuring system, starting with ws-url:" ws-url)
     ;; FIXME: This can't *really* happen until after login.
     ;; That's when we have a session-id and know what "post-login-shell"
     ;; to "fork."
