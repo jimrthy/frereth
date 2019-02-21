@@ -1,5 +1,5 @@
 (ns frereth.apps.shared.worker
-  "Handle the various web workers"
+  "Handle interactions with the various web workers"
   (:require-macros
    [cljs.core.async.macros :refer [go]])
   (:require
@@ -20,12 +20,15 @@
 ;;;; Specs
 
 ;; This is actually an instance of js/WebWorker
-(s/def ::worker any?)
+(s/def ::web-worker #(= js/Worker (type %)))
+
+(s/def ::worker-instance (s/keys :req [:frereth/cookie
+                                       ::web-worker]))
 
 ;; Q: What is this really?
 (s/def ::exported-public-key any?)
 
-(s/def ::worker-map (s/map-of :frereth/world-id ::worker))
+(s/def ::worker-map (s/map-of :frereth/world-id ::worker-instance))
 
 (s/def ::workers (s/and #(instance? Atom %)
                         #(s/valid? ::worker-map (deref %))))
@@ -195,27 +198,18 @@
             {:keys [::web-socket/socket]} wrapper]
         (send-message! this
                        world-key
-                       ;; send-message! will
-                       ;; serialize this
-                       ;; again.
+                       ;; send-message! will serialize this again.
                        ;; Which is wasteful.
-                       ;; Would be better to
-                       ;; just have this
-                       ;; :action as a tag,
-                       ;; followed by the
-                       ;; body.
+                       ;; Would be better to just have this :action as
+                       ;; a tag, followed by the body.
                        #_data
-                       ;; But that's premature
-                       ;; optimization.
-                       ;; Worry about that
-                       ;; detail later.
-                       ;; Even though this is
-                       ;; the boundary area
-                       ;; where it's probably
-                       ;; the most important.
+                       ;; But that's premature optimization.
+                       ;; Worry about that detail later.
+                       ;; Even though this is the boundary area where
+                       ;; it's probably the most important.
                        ;; (Well, not here. But in general)
                        decorated)
-        (world/mark-forked worlds world-key cookie worker))
+        (world/mark-forked worlds world-key worker))
       (console.error "Missing ::cookie among" world-state
                      "\namong" (keys worlds)
                      "\nin" worlds
@@ -231,6 +225,7 @@
     (r/render-component [(constantly dom)]
                         (js/document.getElementById "app"))))
 
+;;; FIXME: Make this go away
 (defn on-worker-message-obsolete
   "Cope with message from Worker"
   [{:keys [::web-socket/wrapper
@@ -280,7 +275,7 @@
                                ;; the most important.
                                ;; (Well, not here. But in general)
                                decorated)
-                (world/mark-forked worlds world-key cookie worker))
+                (world/mark-forked worlds world-key worker))
               (console.error "Missing ::cookie among" world-state)))))
       (catch :default ex
         (console.error ex "Trying to deserialize" data)))))
@@ -468,11 +463,10 @@
                                             ch
                                             spawner
                                             raw-key-pair
-                                            full-pk)
-        cookie ::what-should-this-be?]
+                                            full-pk)]
     (console.log "cljs JWK:" full-pk
                  "\nworlds: " worlds)
-    (session/add-pending-world manager full-pk ch cookie {})
+    (session/add-pending-world manager full-pk ch {})
     (console.log "Set up pending World. Notify about pending fork.")
     (send-message! this full-pk {:frereth/action :frereth/forking
                                  :frereth/command 'shell

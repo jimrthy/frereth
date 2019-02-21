@@ -198,7 +198,7 @@
                          :frereth/worlds (world/add-pending worlds
                                                             world-key
                                                             #?(:cljs notification-channel)
-                                                            cookie
+                                                            #?(:clj cookie)
                                                             {})))))
 
 (s/fdef create

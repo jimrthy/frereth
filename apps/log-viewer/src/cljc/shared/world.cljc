@@ -225,18 +225,19 @@
   :args (s/cat :world-map :frereth/worlds
                :world-key :frereth/world-key
                #?@(:cljs [:notification-channel ::notification-channel])
-               :cookie ::cookie
+               #?@(:clj [:cookie ::cookie])
                :initial-state ::internal-state)
   :ret :frereth/worlds)
 (defn add-pending
   "Set up a new world that's waiting for the connection signal"
-  [world-map world-key #?(:cljs notification-channel) cookie initial-state]
+  [world-map world-key #?(:cljs notification-channel
+                          :clj cookie) initial-state]
   (let [world-map (assoc world-map
                          world-key (ctor initial-state))]
     (update-world-connection-state world-map world-key ::pending
                                    nil
                                    #(assoc %
-                                           ::cookie cookie
+                                           #?@(:clj [::cookie cookie])
                                            #?@(:cljs [::notification-channel notification-channel])))))
 
 ;; TODO: Rename this to mark-disconnected
@@ -272,10 +273,11 @@
 
 (s/fdef mark-forked
   :args (s/cat :world-map :frereth/worlds
-               :world-key :frereth/world-key)
+               :world-key :frereth/world-key
+               :worker :frereth/worker)
   :ret (s/nilable ::world))
 (defn mark-forked
-  [world-map world-key cookie worker]
+  [world-map world-key worker]
   (update-world-connection-state world-map world-key
                                  (fn [{:keys [::connection-state]
                                        :as world}]
@@ -288,7 +290,6 @@
                                    ;; Though possibly worth verifying
                                    ;; that they match.
                                    (assoc transitioned
-                                          :frereth/cookie cookie
                                           :frereth/worker worker))))
 
 (defn mark-forking

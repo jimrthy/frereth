@@ -844,6 +844,7 @@
     (sys/do-begin sys/state
                   ;; FIXME: The path-to-fork is something that should
                   ;; come back as part of the login handshake.
+                  ;; It's the equivalent of the user's login shell.
                   {::session/manager {::session/path-to-fork "/api/fork"
                                       ::session/session-id session-id-from-server}
                    ::socket/wrapper {::socket/base-url base-url

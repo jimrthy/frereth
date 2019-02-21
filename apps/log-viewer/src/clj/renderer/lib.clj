@@ -146,6 +146,9 @@
              remote-clock :frereth/lamport
              :as wrapper} (marshall/deserialize message-string)
             local-clock (lamport/do-tick clock remote-clock)]
+        (println (str "lib/on-message! handling\n"
+                      body
+                      ", a " (type body)))
         ;; The actual point.
         ;; It's easy to miss this in the middle of the error handling.
         ;; Which is one reason this is worth keeping separate from the
@@ -228,6 +231,9 @@
   :ret ::cookie)
 (defn decode-cookie
   [cookie-bytes]
+  (println (str "Trying to get the cookie bytes from "
+                cookie-bytes
+                ", a " (type cookie-bytes)))
   (let [cookie-bytes (.decode (Base64/getDecoder) cookie-bytes)
         cookie-string (String. cookie-bytes)]
     (println "Trying to decode" cookie-string "a"

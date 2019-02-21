@@ -2,6 +2,7 @@
   (:require [cljs.core.async :as async]
             [clojure.spec.alpha :as s]
             [frereth.apps.log-viewer.frontend.socket :as web-socket]
+            [frereth.apps.shared.specs :as specs]
             [integrant.core :as ig]
             ;; It seems highly likely that everything that's currently
             ;; in here will move there.
@@ -48,13 +49,18 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Public
 
+(s/fdef add-pending-world
+  :args (s/cat :this ::manager
+               :full-pk :frereth/world-key
+               :chan ::specs/async-chan
+               :initial-state ::world/internal-state))
 (defn add-pending-world
   [{:keys [::world-atom]
     :as this}
-   full-pk ch cookie initial-state]
+   full-pk ch initial-state]
   (swap! world-atom
          (fn [world-map]
-           (world/add-pending world-map full-pk ch cookie initial-state))))
+           (world/add-pending world-map full-pk ch initial-state))))
 
 (s/fdef do-disconnect-all
   :args (s/cat :this ::manager)
