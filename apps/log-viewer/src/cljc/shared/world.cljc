@@ -105,7 +105,8 @@
                              :world-key :frereth/world-key
                              :connection-state ::connection-state
                              :pre-check ::legal-transition?
-                             :transition ::fsm-transition)))
+                             :transition ::fsm-transition))
+  :ret :frereth/worlds)
 (defn update-world-connection-state
   ;; The importance of keeping this distinct from changes to the
   ;; world's internal state cannot be overemphasized.

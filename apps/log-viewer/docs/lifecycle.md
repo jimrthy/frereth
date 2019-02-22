@@ -68,10 +68,49 @@ worker/fork-shell! (A realistic implementation needs to wait until
 a response to notify-login! tells it where to find the code for
 the shell it wants to fork).
 
-fork-shell! generates a new signing key for proving that messages came
+fork-shell! starts with a chain of Promises. It generates a new signing
+key for proving that messages came
 from (or are meant to go to) this world. It exports the public portion
 so the server side can verify message sources. It will use that public
 portion as the key to find this world in the world-map.
 
 Once those operations have completed, it sets up a partial around
-spawn-worker! ond calls build-worker-from-exported-key with that.
+`spawn-worker!` and calls `build-worker-from-exported-key` with that.
+
+`build-worker-from-exported-key` wasn't named well.
+
+It calls:
+* `send-message!` to notify the web server that the "shell" is forking
+* `do-build-actual-worker` which will eventually spawn the Web Worker
+
+`do-build-actual-worker` creates a go block that will wait for up to
+a second on a trigger channel. It's very tempting to set this entire
+thing up as another step in the chain of promises that started earlier
+with building the public keys.
+
+It's less tempting (though not drastically so) to wrap those calls
+in core.async to hide that particular implementation detail.
+
+That forking message passes control back to renderer.lib on the server.
+
+That does some checks to verify that we don't currently have a world
+under that pid (for this particular session), then sends back a
+black-box cookie (this is where the similarity to the CurveCP handshake
+really starts...I knew I'd mimicked it somewhere).
+
+That cookie goes back to the browser and winds up unblocking the go block
+from `do-build-actual-worker`.
+
+That triggers a call to the partial we built around `spawn-worker` earlier,
+which returns another future.
+
+That future
+* builds something like a CurveCP Initiate Packet
+  This includes the server's preliminary Cookie
+* signs it with the World's primary (secret) key
+* puts together the URL for the web worker's code (this is a combination
+  of the base-url, path-to-shell, Initiate Packet data, and a signature)
+* creates a new classic Worker from that URL
+
+That future updates the session manager's world-atom with the new cookie
+and Web Worker.

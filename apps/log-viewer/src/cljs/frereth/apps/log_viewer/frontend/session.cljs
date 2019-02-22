@@ -86,3 +86,18 @@
 (defn get-worlds
   [{:keys [::world-atom]}]
   @world-atom)
+
+(s/fdef do-mark-forking
+  :args (s/cat :this ::manager
+               ;; FIXME: Specs for these
+               :full-pk any?
+               :cookie any?
+               :raw-key-pair any?
+               :worker any?)
+  :ret :frereth/worlds)
+(defn do-mark-forking
+  [{:keys [::world-atom]
+    :as this} full-pk cookie raw-key-pair worker]
+  (swap! world-atom
+         (fn [world-map]
+           (world/mark-forking world-map full-pk cookie raw-key-pair worker))))

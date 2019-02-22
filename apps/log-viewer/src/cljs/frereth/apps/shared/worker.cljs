@@ -425,12 +425,11 @@
                      ;; Possibly sign that request with the Session key.
                      ;; Then use the public key to dispatch messages.
                      (try
-                       (let [worlds (session/get-worlds manager)]
-                         (world/mark-forking worlds
-                                             full-pk
-                                             cookie
-                                             raw-key-pair
-                                             worker))
+                       (session/do-mark-forking manager
+                                                full-pk
+                                                cookie
+                                                raw-key-pair
+                                                worker)
                        (catch :default ex
                          (console.error ex
                                         "\nTrying to mark world as forking starting in\n"
@@ -442,39 +441,41 @@
   :args (s/cat :this ::manager
                :spawner ::work-spawner
                :raw-key-pair ::key-pair
-               :public ::exported-public-key)
+               :exported-pk ::exported-public-key)
   :ret any?)
 (defn build-worker-from-exported-key
   "Spawn worker based on newly exported public key."
   [{:keys [::web-socket/wrapper
            ::session/manager]
     :as this}
-   spawner raw-key-pair public]
+   spawner raw-key-pair full-pk]
+  (console.log "Set up pending World. Notify about pending fork.")
+  ;; Want this part to happen asap to minimize the length of time
+  ;; we have to spend waiting on it
+  (send-message! this full-pk {:frereth/action :frereth/forking
+                               :frereth/command 'shell
+                               :frereth/pid full-pk})
   (console.log "Setting up worker 'fork' in worlds inside the manager in"
                this "\namong" (keys this))
+  ;; Q: Should this next section wait on the forking-ACK?
+  ;; (It's probably worth mentioning in that regard that, originally,
+  ;; this got called before we called send-message!)
   (let [{:keys [::web-socket/socket]} wrapper
         worlds (session/get-worlds manager)
-        ;; This seems a little silly. I think the caller
-        ;; just called clj->js on this.
-        ;; (It did, setting up the spawn-worker! spawner)
-        full-pk (js->clj public)
-        ch (async/chan)
-        ;; This seems like it's putting the cart before the horse, but
-        ;; it returns a go block that's waiting for something
-        ;; to write to ch to trigger the creation of the WebWorker.
-        actual-work (do-build-actual-worker this
-                                            ch
-                                            spawner
-                                            raw-key-pair
-                                            full-pk)]
+        ch (async/chan)]
     (console.log "cljs JWK:" full-pk
                  "\nworlds: " worlds)
     (session/add-pending-world manager full-pk ch {})
-    (console.log "Set up pending World. Notify about pending fork.")
-    (send-message! this full-pk {:frereth/action :frereth/forking
-                                 :frereth/command 'shell
-                                 :frereth/pid full-pk})
-    full-pk))
+    ;; This seems like it's putting the cart before the horse, but
+    ;; it returns a go block that's waiting for something
+    ;; to write to ch to trigger the creation of the WebWorker.
+    ;; It seems like we should probably do something with it, but
+    ;; I'm not sure what would be appropriate.
+    (do-build-actual-worker this
+                            ch
+                            spawner
+                            raw-key-pair
+                            full-pk)))
 
 (s/fdef export-public-key!
   :args (s/cat :this ::manager
@@ -530,7 +531,8 @@
     (.then export-pk-promise (fn [exported]
                                (let [key-pair @key-pair-atom
                                      raw-public (.-publicKey key-pair)
-                                     raw-secret (.-privateKey key-pair)]
+                                     raw-secret (.-privateKey key-pair)
+                                     clj-exported (js->clj exported)]
                                  (build-worker-from-exported-key
                                   this
                                   (partial spawn-worker!
@@ -539,9 +541,9 @@
                                            session-id
                                            {::public raw-public
                                             ::secret raw-secret}
-                                           (js->clj exported))
+                                           clj-exported)
                                   @key-pair-atom
-                                  exported))))))
+                                  clj-exported))))))
 
 (s/fdef manager
   :args (s/cat :clock ::lamport/clock

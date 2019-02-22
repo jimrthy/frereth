@@ -424,6 +424,10 @@
            :frereth/pid]}]
   (if (and command pid)
     (when-let [session (sessions/get-active-session sessions session-id)]
+      ;; These next steps are really encapsulated under
+      ;; connection/get-world.
+      ;; TODO: Move the error handling under there to simplify
+      ;; this and make the benefit more general.
       (let [worlds (:frereth/worlds session)]
         (if (and worlds
                  (not (world/get-world worlds pid)))
