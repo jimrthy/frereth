@@ -454,6 +454,9 @@
                this "\namong" (keys this))
   (let [{:keys [::web-socket/socket]} wrapper
         worlds (session/get-worlds manager)
+        ;; This seems a little silly. I think the caller
+        ;; just called clj->js on this.
+        ;; (It did, setting up the spawn-worker! spawner)
         full-pk (js->clj public)
         ch (async/chan)
         ;; This seems like it's putting the cart before the horse, but

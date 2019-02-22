@@ -25,7 +25,7 @@ At the command-line:
 
 ### Directly on your host
 
-    boot cider dev
+    ./boot.sh cider dev
 
 ### CIDER
 
