@@ -14,6 +14,7 @@
 (defonce app-state (r/atom {:y 2017
                             ::log-entries []}))
 
+;; Q: Worth adding a reference to the serializer and using that instead?
 (let [writer (transit/writer :json)]
   (defn render []
     ;; Keep in mind: web workers can absolutely open their own websockets.
@@ -97,8 +98,10 @@
                                       ::time-stamp (.now js/Date)}))
                 (render)))))))
 
-;; This needs to include the cooking that arrived with ::forking
-;; FIXME: Start back here
+;; It seems like this should include the cookie that arrived with ::forking
+;; It should not. We don't have any reason to know about that sort of
+;; implementation detail here.
+;; It would be nice to not even need to know this much.
 (let [message {:frereth/action :frereth/forked}]
   (.postMessage js/self (transit/write (transit/writer :json) message)))
 

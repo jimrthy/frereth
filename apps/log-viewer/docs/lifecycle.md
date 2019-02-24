@@ -1,10 +1,8 @@
-# Preliminary handshake
+# Login Handshake
 
 Important note: so far, I'm just skipping authentication. That's
 terribly sloppy, but I wanted to get the proof of concept slapped
 together before I invested any time in that.
-
-The design behind this is vaguely analogous to a CurveCP handshake.
 
 Client starts up.
 
@@ -46,9 +44,6 @@ standards rather than rolling my own.
 
 In the meantime:
 
-That session token is what the session was waiting for. It's vaguely
-analogous to the Hello packet in a CurveCP handshake.
-
 That takes us back to the server's renderer.lib/activate-session!
 
 The first message triggers a call to login-finalized!
@@ -60,12 +55,16 @@ Once we get get this message, we update the session atom to mark this
 session ::connection/active and set up the web socket so the
 render.lib/on-message! multimethod handles incoming messages.
 
-Back on the browser side, inside session-socket/init-key for its
-::connection, I've skipped a couple more steps.
+# World Handshake
+
+The design behind this is loosely based on the CurveCP handshake.
+
+Back on the browser side, the session-socket/init-key method for its
+::connection key does double duty.
 
 After the websocket's onopen handler calls notify-logged-in! it calls
 worker/fork-shell! (A realistic implementation needs to wait until
-a response to notify-login! tells it where to find the code for
+a response/ACK to notify-login! tells it where to find the code for
 the shell it wants to fork).
 
 fork-shell! starts with a chain of Promises. It generates a new signing
@@ -80,23 +79,26 @@ Once those operations have completed, it sets up a partial around
 `build-worker-from-exported-key` wasn't named well.
 
 It calls:
-* `send-message!` to notify the web server that the "shell" is forking
+* `send-message!` to notify the web server that the "shell" is forking.
+  This is similar to CurveCP's Hello Packet.
 * `do-build-actual-worker` which will eventually spawn the Web Worker
 
 `do-build-actual-worker` creates a go block that will wait for up to
 a second on a trigger channel. It's very tempting to set this entire
 thing up as another step in the chain of promises that started earlier
-with building the public keys.
+with building the public keys. (i.e. have this wait based on a Promise
+rather than core.async).
 
-It's less tempting (though not drastically so) to wrap those calls
-in core.async to hide that particular implementation detail.
+It's less tempting (though not drastically so) to wrap those encryption
+calls in core.async to hide the ugly promise chaining.
 
 That forking message passes control back to renderer.lib on the server.
 
 That does some checks to verify that we don't currently have a world
-under that pid (for this particular session), then sends back a
+under that "pid" (for this particular session, though realistically
+they should pretty much never get duplicated), then sends back a
 black-box cookie (this is where the similarity to the CurveCP handshake
-really starts...I knew I'd mimicked it somewhere).
+really starts).
 
 That cookie goes back to the browser and winds up unblocking the go block
 from `do-build-actual-worker`.
@@ -104,13 +106,26 @@ from `do-build-actual-worker`.
 That triggers a call to the partial we built around `spawn-worker` earlier,
 which returns another future.
 
-That future
-* builds something like a CurveCP Initiate Packet
-  This includes the server's preliminary Cookie
+That future:
+* builds something like a CurveCP Initiate Packet. This includes the
+  server's preliminary Cookie
 * signs it with the World's primary (secret) key
 * puts together the URL for the web worker's code (this is a combination
   of the base-url, path-to-shell, Initiate Packet data, and a signature)
-* creates a new classic Worker from that URL
+* creates a new "classic" Worker from that URL
+* returns the worker
 
-That future updates the session manager's world-atom with the new cookie
-and Web Worker.
+Once it returns, we update the session manager's world-atom with the
+new cookie and Web Worker.
+
+The event chain is in the web worker's hands now.
+
+At startup, it posts back a message dict with a key of
+:frereth/action and value of :frereth/forked.
+
+worker/on-worker-message has a :frereth/forked handler for that.
+It pulls the worlds out of the session manager and looks up the world
+in question. Then it extracts the cookie from that world.
+
+This is the latest bug I'm running into: that world doesn't have an
+associated Cookie now.

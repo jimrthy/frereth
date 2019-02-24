@@ -87,17 +87,29 @@
   [{:keys [::world-atom]}]
   @world-atom)
 
+(s/fdef do-mark-forked
+  :args (s/cat :this ::manager
+               :world-key :frereth/world-key
+               :worker :frereth/worker)
+  :ret :frereth/worlds)
+(defn do-mark-forked
+  [{:keys [::world-atom]
+    :as this}
+   world-key worker]
+  (swap! world-atom
+         (fn [world-map]
+           (world/mark-forked world-map world-key worker))))
+
 (s/fdef do-mark-forking
   :args (s/cat :this ::manager
+               :world-key :frereth/world-key
                ;; FIXME: Specs for these
-               :full-pk any?
                :cookie any?
-               :raw-key-pair any?
-               :worker any?)
+               :raw-key-pair any?)
   :ret :frereth/worlds)
 (defn do-mark-forking
   [{:keys [::world-atom]
-    :as this} full-pk cookie raw-key-pair worker]
+    :as this} full-pk cookie raw-key-pair]
   (swap! world-atom
          (fn [world-map]
-           (world/mark-forking world-map full-pk cookie raw-key-pair worker))))
+           (world/mark-forking world-map full-pk cookie raw-key-pair))))

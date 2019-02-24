@@ -275,26 +275,34 @@
 (s/fdef mark-forked
   :args (s/cat :world-map :frereth/worlds
                :world-key :frereth/world-key
-               :worker :frereth/worker)
+               #?@(:cljs [:worker :frereth/worker]))
   :ret (s/nilable ::world))
 (defn mark-forked
-  [world-map world-key worker]
+  [world-map world-key #?(:cljs worker)]
   (update-world-connection-state world-map world-key
                                  (fn [{:keys [::connection-state]
                                        :as world}]
                                    (= connection-state ::forked))
-                                 (fn [transitioned]
-                                   ;; There's some duplicated effort
-                                   ;; between this and mark-forking.
-                                   ;; It's silly to assoc the cookie
-                                   ;; and worker in both.
-                                   ;; Though possibly worth verifying
-                                   ;; that they match.
-                                   (assoc transitioned
-                                          :frereth/worker worker))))
+                                 #?(:cljs
+                                    (fn [transitioned]
+                                      ;; There's some duplicated effort
+                                      ;; between this and mark-forking.
+                                      ;; It's silly to assoc the cookie
+                                      ;; and worker in both.
+                                      ;; Though possibly worth verifying
+                                      ;; that they match.
+                                      (assoc transitioned
+                                             :frereth/worker worker)))))
 
+(s/fdef mark-forking
+  :args (s/cat :world-map :frereth/worlds
+               :world-key :frereth/world-key
+               ;; FIXME: Specs
+               :cookie any?
+               :raw-key-pair any?)
+  :ret (s/nilable ::world))
 (defn mark-forking
-  [world-map world-key cookie raw-key-pair worker]
+  [world-map world-key cookie raw-key-pair]
   (update-world-connection-state world-map world-key
                                  (fn [{:keys [::connection-state]
                                        :as world}]
@@ -308,8 +316,7 @@
                                    ;; that they match.
                                    (assoc transitioned
                                           :frereth/cookie cookie
-                                          ::key-pair raw-key-pair
-                                          :frereth/worker worker))))
+                                          ::key-pair raw-key-pair))))
 
 (defn mark-generic-failure
   [world-map world-key]

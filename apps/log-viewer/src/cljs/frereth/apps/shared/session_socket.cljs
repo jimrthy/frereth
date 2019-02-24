@@ -91,8 +91,9 @@
                                                  ::world/pending)]
           (if-let [ack-chan (::world/notification-channel world)]
             (let [success (async/put! ack-chan body)]
-              (console.log (str "Message put onto " ack-chan
-                                ": " success)))
+              (console.log "forking-ack Message put onto "
+                           (js->clj ack-chan)
+                           ": " success))
             (console.error "Missing ACK channel among\n"
                            (keys world)
                            "\nin\n"
@@ -223,16 +224,12 @@
             (fn [event]
               (console.log "Websocket opened:" event socket)
               (notify-logged-in! this session-id)
-              ;; This is where things like deferreds, core.async,
-              ;; and promises come in handy.
-              ;; Once the login sequence has completed, we want to spin
-              ;; up the top-level shell (which, in this case, is our
-              ;; log-viewer Worker)
-              ;; Q: shouldn't this come from the session/manager?
-              ;; After all, it should know what the user's shell
-              ;; *is*.
-              ;; A: Well, sort-of.
-              ;; There are a few more steps before we get to that.
+              ;; TODO: This needs to wait for something like a
+              ;; ::login-complete-ack message.
+              ;; So we should set the .-onmessage to something
+              ;; that handles that (and triggers this) first,
+              ;; then reset it to the partial defined in the
+              ;; line below.
               (worker/fork-shell! worker-manager session-id)))
       (set! (.-onmessage socket) (partial recv-message! this))
       (set! (.-onclose socket)
