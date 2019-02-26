@@ -237,13 +237,17 @@
                   ;; FIXME: Need to cope with the disconnected signal from all workers.
                   (doseq [{{:keys [:frereth/disconnect!]
                             :as forwarder} #?(:clj :frereth/renderer->client
-                                        :cljs :frereth/browser->worker)
+                                              :cljs :frereth/browser->worker)
                            :as world} worlds]
                     (if disconnect!
                       (disconnect!)
                       (println "Missing disconnect! among"
                                #?(:clj (cp-util/pretty world)
-                                  :cljs world))))
+                                  :cljs world)
+                               "\nin" (keys world)
+                               "\nsearching inside"
+                               #?(:clj :frereth/renderer->client
+                                  :cljs :frereth/browser->worker))))
                   session)))
 
 (s/fdef get-world

@@ -110,6 +110,7 @@
 (defn do-mark-forking
   [{:keys [::world-atom]
     :as this} full-pk cookie raw-key-pair]
+  (console.log "do-mark-forking: swap!ing the Cookie into the World")
   (swap! world-atom
          (fn [world-map]
            (world/mark-forking world-map full-pk cookie raw-key-pair))))

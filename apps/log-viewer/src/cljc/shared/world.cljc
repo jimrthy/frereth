@@ -34,6 +34,9 @@
                                              ::internal-state]
                                        :opt [::cookie
                                              ::notification-channel
+                                             ;; In hindsight, making these
+                                             ;; distinct was a foolish choice.
+                                             ;; TODO: Consolidate them.
                                              #?(:clj :frereth/renderer->client
                                                 :cljs :frereth/browser->worker)
                                              #?(:cljs :frereth/worker)]))
@@ -89,7 +92,6 @@
   {::connection-state  ::created
    ::history []
    ::internal-state initial-state
-
    ::specs/time-in-state (now)})
 
 ;;; TODO: Add a fsm.cljc and make the state graph declarative.
@@ -112,9 +114,11 @@
   ;; world's internal state cannot be overemphasized.
   "Trigger change in connection FSM"
   ([world-map world-key connection-state]
-   (println ::update-world-connection-state
-            "Updating world connection-state to"
-            connection-state)
+   (#?(:clj println
+       :cljs console.log)
+    ::update-world-connection-state
+    "Updating world connection-state to"
+    connection-state)
    (update world-map world-key
            (fn [world]
              (let [history (::history world)
@@ -204,18 +208,20 @@
   [world-map world-key]
   (get-world-in-state world-map world-key ::active))
 
-(s/fdef activate-pending
-  :args (s/cat :world ::world
-               :client :frereth/renderer->client)
+(s/fdef activate-forked
+  :args (s/cat :world-map ::world-map
+               :world-key ::world-key
+               :client #?(:clj :frereth/renderer->client
+                          :cljs :frereth/browser->worker))
   :fn (s/and #(= ::pending (-> % :args :world ::connection-state))
              #(or (= ::active (:ret %))
                   (= ::fsm-error (:ret %))))
   :ret ::world)
-(defn activate-pending
+(defn activate-forked
   [world-map world-key client]
   (update-world-connection-state world-map world-key ::active
                                  (fn [world]
-                                   (= (::connection-state world) ::pending))
+                                   (= (::connection-state world) ::forkeding))
                                  (fn  [world]
                                    (assoc world
                                           #?(:clj :frereth/renderer->client
@@ -280,9 +286,10 @@
 (defn mark-forked
   [world-map world-key #?(:cljs worker)]
   (update-world-connection-state world-map world-key
+                                 ::forked
                                  (fn [{:keys [::connection-state]
                                        :as world}]
-                                   (= connection-state ::forked))
+                                   (= connection-state ::forking))
                                  #?(:cljs
                                     (fn [transitioned]
                                       ;; There's some duplicated effort
@@ -304,6 +311,7 @@
 (defn mark-forking
   [world-map world-key cookie raw-key-pair]
   (update-world-connection-state world-map world-key
+                                 ::forking
                                  (fn [{:keys [::connection-state]
                                        :as world}]
                                    (= connection-state ::pending))
@@ -315,7 +323,7 @@
                                    ;; Though possibly worth verifying
                                    ;; that they match.
                                    (assoc transitioned
-                                          :frereth/cookie cookie
+                                          ::cookie cookie
                                           ::key-pair raw-key-pair))))
 
 (defn mark-generic-failure

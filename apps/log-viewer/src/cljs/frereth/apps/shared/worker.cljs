@@ -228,8 +228,9 @@
 ;;; FIXME: Make this go away
 (defn on-worker-message-obsolete
   "Cope with message from Worker"
-  [{:keys [::web-socket/wrapper
-           :frereth/worlds]
+  [{:keys [::session/manager
+           :frereth/worlds
+           ::web-socket/wrapper]
     :as this}
    world-key worker event]
   (let [data (.-data event)
@@ -470,8 +471,7 @@
   ;; Q: Should this next section wait on the forking-ACK?
   ;; (It's probably worth mentioning in that regard that, originally,
   ;; this got called before we called send-message!)
-  (let [{:keys [::web-socket/socket]} wrapper
-        worlds (session/get-worlds manager)
+  (let [worlds (session/get-worlds manager)
         ch (async/chan)]
     (console.log "cljs JWK:" full-pk
                  "\nworlds: " worlds)

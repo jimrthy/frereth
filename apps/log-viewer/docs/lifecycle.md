@@ -129,3 +129,21 @@ in question. Then it extracts the cookie from that world.
 
 This is the latest bug I'm running into: that world doesn't have an
 associated Cookie now.
+
+# World State progression
+
+This really starts in
+worker/build-worker-from-exported-key. After that sends the
+:frereth/forking message to the web server, it calls
+frereth.apps.log-viewer.frontend.session/add-pending-world.
+Then it immediately calls world/do-build-actual-worker
+
+session/add-pending world, in turn, calls world/add-pending.
+
+world/add-pending calls world/ctor then immediately calls
+world/update-world-connection-state to switch to ::pending.
+
+* ::created - set up in ctor
+* ::pending - called immediately after ctor
+* ::forking - message handler for :frereth/ack-forking should
+  trigger this in session/do-mark-forking

@@ -61,27 +61,44 @@
     ;; also seems tailor-made for this. Assuming it is available in
     ;; cljs.
     ;; (It is, but it still seems like overkill for these purposes)
+    ;; On the other hand...this approach should be fast.
     (condp = action
       :frereth/ack-forked
-      (if-let [{:keys [::worker]} (world/get-world-in-state worlds
-                                                            world-key
-                                                            ::world/forked)]
-        (swap! world-atom
-               (fn [worlds]
-                 (try
-                   (throw (js/Error "Need the client connection parameter"))
-                   (world/activate-pending worlds world-key nil)
-                   (catch :default ex
-                     (console.error "Forked ACK failed to adjust world state:" ex
-                                    "TODO: Transition the offender to an error state")
-                     ;; FIXME: This is wrong.
-                     ;; Need to transition the offending world into an error state
-                     worlds))))
+      (if-let [world (world/get-world-in-state worlds
+                                               world-key
+                                               ::world/forked)]
+        (let [{:keys [:frereth/browser->worker
+                      ::worker]} world]
+          (if worker
+            (do
+              (when-not browser->worker
+                (throw (js/Error. "I have a chicken/egg problem"))
+                (console.error "Need the client connection parameter\n"
+                               "among" (keys world)
+                               "\nin" world)
+                (throw (ex-info
+                                world)))
+              (swap! world-atom
+                     (fn [worlds]
+                       (try
+                         (world/activate-forked worlds world-key browser->worker)
+                         (catch :default ex
+                           (console.error "Forked ACK failed to adjust world state:" ex
+                                          "TODO: Transition the offender to an error state")
+                           ;; FIXME: This is wrong.
+                           ;; Need to transition the offending world into an error state
+                           worlds)))))
 
-        (console.error "Missing forked worker"
+            (console.error "Missing forked worker"
+                           {::problem envelope
+                            ::world/forked (world/get-by-state worlds ::world/forked)
+                            ::world-id world-key
+                            :frereth/worlds worlds})))
+        (console.error "No matching world"
                        {::problem envelope
                         ::world/forked (world/get-by-state worlds ::world/forked)
-                        ::world-id world-key}))
+                        ::world-id world-key
+                        :frereth/worlds worlds}))
 
       :frereth/ack-forking
       (try
@@ -128,7 +145,7 @@
                          ". Missing worker"
                          (keys world)
                          "among" world))
-        ;; This is impossible: it will throw an exception
+        ;; This should be impossible: it will throw an exception
         (console.error "Missing world" world-key "inside" worlds)))))
 
 (s/fdef send-message!
