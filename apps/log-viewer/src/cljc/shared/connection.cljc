@@ -1,5 +1,9 @@
 (ns shared.connection
-  ;; Q: Is it worth just moving that to a shared .cljc ns instead?
+  ;; Q: How much overlap is there with
+  ;; frereth.apps.log-viewer.frontend.session
+  ;; on the browser?
+  ;; Is it worth trying to consolidate?
+
   ;; ::subject probably doesn't make sense on the browser side,
   ;; but the rest of it (plus history) seems pretty relevant.
   "Cope with the details of a single web socket connection"
@@ -163,19 +167,21 @@
   (update-state session ::active
                 #(assoc % ::web-socket web-socket)))
 
-(s/fdef activate-pending-world
-        :args (s/cat :session :frereth/session
-                     :world-key :frereth/world-key
-                     :message-forwarder
-                     #?(:clj :frereth/renderer->client
-                        :cljs :frereth/browser->worker))
-        :ret :frereth/session)
-(defn activate-pending-world
-  "Transition World from pending to active"
+(s/fdef activate-forked-world
+  :args (s/cat :session :frereth/session
+               :world-key :frereth/world-key
+               :message-forwarder
+               #?(:clj :frereth/renderer->client
+                  :cljs :frereth/browser->worker))
+  :ret :frereth/session)
+(defn activate-forked-world
+  "Transition World from forking to active"
   [session world-key message-forwarder]
   (update-state session nil
                 #(update % :frereth/worlds
-                         world/activate-pending world-key message-forwarder)))
+                         world/activate-forked
+                         world-key
+                         message-forwarder)))
 
 (s/fdef add-pending-world
   :args (s/cat :current :frereth/session

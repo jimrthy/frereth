@@ -68,16 +68,16 @@
                                                world-key
                                                ::world/forked)]
         (let [{:keys [:frereth/browser->worker
-                      ::worker]} world]
+                      :frereth/worker]} world]
           (if worker
-            (do
-              (when-not browser->worker
-                (throw (js/Error. "I have a chicken/egg problem"))
-                (console.error "Need the client connection parameter\n"
-                               "among" (keys world)
-                               "\nin" world)
-                (throw (ex-info
-                                world)))
+            ;; Q: Is this something I can consolidate with the
+            ;; server-side version? (It doesn't seem all that likely)
+            (let [browser->worker (fn [raw-message]
+                                    (let [serialized (serial/serialize raw-message)
+                                          wrapped {:frereth/action :frereth/forward
+                                                   :frereth/body serialized}]
+                                      (.postMessage worker wrapped))
+                                    (throw (js/Error. "write this")))]
               (swap! world-atom
                      (fn [worlds]
                        (try
@@ -91,10 +91,16 @@
 
             (console.error "Missing forked worker"
                            {::problem envelope
+                            ::world world
+                            ;; Q: Why is this an empty dict?
+                            ;; I can see the log-viewer world in the
+                            ;; ::world/forked ::world/connection-state
+                            ;; This gets stranger because I just established
+                            ;; that I have a :world that matches.
                             ::world/forked (world/get-by-state worlds ::world/forked)
                             ::world-id world-key
                             :frereth/worlds worlds})))
-        (console.error "No matching world"
+        (console.error "::forked ACKed for missing world"
                        {::problem envelope
                         ::world/forked (world/get-by-state worlds ::world/forked)
                         ::world-id world-key
@@ -132,7 +138,7 @@
                        "in"
                        envelope
                        ". No match in"
-                       @worlds))
+                       worlds))
 
       :frereth/forward
       (if-let [world (world/get-world-in-state worlds world-key ::world/active)]

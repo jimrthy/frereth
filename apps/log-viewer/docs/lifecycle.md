@@ -147,3 +147,6 @@ world/update-world-connection-state to switch to ::pending.
 * ::pending - called immediately after ctor
 * ::forking - message handler for :frereth/ack-forking should
   trigger this in session/do-mark-forking
+* ::forked - this is really an in-between state on the browser side.
+
+This doesn't seem sufficient.

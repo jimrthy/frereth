@@ -25,15 +25,6 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Specs
 
-;; It's tempting to make this a limited set.
-;; But it's not like specifying that here would
-;; make runtime callers any more reliable.
-;; That really gets into things like runtime
-;; message validation.
-;; Which, honestly, should be pretty strict and
-;; happen ASAP on both sides.
-(s/def :frereth/action keyword?)
-
 ;; This is a serializable value that will get converted to travel
 ;; across a wire.
 (s/def :frereth/body any?)
@@ -354,6 +345,8 @@
                                 ;; FIXME: Refactor this into its own
                                 ;; top-level function to reduce some of
                                 ;; the noise in here.
+                                ;; Q: Where should that top-level function
+                                ;; live?
                                 (fn [raw-message]
                                   (if (not= raw-message world-stop-signal)
                                     (post-message! sessions
@@ -377,7 +370,7 @@
                          session-id
                          world-key
                          :frereth/ack-forked)
-          (sessions/activate-pending-world sessions
+          (sessions/activate-forking-world sessions
                                            session-id
                                            world-key
                                            client))

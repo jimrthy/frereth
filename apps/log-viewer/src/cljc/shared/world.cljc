@@ -14,7 +14,11 @@
                             ::disconnect-timed-out  ; Timed out waiting for a response from disconnection signal
                             ::disconnecting         ; Web socket has been closed
                             ::failed                ; Error escaped from here
-                            ::forked                ; Q: diff between this and forking?
+                            ;; Really only applies to the browser side.
+                            ;; We've sent the web server the notification
+                            ;; that this is done. Waiting to transition
+                            ;; into an ::active state.
+                            ::forked
                             ::forking               ; received source code. Ready to fork
                             ::fsm-error             ; Tried an illegal state transition
                             ::pending               ; browser would like to fork
@@ -174,8 +178,37 @@
   :ret :frereth/worlds)
 (defn get-by-state
   [world-map connection-state]
-  (hash-map (filter (fn [[world-id world]]
-                      (state-match? world connection-state)))))
+  ;; It seems like there must be a good way to reuse the existing
+  ;; structure for this.
+  ;; This isn't it.
+  #_(hash-map (filter (fn [[world-id world]]
+                        (state-match? world connection-state))
+                      world-map))
+  ;; Maybe a transducer?
+
+  ;; This should work
+  (reduce (fn [acc [world-id world]]
+            (if (state-match? world connection-state)
+              (assoc acc world-id world)
+              acc))
+          {}
+          world-map))
+
+(comment
+  (let [world-map {:a {::connection-state 1}
+                   :b {::connection-state 1}
+                   :c {::connection-state 2}}]
+    #_(apply hash-map (filter (fn [[world-id world]]
+                              (state-match? world 2))
+                              world-map))
+    (filter (fn [[world-id world]]
+              (state-match? world 1))
+            world-map)
+    #_(mapcat (filter (fn [[world-id world]]
+                      (state-match? world 2))
+                      world-map))
+    )
+  )
 
 (s/fdef get-world-in-state
   :args (s/cat :world-map :frereth/worlds
@@ -208,6 +241,9 @@
   [world-map world-key]
   (get-world-in-state world-map world-key ::active))
 
+;; The browser does not correctly cope with the need for
+;; the browser->worker parameter which it really should
+;; have long before we get here.
 (s/fdef activate-forked
   :args (s/cat :world-map ::world-map
                :world-key ::world-key
@@ -221,7 +257,7 @@
   [world-map world-key client]
   (update-world-connection-state world-map world-key ::active
                                  (fn [world]
-                                   (= (::connection-state world) ::forkeding))
+                                   (= (::connection-state world) ::forking))
                                  (fn  [world]
                                    (assoc world
                                           #?(:clj :frereth/renderer->client

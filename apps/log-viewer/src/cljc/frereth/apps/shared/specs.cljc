@@ -5,6 +5,15 @@
 ;; Q: Worth converting to a real spec?
 (s/def ::async-chan any?)
 
+;; It's tempting to make this a limited set.
+;; But it's not like specifying that here would
+;; make runtime callers any more reliable.
+;; That really gets into things like runtime
+;; message validation.
+;; Which, honestly, should be pretty strict and
+;; happen ASAP on both sides.
+(s/def :frereth/action keyword?)
+
 ;; Called to disconnect renderer from a running world
 (s/def :frereth/disconnect! (s/fspec :args nil :ret any?))
 

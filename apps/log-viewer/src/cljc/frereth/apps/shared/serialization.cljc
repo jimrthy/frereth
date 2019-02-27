@@ -14,6 +14,12 @@
                          :cljs #(instance? js/ArrayBuffer %)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; Globals
+
+;; Q: What would be a useful size?
+(def ^:const buffer-out-size 4096)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Serialization handlers
 
 (def async-chan-write-handler
@@ -124,9 +130,8 @@
 #?(:clj
    (defn serialize
      [body]
-     ;; Q: Useful size?
      (try
-       (let [result (ByteArrayOutputStream. 4096)
+       (let [result (ByteArrayOutputStream. buffer-out-size)
              handler-map {:handlers {async-protocols/ReadPort async-chan-write-handler
                                      clojure.core.async.impl.channels.ManyToManyChannel async-chan-write-handler
                                      clojure.lang.Atom atom-write-handler

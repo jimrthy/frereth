@@ -1,5 +1,12 @@
 (ns frereth.apps.log-viewer.worker.core
   ;; This really should be a stand-alone project supplied by Server
+  ;; This is in a weird space.
+  ;; In a lot of ways, this needs to do DI to set up the browser side
+  ;; of the World.
+
+  ;; That's fair.
+  ;; Any operating system injects a lot of boilerplate into most newly
+  ;; forked processes.
   "Generate DOM structure and manage state"
   (:require [cljs.reader]
             [cognitect.transit :as transit]
@@ -67,6 +74,7 @@
         (comment (.preventDefault error))))
 
 (set! (.-onmessage js/self)
+      ;; FIXME: Switch to shared serialization library instead
       (let [reader (transit/reader :json)]
         (fn
           [wrapper]
@@ -75,6 +83,9 @@
                  :as data} (transit/read reader
                                          (.-data wrapper))]
             (condp = action
+              :frereth/disconnect (do
+                                    (console.log "World disconnected. Exiting.")
+                                    (.close js/self))
               :frereth/event
               (let [{[tag ctrl-id event] :frereth/body} data]
                 (console.log "Should dispatch" event "to" ctrl-id "based on" tag)
@@ -88,9 +99,7 @@
                     (when dirty? (render)))
                   (catch :default ex
                     (console.error ex))))
-              :frereth/disconnect (do
-                                    (console.log "World disconnected. Exiting.")
-                                    (.close js/self))
+              :frereth/forward (console.warn "Worker should handle" data)
               (do
                 (swap! app-state
                        #(update % ::log-entries

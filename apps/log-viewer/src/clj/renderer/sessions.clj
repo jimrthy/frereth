@@ -118,21 +118,19 @@
     (when (world/state-match? world state)
       world)))
 
-;; This is just for the sake of keeping things alphabetized
-(declare get-pending-world)
-(s/fdef activate-pending-world
+(s/fdef activate-forking-world
   :args (s/cat :sessions ::sessions
                :session-id :frereth/session-id
                :world-key :frereth/world-key
                :client :frereth/renderer->client)
   :ret ::sessions)
-(defn activate-pending-world
+(defn activate-forking-world
   "Transition World from pending to active"
   [sessions session-id world-key client]
   (if (get-active-session sessions session-id)
     (update sessions
             session-id
-            connection/activate-pending-world world-key client)
+            connection/activate-forked-world world-key client)
     (do
       (println "No active session"
                session-id
