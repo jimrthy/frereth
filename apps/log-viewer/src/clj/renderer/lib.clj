@@ -9,10 +9,10 @@
              [stream :as strm]]
             [clojure.java.io :as io]
             [clojure.core.async :as async]
-            [frereth.apps.shared.specs]  ; Q: How does this overlap w/ shared.specs?
-            [renderer
-             [marshalling :as marshall]
-             [sessions :as sessions]]
+            [frereth.apps.shared
+             [specs]  ; Q: How does this overlap w/ shared.specs?
+             [serialization :as serial]]
+            [renderer.sessions :as sessions]
             [shared
              [connection :as connection]
              [lamport :as lamport]
@@ -135,7 +135,7 @@
     (try
       (let [{:keys [:frereth/body]
              remote-clock :frereth/lamport
-             :as wrapper} (marshall/deserialize message-string)
+             :as wrapper} (serial/deserialize message-string)
             local-clock (lamport/do-tick clock remote-clock)]
         (println (str "lib/on-message! handling\n"
                       body
@@ -211,7 +211,7 @@
   (let [dscr {:frereth/pid world-key
               :frereth/session-id session-id
               :frereth/world-ctor command}
-        world-system-bytes (marshall/serialize dscr)]
+        world-system-bytes (serial/serialize dscr)]
     ;; TODO: This needs to be encrypted by the current minute
     ;; key before we encode it.
     ;; Q: Is it worth keeping a copy of the encoder around persistently?
@@ -231,7 +231,7 @@
              (class cookie-string)
              "from"
              cookie-bytes "a" (class cookie-bytes))
-    (marshall/deserialize cookie-string)))
+    (serial/deserialize cookie-string)))
 
 (s/fdef post-real-message!
   :args (s/cat :sessions ::sessions/sessions
@@ -253,7 +253,7 @@
   (if-let [session (get sessions session-id)]
     (if (= ::connection/active (::connection/state session))
       (try
-        (let [envelope (marshall/serialize wrapper)]
+        (let [envelope (serial/serialize wrapper)]
           (try
             (let [success (strm/try-put! (::connection/web-socket session)
                                          envelope
@@ -480,7 +480,7 @@
   (println ::login-finalized! "Received initial websocket message:" wrapper)
   (if (and (not= ::drained wrapper)
            (not= ::timed-out wrapper))
-    (let [envelope (marshall/deserialize wrapper)
+    (let [envelope (serial/deserialize wrapper)
           _ (println ::login-finalized! "Key pulled:" envelope)
           session-id (:frereth/body envelope)]
       (try

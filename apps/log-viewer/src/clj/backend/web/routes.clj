@@ -8,13 +8,13 @@
    [clojure.java.io :as io]
    [clojure.pprint :refer [pprint]]
    [clojure.spec.alpha :as s]
+   [frereth.apps.shared.serialization :as serial]
    [hiccup.core :refer [html]]
    [hiccup.page :refer [html5 include-js include-css]]
    [manifold.deferred :as dfrd]
    [manifold.stream :as strm]
    [renderer
     [lib :as lib]
-    [marshalling :as marshall]
     [sessions :as sessions]]
    [ring.util.response :as rsp]
    [shared.lamport :as lamport])
@@ -100,7 +100,7 @@
           {:keys [:frereth/cookie
                   :frereth/session-id
                   :frereth/world-key]
-           :as initiate} (marshall/deserialize initiate-wrapper)]
+           :as initiate} (serial/deserialize initiate-wrapper)]
       (if (and cookie session-id world-key)
         (do
           (println ::create-world "Trying to decode" cookie
@@ -257,6 +257,8 @@
                                  session-atom) ::renderer-ws)]]
    [[true :not-found]]])
 (comment
+  ;; If I were going to stick with bidi, this would probably be worth
+  ;; converting to a unit test
   (bidi/match-route (build-routes nil nil) "/")
   (bidi/match-route (build-routes nil nil) "/api/fork")
   (bidi/match-route (build-routes nil nil) "/://?initiate"))
