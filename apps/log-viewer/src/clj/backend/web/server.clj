@@ -25,8 +25,9 @@
         ;; Note that there's a bug in the current implementation:
         ;; Querying for a bogus URL returns a 204 "No Content"
         ;; rather than a 404.
-        ;; That converts this from a nice-to-have nuisance into a
-        ;; correctness issue.
+        ;; That converts that pedestal conversion from a nice-to-have
+        ;; nuisance into a correctness issue.
+        ;; (Assuming it fixes this problem)
         ;; Plus, being able to change the handlers on the fly without
         ;; a reset is a very nice feature.
         handler (ring/make-handler (routes/build-routes lamport-clock
@@ -36,7 +37,7 @@
         ;; trace.
         ;; This is convenient for debugging, but sucks in terms of
         ;; security.
-        ;; (That's another reason to switch to pedestal)
+        ;; (That seems like another reason to switch to pedestal)
         with-middleware (wrap-params handler)]
     (println "Starting web server on http://localhost:" port "from" opts)
     (http/start-server with-middleware {:port port})))

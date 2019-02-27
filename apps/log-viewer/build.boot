@@ -151,7 +151,6 @@
                                                                         org.clojure/spec.alpha]]
                             ;; Ironically, this really is for the sake of the front-end.
                             ;; It has something to do with the clojurescript watcher.
-                            #_[http-kit "2.3.0" :scope "test"]
                             [http-kit "2.4.0-alpha2" :scope "test"]
                             [binaryage/devtools "0.9.10" :scope "test" :exclusions [org.clojure/tools.reader]]
                             ;; Q: Why?

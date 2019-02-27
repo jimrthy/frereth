@@ -10,7 +10,6 @@
             [integrant.core :as ig]
             [shared
              [connection :as connection]
-             [specs :as specs]
              [world :as world]]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

@@ -10,13 +10,12 @@
             [clojure.java.io :as io]
             [clojure.core.async :as async]
             [frereth.apps.shared
-             [specs]  ; Q: How does this overlap w/ shared.specs?
+             [specs]
              [serialization :as serial]]
             [renderer.sessions :as sessions]
             [shared
              [connection :as connection]
              [lamport :as lamport]
-             [specs]
              [world :as world]]
             [frereth.weald.logging :as log])
   (:import clojure.lang.ExceptionInfo

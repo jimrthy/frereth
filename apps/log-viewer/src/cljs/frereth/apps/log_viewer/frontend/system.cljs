@@ -4,9 +4,9 @@
             [frereth.apps.log-viewer.frontend.session :as session]
             [frereth.apps.log-viewer.frontend.socket :as web-socket]
             [frereth.apps.shared.session-socket :as session<->socket]
+            [frereth.apps.shared.specs :as specs]
             [integrant.core :as ig]
             [shared.lamport :as lamport]
-            [shared.specs :as specs]
             [weasel.repl :as repl]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

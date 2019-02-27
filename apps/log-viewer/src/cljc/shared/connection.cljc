@@ -14,7 +14,7 @@
                 :clj frereth.apps.log-viewer.renderer.socket)
              :as web-socket]
             #?(:clj [frereth.cp.shared.util :as cp-util])
-            [shared.specs :as specs]
+            [frereth.apps.shared.specs :as specs]
             [shared.world :as world])
   #?(:cljs (:require-macros [cljs.core.async.macros :refer [go]])))
 

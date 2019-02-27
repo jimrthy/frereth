@@ -36,7 +36,8 @@ Open the connection (theoretically):
 
 That should open a new browser tab running your app.
 
-It was annoying enough that I tend to start the top-level System:
+The "new browser tab" part was annoying enough that I tend to start the
+top-level System manually:
 
     boot.user> (require 'user)
     boot.user> (in-ns 'user)

@@ -88,6 +88,13 @@
   #?(:clj (java.util.Date.)
      :cljs (js/Date.)))
 
+(defn log
+  "It seems silly this isn't unified"
+  [& args]
+  #?(:clj (apply println args)
+     ;; Q: What are the odds of this working?
+     :cljs (apply console.log args)))
+
 (s/fdef ctor
   :args (s/cat :initial-state ::internal-state)
   :ret ::world)
@@ -132,14 +139,17 @@
                           ::connection-state connection-state)
                    (update ::history conj previous))))))
   ([world-map world-key connection-state pre-check]
-   (when pre-check
-     (println ::update-world-connection-state "Verifying legal FSM transition"))
+   (if pre-check
+     (log ::update-world-connection-state "Verifying legal FSM transition")
+     (log ::update-world-connection-state "nil FSM transition"))
    (let [current (get world-map world-key)
          next-state
          (if (or (not pre-check)
                  (pre-check current))
            connection-state
-           ::fsm-error)]
+           (do
+             (log "Pre-check" pre-check "failed against\n" current)
+             ::fsm-error))]
      (update-world-connection-state world-map world-key next-state)))
   ([world-map world-key connection-state pre-check transition]
    (let [updated
@@ -257,7 +267,7 @@
   [world-map world-key client]
   (update-world-connection-state world-map world-key ::active
                                  (fn [world]
-                                   (= (::connection-state world) ::forking))
+                                   (= (::connection-state world) ::forked))
                                  (fn  [world]
                                    (assoc world
                                           #?(:clj :frereth/renderer->client
