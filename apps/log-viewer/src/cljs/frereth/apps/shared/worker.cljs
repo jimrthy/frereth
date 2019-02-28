@@ -10,11 +10,11 @@
    [frereth.apps.log-viewer.frontend.socket :as web-socket]
    [frereth.apps.shared.serialization :as serial]
    [frereth.apps.shared.specs :as specs]
+   [frereth.apps.shared.world :as world]
    ;; Start by at least partially supporting this, since it's
    ;; so popular
    [reagent.core :as r]
-   [shared.lamport :as lamport]
-   [shared.world :as world]))
+   [shared.lamport :as lamport]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Specs

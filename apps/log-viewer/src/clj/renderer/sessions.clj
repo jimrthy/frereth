@@ -5,12 +5,13 @@
   ;; abstraction layer.
   ;; Each Session here really represents a browser connection/websocket.
   (:require [clojure.spec.alpha :as s]
-            [frereth.apps.shared.specs]  ; again w/ the shared.specs overlap
+            [frereth.apps.shared
+             [specs]  ; again w/ the shared.specs overlap
+             [world :as world]]
             [frereth.cp.shared.util :as cp-util]
             [integrant.core :as ig]
             [shared
-             [connection :as connection]
-             [world :as world]]))
+             [connection :as connection]]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Specs

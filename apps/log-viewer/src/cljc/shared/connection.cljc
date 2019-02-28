@@ -1,12 +1,4 @@
 (ns shared.connection
-  ;; Q: How much overlap is there with
-  ;; frereth.apps.log-viewer.frontend.session
-  ;; on the browser?
-  ;; Is it worth trying to consolidate?
-  ;; TODO: Check
-
-  ;; ::subject probably doesn't make sense on the browser side,
-  ;; but the rest of it (plus history) seems pretty relevant.
   "Cope with the details of a single web socket connection"
   (:require [#?(:clj clojure.core.async
                 :cljs cljs.core.async) :as async #?@(:clj [:refer [go]])]
@@ -16,7 +8,7 @@
              :as web-socket]
             #?(:clj [frereth.cp.shared.util :as cp-util])
             [frereth.apps.shared.specs :as specs]
-            [shared.world :as world])
+            [frereth.apps.shared.world :as world])
   #?(:cljs (:require-macros [cljs.core.async.macros :refer [go]])))
 
 #?(:cljs (enable-console-print!))
@@ -53,16 +45,16 @@
 ;; a Client connection to a remote Server to monitor its health.
 ;; And an anonymous Client connection to some other remote Server to
 ;; browse a blog.
-;; Q: Any point to building a blog engine like a regular web server
-;; that people can read anonymously?
-;; And an authenticated Client connection to that some Server to write
+;; [Q: Any point to building a blog engine like a regular web server
+;; that people can read anonymously?]
+;; And an authenticated Client connection to that same Server to write
 ;; new blog entries.
 ;; None of this matters for an initial proof of concept, but it's
 ;; important to keep in mind.
-;; Because it probably means that "logged in" really happens after the
-;; websocket connection.
-;; But that's going to depend on the World.
-;; Except that the Session is a direct browser connection to this local
+;; Because it "logged in" really happens after the
+;; websocket connection, for most Worlds.
+;; But that *is* going to depend on the World.
+;; Note that the Session is a direct browser connection to this local
 ;; web server.
 ;; World connections beyond that will go through the Client interface
 ;; instead.
@@ -108,6 +100,9 @@
 ;; This *does* represent an individual browser session.
 ;; But it's very confusing to call it that here in the
 ;; connection ns.
+;; TODO: Rename to something like ::manager
+;; ::connection is a little tempting, but also seems...well, it would
+;; make destructuring cleaner, since there isn't any overlap.
 (s/def :frereth/session (s/merge :frereth/session-sans-history
                                  (s/keys :req [::history])))
 
@@ -153,6 +148,7 @@
 
 (s/fdef activate
   :args (s/cat :state :frereth/session
+               ;; FIXME: What is this?
                :web-socket ::web-socket)
   :fn (s/and #(= (-> % :args :state ::state)
                  ::pending)
@@ -228,12 +224,7 @@
 
 (s/fdef disconnect-all
   :args (s/cat :session ::session)
-  ;; FIXME: This spec is wrong.
-  ;; As written, this really returns a ::session where the
-  ;; :frereth/worlds key has been replaced with an async chan
-  ;; (although manifold.deferred is very tempting) that will
-  ;; eventually resolve to
-  :ret any?)
+  :ret :frereth/session)
 (defn disconnect-all
   [{:keys [:frereth/worlds]
     :as session}]

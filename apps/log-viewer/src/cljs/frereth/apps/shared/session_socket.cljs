@@ -7,9 +7,9 @@
    [frereth.apps.log-viewer.frontend.socket :as web-socket]
    [frereth.apps.shared.serialization :as serial]
    [frereth.apps.shared.worker :as worker]
+   [frereth.apps.shared.world :as world]
    [integrant.core :as ig]
-   [shared.lamport :as lamport]
-   [shared.world :as world]))
+   [shared.lamport :as lamport]))
 
 (enable-console-print!)
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

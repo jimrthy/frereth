@@ -3,6 +3,7 @@
   (:require [client.registrar :as registrar]
             [clojure.pprint :refer [pprint]]
             [clojure.spec.alpha :as s]
+            [frereth.apps.shared.world :as world]
             [frereth.cp.shared.crypto :as crypto]
             [manifold
              [deferred :as dfrd]
@@ -15,8 +16,7 @@
             [renderer.sessions :as sessions]
             [shared
              [connection :as connection]
-             [lamport :as lamport]
-             [world :as world]]
+             [lamport :as lamport]]
             [frereth.weald.logging :as log])
   (:import clojure.lang.ExceptionInfo
            java.util.Base64))

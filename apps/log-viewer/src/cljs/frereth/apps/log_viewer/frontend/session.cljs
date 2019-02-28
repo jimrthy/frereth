@@ -3,11 +3,11 @@
             [clojure.spec.alpha :as s]
             [frereth.apps.log-viewer.frontend.socket :as web-socket]
             [frereth.apps.shared.specs :as specs]
+            [frereth.apps.shared.world :as world]
             [integrant.core :as ig]
             ;; It seems highly likely that everything that's currently
             ;; in here will move there.
-            [shared.connection :as connection]
-            [shared.world :as world])
+            [shared.connection :as connection])
   (:require-macros [cljs.core.async.macros :as async-macros :refer [go]]))
 
 (enable-console-print!)
