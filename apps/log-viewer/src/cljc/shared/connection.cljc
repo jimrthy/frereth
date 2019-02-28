@@ -254,7 +254,13 @@
   :ret (s/nilable ::world/world))
 (defn get-world
   [session world-key]
-  (world/get-world (:frereth/worlds session) world-key))
+  (if-let [worlds (:frereth/worlds session)]
+    (world/get-world worlds
+                     world-key)
+    (world/log "Missing worlds in\n"
+               session
+               "\namong\n"
+               (keys session))))
 
 (s/fdef log-in
   :args (s/cat :state :frereth/state

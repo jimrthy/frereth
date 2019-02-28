@@ -55,6 +55,8 @@ Once we get get this message, we update the session atom to mark this
 session ::connection/active and set up the web socket so the
 render.lib/on-message! multimethod handles incoming messages.
 
+The next step is to fork the initial World.
+
 # World Handshake
 
 The design behind this is loosely based on the CurveCP handshake.
@@ -149,4 +151,7 @@ world/update-world-connection-state to switch to ::pending.
   trigger this in session/do-mark-forking
 * ::forked - this is really an in-between state on the browser side.
 
-This doesn't seem sufficient.
+This doesn't seem sufficient. There are more in-between states.
+
+TODO: Keep going with this. I took this far enough to figure out why my
+immediate problem was broken, but there's more.

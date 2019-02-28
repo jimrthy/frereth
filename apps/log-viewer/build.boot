@@ -151,16 +151,17 @@
                                                                         org.clojure/spec.alpha]]
                             ;; Ironically, this really is for the sake of the front-end.
                             ;; It has something to do with the clojurescript watcher.
-                            [http-kit "2.4.0-alpha2" :scope "test"]
+                            [http-kit "2.4.0-alpha3" :scope "test"]
                             [binaryage/devtools "0.9.10" :scope "test" :exclusions [org.clojure/tools.reader]]
                             ;; Q: Why?
                             [cljsjs/babel-standalone "6.18.1-3" :scope "test" :exclusions [org.clojure/clojure]]
-                            ;; This has been upgraded to 4.2.1, but that version doesn't work
+                            ;; This has been upgraded to 4.3.1, but that version doesn't work
                             ;; (the file bootstrap/less/bootstrap.less no longer exists).
                             ;; TODO: Consider changing this and whatever depends on it.
                             [org.webjars/bootstrap "3.3.7-1"]
                             ;; SASS
-                            [org.webjars.bower/bootstrap "4.1.3" :exclusions [org.webjars.bower/jquery]]]
+                            #_[org.webjars.bower/bootstrap "4.1.3" :exclusions [org.webjars.bower/jquery]]
+                            [org.webjars.bower/bootstrap "4.3.1" :exclusions [org.webjars.bower/jquery]]]
           :project project
           ;; Q: Do I want to add "resources" to this?
           ;; Both it and target seem to have gone dormant in October.

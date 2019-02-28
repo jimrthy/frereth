@@ -417,50 +417,43 @@
            :frereth/pid]}]
   (if (and command pid)
     (when-let [session (sessions/get-active-session sessions session-id)]
-      ;; These next steps are really encapsulated under
-      ;; connection/get-world.
-      ;; TODO: Move the error handling under there to simplify
-      ;; this and make the benefit more general.
-      ;; No, really. Do it
-      (let [worlds (:frereth/worlds session)]
-        (if (and worlds
-                 (not (world/get-world worlds pid)))
-          ;; TODO: Need to check with the Client registry
-          ;; to verify that command is legal for the current
-          ;; session (at the very least, this means authorization)
-          (let [cookie (build-cookie session-id pid command)]
-            (try
-              (post-message! sessions
-                             lamport
-                             session-id
-                             pid
-                             :frereth/ack-forking
-                             {:frereth/cookie cookie})
-              (catch Exception ex
-                (println "Error:" ex
-                         "\nTrying to post :frereth/ack-forking to"
-                         session-id
-                         "\nabout"
-                         pid)))
-            ;; It's tempting to add the world to the session here.
-            ;; Actually, there doesn't seem like any good reason
-            ;; not to.
-            ;; There are lots of places for things to break along
-            ;; the way, but this is an important starting point.
-            ;; It's also very tempting to set up an Actor model
-            ;; sort of thing inside the Session to handle this
-            ;; World that we're trying to create.
-            ;; This makes me think this this is working at too high
-            ;; a layer in the abstraction tree.
-            ;; We should really be running something like update-in
-            ;; with just the piece that's being changed here (in
-            ;; this case, the appropriate Session).
-            sessions)
-          (do
-            (println "Error: trying to re-fork pid" pid
-                     "\namong\n"
-                     worlds)
-            sessions))))
+      (if-not (connection/get-world session pid)
+        ;; TODO: Need to check with the Client registry
+        ;; to verify that command is legal for the current
+        ;; session (at the very least, this means authorization)
+        (let [cookie (build-cookie session-id pid command)]
+          (try
+            (post-message! sessions
+                           lamport
+                           session-id
+                           pid
+                           :frereth/ack-forking
+                           {:frereth/cookie cookie})
+            (catch Exception ex
+              (println "Error:" ex
+                       "\nTrying to post :frereth/ack-forking to"
+                       session-id
+                       "\nabout"
+                       pid)))
+          ;; It's tempting to add the world to the session here.
+          ;; Actually, there doesn't seem like any good reason
+          ;; not to (and not earlier)
+          ;; There are lots of places for things to break along
+          ;; the way, but this is an important starting point.
+          ;; It's also very tempting to set up an Actor model
+          ;; sort of thing inside the Session to handle this
+          ;; World that we're trying to create.
+          ;; This makes me think this this is working at too high
+          ;; a layer in the abstraction tree.
+          ;; We should really be running something like update-in
+          ;; with just the piece that's being changed here (in
+          ;; this case, the appropriate Session).
+          sessions)
+        (do
+          (println "Error: trying to re-fork pid" pid
+                   "\namong\n"
+                   sessions)
+          sessions)))
     (do
       (println (str "Missing either/both of '"
                     command
@@ -485,10 +478,10 @@
           _ (println ::login-finalized! "Key pulled:" envelope)
           session-id (:frereth/body envelope)]
       (try
-        (println ::login-realized! "Trying to activate\n" session-id
+        (println ::login-finalized! "Trying to activate\n" session-id
                  "a" (class session-id)
                  "\nfrom\n"
-                 (sessions/get-by-state @session-atom ::pending))
+                 (sessions/get-by-state @session-atom ::connection/pending))
         (catch Exception ex
           (println "Failed trying to log activation details:" ex)
           (pprint {::details (log/exception-details ex)
@@ -542,7 +535,12 @@
                                        sessions/disconnect
                                        session-id)))))
         (do
-          (println ::login-realized! "Not found")
+          (println ::login-finalized! "No match for"
+                   session-id
+                   "\namong\n"
+                   (keys @session-atom)
+                   "\nin\n"
+                   @session-atom)
           (throw (ex-info "Browser trying to complete non-pending connection"
                           {::attempt session-id
                            ::sessions/sessions @session-atom})))))

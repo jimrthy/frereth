@@ -1,5 +1,9 @@
-;; Q: What does that leading dot mean?
-(ns .shared.connection-test
+(ns shared.connection-test
+  ;; When CIDER generated this originally, it named it
+  ;; '.shared.connection-test
+  ;; Which doesn't seem to make any sense at all.
+  ;; Except that it worked.
+  ;; TODO: Find out how.
   (:require [shared.connection :as connection]
             #?(:clj [clojure.test :as t :refer (deftest is testing)]
                :cljs [cljs.test :as t :include-macros true])
