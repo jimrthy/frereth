@@ -106,6 +106,7 @@
    ::specs/time-in-state (now)})
 
 ;;; TODO: Add a fsm.cljc and make the state graph declarative.
+;; (No, really)
 (s/fdef update-world-connection-state
   :args (s/or :simple (s/cat :world-map :frereth/worlds
                              :world-key :frereth/world-key
@@ -125,11 +126,9 @@
   ;; world's internal state cannot be overemphasized.
   "Trigger change in connection FSM"
   ([world-map world-key connection-state]
-   (#?(:clj println
-       :cljs console.log)
-    ::update-world-connection-state
-    "Updating world connection-state to"
-    connection-state)
+   (log ::update-world-connection-state
+        "Updating world connection-state to"
+        connection-state)
    (update world-map world-key
            (fn [world]
              (let [history (::history world)
@@ -157,8 +156,8 @@
                              world-key
                              connection-state
                              pre-check)]
-     (println ::update-world-connection-state
-              "Calling transition function on world")
+     (log ::update-world-connection-state
+          "Calling transition function on world")
      (pprint (get world-map world-key))
      (update updated world-key transition))))
 
@@ -191,34 +190,15 @@
   ;; It seems like there must be a good way to reuse the existing
   ;; structure for this.
   ;; This isn't it.
-  #_(hash-map (filter (fn [[world-id world]]
-                        (state-match? world connection-state))
-                      world-map))
-  ;; Maybe a transducer?
 
-  ;; This should work
+  ;; This works, but...*is* there an efficient way to set up
+  ;; a subtree along these lines?
   (reduce (fn [acc [world-id world]]
             (if (state-match? world connection-state)
               (assoc acc world-id world)
               acc))
           {}
           world-map))
-
-(comment
-  (let [world-map {:a {::connection-state 1}
-                   :b {::connection-state 1}
-                   :c {::connection-state 2}}]
-    #_(apply hash-map (filter (fn [[world-id world]]
-                              (state-match? world 2))
-                              world-map))
-    (filter (fn [[world-id world]]
-              (state-match? world 1))
-            world-map)
-    #_(mapcat (filter (fn [[world-id world]]
-                      (state-match? world 2))
-                      world-map))
-    )
-  )
 
 (s/fdef get-world-in-state
   :args (s/cat :world-map :frereth/worlds
@@ -227,21 +207,21 @@
   :ret (s/nilable ::world))
 (defn get-world-in-state
   [world-map world-key state]
-  (#?(:clj println :cljs console.log) "Looking for matching" state "world")
+  (log "Looking for matching" state "world")
   (if-let [world (get-world world-map world-key)]
     (do
-      (#?(:clj println :cljs console.log) "Found the world")
+      (log "Found the world")
       (if (state-match? world state)
         (do
-          (#?(:clj println :cljs console.log) "State matches")
+          (log "State matches")
           world)
-        (#?(:clj println :cljs console.log) "Looking for" state
-                                            "\nbut world is in"
-                                            (::connection-state world))))
-    (#? (:clj println :cljs console.log) "No world matching\n"
-                                         world-key
-                                         "\namong\n"
-                                         (keys world-map))))
+        (log "Looking for" state
+             "\nbut world is in"
+             (::connection-state world))))
+    (log "No world matching\n"
+         world-key
+         "\namong\n"
+         (keys world-map))))
 
 (s/fdef get-active
   :args (s/cat :world-map :frereth/worlds
@@ -251,9 +231,6 @@
   [world-map world-key]
   (get-world-in-state world-map world-key ::active))
 
-;; The browser does not correctly cope with the need for
-;; the browser->worker parameter which it really should
-;; have long before we get here.
 (s/fdef activate-forked
   :args (s/cat :world-map ::world-map
                :world-key ::world-key

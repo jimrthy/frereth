@@ -43,17 +43,15 @@
                    {:type "button"
                     ;; Primitive parts of events will be forwarded here
                     ;; using these keywords as tags to identify them.
-                    :on-click ::button-+
-                    }
+                    :on-click ::button-+}
                    "+"]
                   [:button.btn.btn-success
                    {:type "button"
-                    :on-click ::button--
-                    } "-"]
+                    :on-click ::button--}
+                   "-"]
                   [:button.btn.btn-default
                    {:type "button"
-                    :on-click ::button-log
-                    }
+                    :on-click ::button-log}
                    "Console.log"]]]]
         ;; Almost certain we want to transfer ownership rather than
         ;; spending the time on a clone

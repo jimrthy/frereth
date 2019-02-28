@@ -157,6 +157,7 @@
         ;; (Q: Isn't it?)
         ;; TODO: Review how atoms really work. Especially in terms
         ;; of conflict resolution.
+        ;; Seriously. Get back to this.
         (swap! session-atom dispatch clock session-id body))
       (catch Exception ex
         (println ex "trying to deserialize/dispatch" message-string)))
@@ -345,7 +346,7 @@
                                 ;; top-level function to reduce some of
                                 ;; the noise in here.
                                 ;; Q: Where should that top-level function
-                                ;; live?
+                                ;; live? (that isn't rhetorical)
                                 (fn [raw-message]
                                   (if (not= raw-message world-stop-signal)
                                     (post-message! sessions
@@ -420,6 +421,7 @@
       ;; connection/get-world.
       ;; TODO: Move the error handling under there to simplify
       ;; this and make the benefit more general.
+      ;; No, really. Do it
       (let [worlds (:frereth/worlds session)]
         (if (and worlds
                  (not (world/get-world worlds pid)))

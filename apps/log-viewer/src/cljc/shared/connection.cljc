@@ -3,6 +3,7 @@
   ;; frereth.apps.log-viewer.frontend.session
   ;; on the browser?
   ;; Is it worth trying to consolidate?
+  ;; TODO: Check
 
   ;; ::subject probably doesn't make sense on the browser side,
   ;; but the rest of it (plus history) seems pretty relevant.
