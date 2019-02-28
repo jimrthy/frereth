@@ -1,4 +1,7 @@
 (ns backend.system
+  "Layers that define the backend portions.
+
+  These include the web/renderer, client, and server."
   (:require [aleph.udp :as udp]
             [backend.web.server]
             [client

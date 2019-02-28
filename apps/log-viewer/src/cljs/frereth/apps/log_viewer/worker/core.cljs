@@ -1,5 +1,12 @@
-(ns frontend.worker
+(ns frereth.apps.log-viewer.worker.core
   ;; This really should be a stand-alone project supplied by Server
+  ;; This is in a weird space.
+  ;; In a lot of ways, this needs to do DI to set up the browser side
+  ;; of the World.
+
+  ;; That's fair.
+  ;; Any operating system injects a lot of boilerplate into most newly
+  ;; forked processes.
   "Generate DOM structure and manage state"
   (:require [cljs.reader]
             [cognitect.transit :as transit]
@@ -14,6 +21,7 @@
 (defonce app-state (r/atom {:y 2017
                             ::log-entries []}))
 
+;; Q: Worth adding a reference to the serializer and using that instead?
 (let [writer (transit/writer :json)]
   (defn render []
     ;; Keep in mind: web workers can absolutely open their own websockets.
@@ -35,17 +43,15 @@
                    {:type "button"
                     ;; Primitive parts of events will be forwarded here
                     ;; using these keywords as tags to identify them.
-                    :on-click ::button-+
-                    }
+                    :on-click ::button-+}
                    "+"]
                   [:button.btn.btn-success
                    {:type "button"
-                    :on-click ::button--
-                    } "-"]
+                    :on-click ::button--}
+                   "-"]
                   [:button.btn.btn-default
                    {:type "button"
-                    :on-click ::button-log
-                    }
+                    :on-click ::button-log}
                    "Console.log"]]]]
         ;; Almost certain we want to transfer ownership rather than
         ;; spending the time on a clone
@@ -66,6 +72,7 @@
         (comment (.preventDefault error))))
 
 (set! (.-onmessage js/self)
+      ;; FIXME: Switch to shared serialization library instead
       (let [reader (transit/reader :json)]
         (fn
           [wrapper]
@@ -74,6 +81,9 @@
                  :as data} (transit/read reader
                                          (.-data wrapper))]
             (condp = action
+              :frereth/disconnect (do
+                                    (console.log "World disconnected. Exiting.")
+                                    (.close js/self))
               :frereth/event
               (let [{[tag ctrl-id event] :frereth/body} data]
                 (console.log "Should dispatch" event "to" ctrl-id "based on" tag)
@@ -87,9 +97,7 @@
                     (when dirty? (render)))
                   (catch :default ex
                     (console.error ex))))
-              :frereth/disconnect (do
-                                    (console.log "World disconnected. Exiting.")
-                                    (.close js/self))
+              :frereth/forward (console.warn "Worker should handle" data)
               (do
                 (swap! app-state
                        #(update % ::log-entries
@@ -97,8 +105,10 @@
                                       ::time-stamp (.now js/Date)}))
                 (render)))))))
 
-;; This needs to include the cooking that arrived with ::forking
-;; FIXME: Start back here
+;; It seems like this should include the cookie that arrived with ::forking
+;; It should not. We don't have any reason to know about that sort of
+;; implementation detail here.
+;; It would be nice to not even need to know this much.
 (let [message {:frereth/action :frereth/forked}]
   (.postMessage js/self (transit/write (transit/writer :json) message)))
 

@@ -1,4 +1,4 @@
-{:compiler-options {:main frontend.core
+{:compiler-options {:main frereth.apps.log-viewer.frontend.core
                     ;; Q: Why do I need no / here, but / for worker?
                     ;; Initial guess: for worker, we don't want to load
                     ;; relative to main.out.

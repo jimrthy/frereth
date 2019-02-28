@@ -22,9 +22,22 @@
   (let [port (or port 10555)
         ;; FIXME: Switch to pedestal. It's supported aleph as a backend
         ;; since 0.5.0.
+        ;; Note that there's a bug in the current implementation:
+        ;; Querying for a bogus URL returns a 204 "No Content"
+        ;; rather than a 404.
+        ;; That converts that pedestal conversion from a nice-to-have
+        ;; nuisance into a correctness issue.
+        ;; (Assuming it fixes this problem)
+        ;; Plus, being able to change the handlers on the fly without
+        ;; a reset is a very nice feature.
         handler (ring/make-handler (routes/build-routes lamport-clock
                                                         session-atom))
         ;; TODO: add a logger interceptor
+        ;; On an internal error, the 500 response includes a stack
+        ;; trace.
+        ;; This is convenient for debugging, but sucks in terms of
+        ;; security.
+        ;; (That seems like another reason to switch to pedestal)
         with-middleware (wrap-params handler)]
     (println "Starting web server on http://localhost:" port "from" opts)
     (http/start-server with-middleware {:port port})))

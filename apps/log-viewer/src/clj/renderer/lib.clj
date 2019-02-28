@@ -3,36 +3,26 @@
   (:require [client.registrar :as registrar]
             [clojure.pprint :refer [pprint]]
             [clojure.spec.alpha :as s]
+            [frereth.apps.shared.world :as world]
             [frereth.cp.shared.crypto :as crypto]
             [manifold
              [deferred :as dfrd]
              [stream :as strm]]
             [clojure.java.io :as io]
             [clojure.core.async :as async]
-            [frereth.apps.login-viewer.specs]
-            [renderer
-             [marshalling :as marshall]
-             [sessions :as sessions]
-             [world :as world]]
+            [frereth.apps.shared
+             [specs]
+             [serialization :as serial]]
+            [renderer.sessions :as sessions]
             [shared
-             [lamport :as lamport]
-             [specs]]
-            [frereth.weald.logging :as log]
-            [renderer.world :as world])
+             [connection :as connection]
+             [lamport :as lamport]]
+            [frereth.weald.logging :as log])
   (:import clojure.lang.ExceptionInfo
            java.util.Base64))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Specs
-
-;; It's tempting to make this a limited set.
-;; But it's not like specifying that here would
-;; make runtime callers any more reliable.
-;; That really gets into things like runtime
-;; message validation.
-;; Which, honestly, should be pretty strict and
-;; happen ASAP on both sides.
-(s/def :frereth/action keyword?)
 
 ;; This is a serializable value that will get converted to travel
 ;; across a wire.
@@ -144,12 +134,30 @@
     (try
       (let [{:keys [:frereth/body]
              remote-clock :frereth/lamport
-             :as wrapper} (marshall/deserialize message-string)
+             :as wrapper} (serial/deserialize message-string)
             local-clock (lamport/do-tick clock remote-clock)]
+        (println (str "lib/on-message! handling\n"
+                      body
+                      ", a " (type body)))
         ;; The actual point.
         ;; It's easy to miss this in the middle of the error handling.
         ;; Which is one reason this is worth keeping separate from the
         ;; dispatching code.
+        ;; Doing this inside a swap! seems iffy.
+        ;; Realistically, dispatch should return something like a
+        ;; tuple of:
+        ;; a) the new state
+        ;; b) seq of functions to call to trigger side-effects
+        ;; That isn't quite right. The side-effecting functions
+        ;; could result in a different end state for this...call
+        ;; it a transaction.
+        ;; But it's better than having a big, synchronous
+        ;; transformation that seems very likely to either block
+        ;; updates or trigger multiple side-effects.
+        ;; (Q: Isn't it?)
+        ;; TODO: Review how atoms really work. Especially in terms
+        ;; of conflict resolution.
+        ;; Seriously. Get back to this.
         (swap! session-atom dispatch clock session-id body))
       (catch Exception ex
         (println ex "trying to deserialize/dispatch" message-string)))
@@ -167,14 +175,6 @@
                (sessions/get-by-state @session-atom
                                       ::sessions/pending)
                "\nat" @clock))))
-
-(defn deactivate-world!
-  [session-atom session-id world-key]
-  ;; TODO: Refactor/move this into the sessions ns
-  (swap! session-atom
-         #(update-in % [session-id :frereth/worlds]
-                     dissoc
-                     world-key)))
 
 (s/fdef build-cookie
   :args (s/cat :session-id ::session-id
@@ -211,7 +211,7 @@
   (let [dscr {:frereth/pid world-key
               :frereth/session-id session-id
               :frereth/world-ctor command}
-        world-system-bytes (marshall/serialize dscr)]
+        world-system-bytes (serial/serialize dscr)]
     ;; TODO: This needs to be encrypted by the current minute
     ;; key before we encode it.
     ;; Q: Is it worth keeping a copy of the encoder around persistently?
@@ -222,13 +222,16 @@
   :ret ::cookie)
 (defn decode-cookie
   [cookie-bytes]
+  (println (str "Trying to get the cookie bytes from "
+                cookie-bytes
+                ", a " (type cookie-bytes)))
   (let [cookie-bytes (.decode (Base64/getDecoder) cookie-bytes)
         cookie-string (String. cookie-bytes)]
     (println "Trying to decode" cookie-string "a"
              (class cookie-string)
              "from"
              cookie-bytes "a" (class cookie-bytes))
-    (marshall/deserialize cookie-string)))
+    (serial/deserialize cookie-string)))
 
 (s/fdef post-real-message!
   :args (s/cat :sessions ::sessions/sessions
@@ -248,11 +251,11 @@
                 "\nin\n"
                 session-id))
   (if-let [session (get sessions session-id)]
-    (if (= ::sessions/active (::sessions/state session))
+    (if (= ::connection/active (::connection/state session))
       (try
-        (let [envelope (marshall/serialize wrapper)]
+        (let [envelope (serial/serialize wrapper)]
           (try
-            (let [success (strm/try-put! (::sessions/web-socket session)
+            (let [success (strm/try-put! (::connection/web-socket session)
                                          envelope
                                          500
                                          ::timed-out)]
@@ -342,6 +345,8 @@
                                 ;; FIXME: Refactor this into its own
                                 ;; top-level function to reduce some of
                                 ;; the noise in here.
+                                ;; Q: Where should that top-level function
+                                ;; live? (that isn't rhetorical)
                                 (fn [raw-message]
                                   (if (not= raw-message world-stop-signal)
                                     (post-message! sessions
@@ -351,21 +356,21 @@
                                                    :frereth/forward
                                                    raw-message)
                                     (do
-                                      (deactivate-world! sessions
-                                                         session-id
-                                                         world-key)
                                       (post-message! sessions
                                                      lamport
                                                      session-id
                                                      world-key
                                                      :frereth/disconnect
-                                                     true)))))]
+                                                     true)
+                                      (sessions/deactivate-world sessions
+                                                                 session-id
+                                                                 world-key)))))]
           (post-message! sessions
                          lamport
                          session-id
                          world-key
                          :frereth/ack-forked)
-          (sessions/activate-pending-world sessions
+          (sessions/activate-forking-world sessions
                                            session-id
                                            world-key
                                            client))
@@ -412,45 +417,43 @@
            :frereth/pid]}]
   (if (and command pid)
     (when-let [session (sessions/get-active-session sessions session-id)]
-      (let [worlds (:frereth/worlds session)]
-        (if (and worlds
-                 (not (world/get-world worlds pid)))
-          ;; TODO: Need to check with the Client registry
-          ;; to verify that command is legal for the current
-          ;; session (at the very least, this means authorization)
-          (let [cookie (build-cookie session-id pid command)]
-            (try
-              (post-message! sessions
-                             lamport
-                             session-id
-                             pid
-                             :frereth/ack-forking
-                             {:frereth/cookie cookie})
-              (catch Exception ex
-                (println "Error:" ex
-                         "\nTrying to post :frereth/ack-forking to"
-                         session-id
-                         "\nabout"
-                         pid)))
-            ;; It's tempting to add the world to the session here.
-            ;; Actually, there doesn't seem like any good reason
-            ;; not to.
-            ;; There are lots of places for things to break along
-            ;; the way, but this is an important starting point.
-            ;; It's also very tempting to set up an Actor model
-            ;; sort of thing inside the Session to handle this
-            ;; World that we're trying to create.
-            ;; This makes me think this this is working at too high
-            ;; a layer in the abstraction tree.
-            ;; We should really be running something like update-in
-            ;; with just the piece that's being changed here (in
-            ;; this case, the appropriate Session).
-            sessions)
-          (do
-            (println "Error: trying to re-fork pid" pid
-                     "\namong\n"
-                     worlds)
-            sessions))))
+      (if-not (connection/get-world session pid)
+        ;; TODO: Need to check with the Client registry
+        ;; to verify that command is legal for the current
+        ;; session (at the very least, this means authorization)
+        (let [cookie (build-cookie session-id pid command)]
+          (try
+            (post-message! sessions
+                           lamport
+                           session-id
+                           pid
+                           :frereth/ack-forking
+                           {:frereth/cookie cookie})
+            (catch Exception ex
+              (println "Error:" ex
+                       "\nTrying to post :frereth/ack-forking to"
+                       session-id
+                       "\nabout"
+                       pid)))
+          ;; It's tempting to add the world to the session here.
+          ;; Actually, there doesn't seem like any good reason
+          ;; not to (and not earlier)
+          ;; There are lots of places for things to break along
+          ;; the way, but this is an important starting point.
+          ;; It's also very tempting to set up an Actor model
+          ;; sort of thing inside the Session to handle this
+          ;; World that we're trying to create.
+          ;; This makes me think this this is working at too high
+          ;; a layer in the abstraction tree.
+          ;; We should really be running something like update-in
+          ;; with just the piece that's being changed here (in
+          ;; this case, the appropriate Session).
+          sessions)
+        (do
+          (println "Error: trying to re-fork pid" pid
+                   "\namong\n"
+                   sessions)
+          sessions)))
     (do
       (println (str "Missing either/both of '"
                     command
@@ -462,7 +465,7 @@
 (s/fdef login-finalized!
   :args (s/cat :lamport ::lamport/clock
                :session-atom ::sessions/session-atom
-               :websocket ::sessions/web-socket
+               :websocket ::connection/web-socket
                :wrapper string?)
   :ret any?)
 (defn login-finalized!
@@ -471,14 +474,14 @@
   (println ::login-finalized! "Received initial websocket message:" wrapper)
   (if (and (not= ::drained wrapper)
            (not= ::timed-out wrapper))
-    (let [envelope (marshall/deserialize wrapper)
+    (let [envelope (serial/deserialize wrapper)
           _ (println ::login-finalized! "Key pulled:" envelope)
           session-id (:frereth/body envelope)]
       (try
-        (println ::login-realized! "Trying to activate\n" session-id
+        (println ::login-finalized! "Trying to activate\n" session-id
                  "a" (class session-id)
                  "\nfrom\n"
-                 (sessions/get-by-state @session-atom ::pending))
+                 (sessions/get-by-state @session-atom ::connection/pending))
         (catch Exception ex
           (println "Failed trying to log activation details:" ex)
           (pprint {::details (log/exception-details ex)
@@ -492,7 +495,7 @@
           (swap! session-atom
                  (fn [sessions]
                    (update sessions session-id
-                           sessions/activate
+                           connection/activate
                            websocket)))
           (println ::login-finalized! "Swapped:")
           (pprint websocket)
@@ -520,7 +523,7 @@
                                               ": "
                                               succeeded))
                                 (swap! session-atom
-                                       sessions/deactivate
+                                       sessions/disconnect
                                        session-id))
                               (fn [failure]
                                 (println ::login-finalized!
@@ -529,10 +532,15 @@
                                          ":"
                                          failure)
                                 (swap! session-atom
-                                       sessions/deactivate
+                                       sessions/disconnect
                                        session-id)))))
         (do
-          (println ::login-dinalized! "Not found")
+          (println ::login-finalized! "No match for"
+                   session-id
+                   "\namong\n"
+                   (keys @session-atom)
+                   "\nin\n"
+                   @session-atom)
           (throw (ex-info "Browser trying to complete non-pending connection"
                           {::attempt session-id
                            ::sessions/sessions @session-atom})))))

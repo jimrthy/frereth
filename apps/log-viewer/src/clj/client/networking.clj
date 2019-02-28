@@ -66,6 +66,11 @@
 
     (let [server-extension (byte-array server-extension-vector)
           server-binary-name (shared/encode-server-name server-name)
+
+          ;; Then again, this branch is really all about cleaning up the
+          ;; session holes. So the browser singleton seems more
+          ;; useful/relevant.
+          _ (throw (RuntimeException. "Start back at cp.client.state/ctor"))
           result (client/ctor {::msg-specs/->child ->child
                                ::shared/my-keys {::shared/keydir key-dir
                                                  ::shared/long-pair my-long-key-pair

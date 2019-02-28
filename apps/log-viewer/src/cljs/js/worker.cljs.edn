@@ -1,4 +1,4 @@
-{:compiler-options {:main frontend.worker
+{:compiler-options {:main frereth.apps.log-viewer.worker.core
                     :asset-path "/js/worker.out"
                     :parallel-build true
                     :preloads [devtools.preload]

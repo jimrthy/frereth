@@ -1,4 +1,5 @@
 (ns shared.lamport
+  ;; TODO: Refactor this into frereth.apps.shared
   "Think about splitting a singleton clock into a Component"
   (:require [clojure.spec.alpha :as s]
             [integrant.core :as ig]))
