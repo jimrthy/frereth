@@ -1,8 +1,8 @@
 (ns frereth.apps.log-viewer.frontend.system
   "Major motivation: keep autoreloads idempotent"
   (:require [clojure.spec.alpha :as s]
-            [frereth.apps.log-viewer.frontend.session :as session]
             [frereth.apps.shared.lamport :as lamport]
+            [frereth.apps.shared.session :as session]
             [frereth.apps.shared.session-socket :as session<->socket]
             [frereth.apps.shared.socket :as web-socket]
             [frereth.apps.shared.specs :as specs]

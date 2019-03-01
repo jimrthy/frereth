@@ -1,5 +1,4 @@
-(ns frereth.apps.log-viewer.frontend.session
-  ;; FIXME: Move this into shared
+(ns frereth.apps.shared.session
   (:require [cljs.core.async :as async]
             [clojure.spec.alpha :as s]
             ;; It seems highly likely that everything that's currently

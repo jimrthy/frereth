@@ -3,9 +3,9 @@
   (:require
    [cljs.core.async :as async]
    [clojure.spec.alpha :as s]
-   [frereth.apps.log-viewer.frontend.session :as session]
    [frereth.apps.shared.lamport :as lamport]
    [frereth.apps.shared.serialization :as serial]
+   [frereth.apps.shared.session :as session]
    [frereth.apps.shared.socket :as web-socket]
    [frereth.apps.shared.worker :as worker]
    [frereth.apps.shared.world :as world]

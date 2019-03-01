@@ -1,8 +1,8 @@
 (ns frereth.apps.log-viewer.frontend.core
   (:require
    [cemerick.url :as url]
-   [frereth.apps.log-viewer.frontend.session :as session]
    [frereth.apps.log-viewer.frontend.system :as sys]
+   [frereth.apps.shared.session :as session]
    [frereth.apps.shared.socket :as socket]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
