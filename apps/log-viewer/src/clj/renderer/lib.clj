@@ -10,12 +10,11 @@
              [stream :as strm]]
             [clojure.java.io :as io]
             [clojure.core.async :as async]
-            [frereth.apps.shared
-             [lamport :as lamport]
-             [specs]
-             [serialization :as serial]]
+            [frereth.apps.shared.connection :as connection]
+            [frereth.apps.shared.lamport :as lamport]
+            [frereth.apps.shared.specs]
+            [frereth.apps.shared.serialization :as serial]
             [renderer.sessions :as sessions]
-            [shared.connection :as connection]
             [frereth.weald.logging :as log])
   (:import clojure.lang.ExceptionInfo
            java.util.Base64))
@@ -240,7 +239,7 @@
                :wrapper any?)
   :ret any?)
 (defn post-real-message!
-  "Forward marshalled value to the associated World"
+  "Forward serialized value to the associated World"
   [sessions session-id world-key wrapper]
   (println (str "Trying to send "
                 wrapper
@@ -269,13 +268,15 @@
       (do
         (println "Session not active")
         (throw (ex-info "Trying to POST to inactive Session"
-                        {::pending (sessions/get-by-state sessions
-                                                          ::sessions/pending)
-                         ::world-id session-id
+                        {::all sessions
                          ::connected (sessions/get-by-state sessions
-                                                            ::sessions/active)}))))
+                                                            ::sessions/active)
+                         ::current session
+                         ::pending (sessions/get-by-state sessions
+                                                          ::sessions/pending)
+                         ::world-id session-id}))))
     (do
-      (println "World not connected")
+      (println "No such session")
       (throw (ex-info "Trying to POST to unconnected Session"
                       {::pending (sessions/get-by-state sessions
                                                         ::sessions/pending)

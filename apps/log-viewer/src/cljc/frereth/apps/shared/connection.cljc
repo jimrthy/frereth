@@ -1,4 +1,4 @@
-(ns shared.connection
+(ns frereth.apps.shared.connection
   "Cope with the details of a single web socket connection"
   (:require [#?(:clj clojure.core.async
                 :cljs cljs.core.async) :as async #?@(:clj [:refer [go]])]

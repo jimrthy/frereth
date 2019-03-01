@@ -1,13 +1,14 @@
 (ns frereth.apps.log-viewer.frontend.session
+  ;; FIXME: Move this into shared
   (:require [cljs.core.async :as async]
             [clojure.spec.alpha :as s]
             [frereth.apps.log-viewer.frontend.socket :as web-socket]
-            [frereth.apps.shared.specs :as specs]
-            [frereth.apps.shared.world :as world]
-            [integrant.core :as ig]
             ;; It seems highly likely that everything that's currently
             ;; in here will move there.
-            [shared.connection :as connection])
+            [frereth.apps.shared.connection :as connection]
+            [frereth.apps.shared.specs :as specs]
+            [frereth.apps.shared.world :as world]
+            [integrant.core :as ig])
   (:require-macros [cljs.core.async.macros :as async-macros :refer [go]]))
 
 (enable-console-print!)
@@ -69,7 +70,7 @@
   [{:keys [::world-atom]
     :as this}]
   (println "Disconnecting all worlds in" @world-atom)
-  (swap! this ::world-atom
+  (swap! (::world-atom this)
          (fn [worlds]
            (reduce (fn [world-map world-key]
                      (let [world (world/get-world world-map world-key)]

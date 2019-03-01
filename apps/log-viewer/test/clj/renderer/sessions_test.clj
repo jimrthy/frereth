@@ -6,7 +6,7 @@
                                testing]]
    [integrant.core :as ig]
    [renderer.sessions :as sessions]
-   [shared.connection :as connection]))
+   [frereth.apps.shared.connection :as connection]))
 
 (deftest state-retrieval
   (let [sessions {1 {::sessions/state ::a}

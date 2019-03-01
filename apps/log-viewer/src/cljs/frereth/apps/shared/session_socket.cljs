@@ -131,13 +131,20 @@
           (console.error "Failed to handle :frereth/ack-forking" ex body)))
 
       :frereth/disconnect
-      (if-let [worker (::worker (world/get-world worlds world-key))]
-        (.postMessage worker raw-envelope)
+      (if-let [world (world/get-world worlds world-key)]
+        (if-let [worker (:frereth/worker world)]
+          (.postMessage worker raw-envelope)
+          (console.error "Disconnect message for"
+                         world-key
+                         "in"
+                         envelope
+                         ".\nNo matching worker in\n"
+                         world))
         (console.error "Disconnect message for"
                        world-key
                        "in"
                        envelope
-                       ". No match in"
+                       ".\nNo matching world in\n"
                        worlds))
 
       :frereth/forward
