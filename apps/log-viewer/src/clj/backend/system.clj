@@ -20,9 +20,9 @@
             [frereth.cp.shared
              [crypto :as crypto]
              [specs :as shared-specs]]
+            [frereth.apps.shared.lamport :as lamport]
             [renderer.sessions :as sessions]
-            [server.networking]
-            [shared.lamport :as lamport]))
+            [server.networking]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Magic Constants

@@ -3,10 +3,10 @@
   (:require [clojure.spec.alpha :as s]
             [frereth.apps.log-viewer.frontend.session :as session]
             [frereth.apps.log-viewer.frontend.socket :as web-socket]
+            [frereth.apps.shared.lamport :as lamport]
             [frereth.apps.shared.session-socket :as session<->socket]
             [frereth.apps.shared.specs :as specs]
             [integrant.core :as ig]
-            [shared.lamport :as lamport]
             [weasel.repl :as repl]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

@@ -11,12 +11,11 @@
             [clojure.java.io :as io]
             [clojure.core.async :as async]
             [frereth.apps.shared
+             [lamport :as lamport]
              [specs]
              [serialization :as serial]]
             [renderer.sessions :as sessions]
-            [shared
-             [connection :as connection]
-             [lamport :as lamport]]
+            [shared.connection :as connection]
             [frereth.weald.logging :as log])
   (:import clojure.lang.ExceptionInfo
            java.util.Base64))
@@ -100,8 +99,7 @@
   :ret ::message-envelope)
 ;; Honestly, this should be a Component in the System.
 ;; And it needs to interact with the clock from weald.
-;; FIXME: Switch to using a :shared.lamport/clock.
-;; Interestingly enough, that makes it tempting to convert both
+;; Interestingly enough, this makes it tempting to convert both
 ;; do-wrap-message and on-message! into a Protocol.
 (defn do-wrap-message
   ([lamport world-key action]

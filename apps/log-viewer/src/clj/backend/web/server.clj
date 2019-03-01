@@ -3,11 +3,11 @@
   (:require [aleph.http.server :as http]
             [backend.web.routes :as routes]
             [bidi.ring :as ring]
+            [frereth.apps.shared.lamport :as lamport]
             [integrant.core :as ig]
             [ring.middleware.params :refer [wrap-params]]
             [ring.util.response :refer [redirect]]
             [ring.util.http-response :refer :all]
-            [shared.lamport :as lamport]
             [renderer.sessions :as sessions]))
 
 (defmethod ig/init-key ::web-server

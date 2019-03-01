@@ -2,7 +2,7 @@
   (:require
    [clojure.spec.alpha :as s]
    [integrant.core :as ig]
-   [shared.lamport :as lamport]))
+   [frereth.apps.shared.lamport :as lamport]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Specs

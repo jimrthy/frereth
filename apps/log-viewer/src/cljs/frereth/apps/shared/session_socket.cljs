@@ -5,11 +5,11 @@
    [clojure.spec.alpha :as s]
    [frereth.apps.log-viewer.frontend.session :as session]
    [frereth.apps.log-viewer.frontend.socket :as web-socket]
+   [frereth.apps.shared.lamport :as lamport]
    [frereth.apps.shared.serialization :as serial]
    [frereth.apps.shared.worker :as worker]
    [frereth.apps.shared.world :as world]
-   [integrant.core :as ig]
-   [shared.lamport :as lamport]))
+   [integrant.core :as ig]))
 
 (enable-console-print!)
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

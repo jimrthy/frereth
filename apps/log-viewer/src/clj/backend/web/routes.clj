@@ -9,15 +9,14 @@
    [clojure.pprint :refer [pprint]]
    [clojure.spec.alpha :as s]
    [frereth.apps.shared.serialization :as serial]
+   [frereth.apps.shared.lamport :as lamport]
    [hiccup.core :refer [html]]
    [hiccup.page :refer [html5 include-js include-css]]
    [manifold.deferred :as dfrd]
    [manifold.stream :as strm]
-   [renderer
-    [lib :as lib]
-    [sessions :as sessions]]
-   [ring.util.response :as rsp]
-   [shared.lamport :as lamport])
+   [renderer.lib :as lib]
+   [renderer.sessions :as sessions]
+   [ring.util.response :as rsp])
   (:import clojure.lang.ExceptionInfo))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

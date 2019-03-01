@@ -8,13 +8,13 @@
    [clojure.spec.alpha :as s]
    [frereth.apps.log-viewer.frontend.session :as session]
    [frereth.apps.log-viewer.frontend.socket :as web-socket]
+   [frereth.apps.shared.lamport :as lamport]
    [frereth.apps.shared.serialization :as serial]
    [frereth.apps.shared.specs :as specs]
    [frereth.apps.shared.world :as world]
    ;; Start by at least partially supporting this, since it's
    ;; so popular
-   [reagent.core :as r]
-   [shared.lamport :as lamport]))
+   [reagent.core :as r]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Specs
