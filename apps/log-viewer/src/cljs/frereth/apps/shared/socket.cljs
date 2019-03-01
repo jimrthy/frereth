@@ -1,4 +1,4 @@
-(ns frereth.apps.log-viewer.frontend.socket
+(ns frereth.apps.shared.socket
   (:require
    [clojure.spec.alpha :as s]
    [integrant.core :as ig]

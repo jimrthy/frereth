@@ -2,8 +2,8 @@
   (:require
    [cemerick.url :as url]
    [frereth.apps.log-viewer.frontend.session :as session]
-   [frereth.apps.log-viewer.frontend.socket :as socket]
-   [frereth.apps.log-viewer.frontend.system :as sys]))
+   [frereth.apps.log-viewer.frontend.system :as sys]
+   [frereth.apps.shared.socket :as socket]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Specs

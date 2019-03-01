@@ -2,10 +2,10 @@
   ;; FIXME: Move this into shared
   (:require [cljs.core.async :as async]
             [clojure.spec.alpha :as s]
-            [frereth.apps.log-viewer.frontend.socket :as web-socket]
             ;; It seems highly likely that everything that's currently
-            ;; in here will move there.
+            ;; in here will move into connection.
             [frereth.apps.shared.connection :as connection]
+            [frereth.apps.shared.socket :as web-socket]
             [frereth.apps.shared.specs :as specs]
             [frereth.apps.shared.world :as world]
             [integrant.core :as ig])

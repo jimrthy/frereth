@@ -3,7 +3,7 @@
   (:require [#?(:clj clojure.core.async
                 :cljs cljs.core.async) :as async #?@(:clj [:refer [go]])]
             [clojure.spec.alpha :as s]
-            [#?(:cljs frereth.apps.log-viewer.frontend.socket
+            [#?(:cljs frereth.apps.shared.socket
                 :clj frereth.apps.log-viewer.renderer.socket)
              :as web-socket]
             #?(:clj [frereth.cp.shared.util :as cp-util])
