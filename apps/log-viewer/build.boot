@@ -67,9 +67,12 @@
                                           org.slf4j/slf4j-api]
                              :scope "test"]
                             [com.cemerick/url "0.1.1"]
-                            [com.cognitect/transit-clj "0.8.313" :exclusions [commons-codec]]
+                            [com.cognitect/transit-clj "0.8.313" :exclusions [commons-codec
+                                                                              ;; Pedestal uses a version of cheshire that
+                                                                              ;; relies on newer versions of this
+                                                                              com.fasterxml.jackson.core/jackson-core]]
                             [com.cognitect/transit-cljs "0.8.256"]
-                            [com.nimbusds/nimbus-jose-jwt "6.7"]
+                            [com.nimbusds/nimbus-jose-jwt "7.0.1"]
                             [com.nimbusds/srp6a "2.0.2"]
                             [crisptrutski/boot-cljs-test "0.3.4" :scope "test"]
                             [deraen/boot-sass "0.3.1" :scope "test"]
@@ -89,12 +92,14 @@
                                                                      org.clojure/spec.alpha
                                                                      org.clojure/tools.reader]]
                             [funcool/promesa "2.0.0"]
+                            ;; Seems worth mentioning that this brings in both crypto-equality and
+                            ;; crypto-random
                             [io.pedestal/pedestal.service "0.5.5"]
                             [io.pedestal/pedestal.service-tools "0.5.5"]
                             [io.pedestal/pedestal.immutant "0.5.5"]
                             [metosin/boot-alt-test "0.3.2" :scope "test"]
                             [metosin/boot-deps-size "0.1.0" :scope "test"]
-                            ;; Q: Does 0.4.5 play more nicely?
+                            ;; Q: How does 0.6.0 pan out?
                             [nrepl "0.5.3" :exclusions [org.clojure/clojure]]
                             [org.clojure/clojure "1.10.0"]
                             [org.clojure/clojurescript "1.10.520" :scope "test" :exclusions [commons-codec
