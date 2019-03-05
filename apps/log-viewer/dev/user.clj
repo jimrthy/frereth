@@ -6,7 +6,8 @@
   ;; Trying to load byte-streams fails because of the failure
   ;; in byte-streams.graph.
   ;; This is...odd.
-  (:require [aleph.udp :as udp]
+  (:require [aleph.http.server :as http-server]
+            [aleph.udp :as udp]
             [backend.main :as main]
             [byte-streams :as b-s]
             [cider.piggieback]
@@ -16,7 +17,8 @@
             [clojure
              [data :as data]
              [edn :as edn]
-             [pprint :refor (pprint)]
+             [pprint :refer (pprint)]
+             [reflect :as reflect]
              [repl :refer (apropos dir doc pst root-cause source)]]
             [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
@@ -306,4 +308,23 @@
       ::sessions/session-atom
       deref
       (sessions/get-by-state ::sessions/active))
+  )
+
+(comment
+  (def my-server (http-server/start-server (fn [request]
+                                             {:status 200
+                                              :body (with-out-str (pprint request))})
+                                           {:host "127.0.0.1"
+                                            :port 10556}))
+  my-server
+  (let [reflection (reflect/reflect my-server)]
+    (comment
+      (keys reflection)
+      (:flags reflection)
+      (:base reflection))
+    (->> reflection
+         :members
+         (map :name)))
+  (.close my-server)
+  (.start my-server)
   )
