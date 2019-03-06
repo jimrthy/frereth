@@ -3,7 +3,8 @@
             [clojure.spec.alpha :as s]
             [integrant.core :as ig]
             [io.pedestal.http :as http]
-            [io.pedestal.http.route :as route]))
+            [io.pedestal.http.route :as route]
+            [io.pedestal.interceptor.chain :as chain]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Specs
@@ -12,6 +13,30 @@
 
 ;;; Q: What are the legal options here?
 (s/def ::environment #{:dev :prod})
+
+;;; Q: Worth enumerating the list of legal codes?
+(s/def :http/status (s/and integer?
+                           #(>= % 100)))
+
+;; TODO: Spec this out.
+;; Technically, ring allows an instance of
+;; ring.core.protocols/StreamableResponseBody.
+;; By default, that's fulfilled by the classes/interfaces
+;; #{String ISeq File InputStream}
+;; Those happen to be the same types that satisfy
+;; the Pedestal body requirements.
+(s/def :ring/body any?)
+
+(s/def :pedestal/headers (s/or :map (s/map-of string? string?)
+                               :seq (s/coll-of string?)))
+(s/def :ring/headers (s/map-of string? string?))
+
+(s/def ::pedestal-response (s/keys :req-un [:http/status]
+                                   :opt-un [:ring/body
+                                            :pedestal/headers]))
+(s/def ::ring-response (s/keys :req-un [:ring/headers
+                                        ::status]
+                               :opt-un [:ring/body]))
 
 ;;; Q: Is this defined anywhere in Pedestal?
 (s/def ::service-map-sans-handler map?)
@@ -28,6 +53,25 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Internal Implementation
+
+(defn build-request-context
+  [{:keys [:uri] :as ring-request}]
+  (let [direct-translation (select-keys ring-request [:body
+                                                      :query-string
+                                                      :request-method])]
+    {:request (assoc direct-translation
+                     :path-info uri
+                     :async-supported? true)}))
+
+(s/fdef translate-response-context
+  :args (s/cat :response ::pedestal-response)
+  :ret ::ring-response)
+(defn translate-response-context
+  [{:keys [:body :headers :status]
+    :as pedestal-response}]
+  (cond (map? headers) pedestal-response
+        (nil? headers) (assoc pedestal-response :headers {})
+        :else (update pedestal-response :headers #(apply hash-map %))))
 
 (s/fdef chain-provider
   :args (s/cat :service-map ::service-map-sans-handler)
@@ -50,39 +94,25 @@
   operating in async mode (so the container can handle on the
   outbound)"
   [service-map]
-  (assoc service-map ::handler (throw (RuntimeException. "Write this"))))
+  (let [interceptors (::http/interceptors service-map)]
+    (assoc service-map ::handler (fn [ring-request]
+                                   (let [initial-context (build-request-context ring-request)
+                                         resp-ctx (chain/execute initial-context
+                                                                 interceptors)]
+                                     (translate-response-context (:response resp-ctx)))))))
 
 (s/fdef build-server
   :args (s/cat :service-map ::service-map
                :server-opts ::server-opts)
   :ret (s/keys :req-un [::server ::start-fn ::stop-fn]))
 (defn build-server
-  [service-map
+  [{:keys [::handler]
+    :as service-map}
    {:keys [:host :port]
     :or {host "127.0.0.1"
          port 10555}
     :as server-opts}]
-  (let [server-atom (atom nil)
-        handler (fn [& args]
-                  ;; This should be the basic aleph handler.
-                  ;; Its job, at least in theory, is to take a Ring
-                  ;; Request and convert it into either a Response or
-                  ;; a core.async that will yield that Response.
-                  ;; In practice, that seems like I should set up the
-                  ;; interceptor chain and call (execute) on it.
-                  ;; According to the comments for
-                  ;; https://github.com/pedestal/pedestal/pull/421
-                  ;; there is now a public io.pedestal.interceptor.chain
-                  ;; ns that's added `execute-only` to the public
-                  ;; `execute` and `enqueue` functions.
-                  ;; It's part of pedestal.interceptor rather than
-                  ;; pedestal.service.
-                  ;; `execute-only` is really for the sake of things
-                  ;; like streaming interfaces.
-                  ;; Which, of course, is extremely interesting for this
-                  ;; use case.
-                  (throw (ex-info "service-map handler called. What do I do with it?"
-                                  {::params args})))]
+  (let [server-atom (atom nil)]
     {:server server-atom  ;; Q: Does the type matter here?
      :start-fn (fn []
                  (swap! server-atom
@@ -114,7 +144,8 @@
   {
    ;; nil means the default [servlet-interceptor] chain-provider.
    ;;
-   ;; We can customize this also
+   ;; This sets up the handler that the server will use to actually
+   ;; execute the Interceptor Chain
    ::http/chain-provider chain-provider
 
    :env  environment
@@ -129,7 +160,6 @@
 
 (defmethod ig/init-key ::chain-provider
   [_ {:keys [::debug?
-             ;; FIXME: This needs to be a Component
              ::route-atom]
       :as opts}]
   (println "Setting up Pedestal")
