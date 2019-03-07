@@ -9,6 +9,7 @@
   (:require [aleph.http.server :as http-server]
             [aleph.udp :as udp]
             [backend.main :as main]
+            [backend.web.routes :as routes]
             [byte-streams :as b-s]
             [cider.piggieback]
             [client.registrar :as registrar]
@@ -54,7 +55,8 @@
             [renderer.lib :as renderer]
             [client.networking :as client-net]
             [frereth.cp.client.state :as client-state]
-            [renderer.sessions :as sessions]))
+            [renderer.sessions :as sessions]
+            [backend.web.routes :as routes]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Magic Numbers
@@ -206,10 +208,10 @@
 (defn setup-monitor! [opts]
   (ig-repl/set-prep! #(initialize opts)))
 
-(println "Run (setup-monitor! {}) and then (go) to start the Monitor")
+(println "Run (setup-monitor! {::routes/handler-map {::routes/debug? true}}) and then (go) to start the Monitor")
 
 (comment
-  (setup-monitor! {})
+  (setup-monitor! {::routes/handler-map {::routes/debug? true}})
   (go)
 
   (-> ig-state/system

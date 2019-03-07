@@ -8,10 +8,12 @@
    [clojure.java.io :as io]
    [clojure.pprint :refer [pprint]]
    [clojure.spec.alpha :as s]
-   [frereth.apps.shared.serialization :as serial]
    [frereth.apps.shared.lamport :as lamport]
+   [frereth.apps.shared.serialization :as serial]
    [hiccup.core :refer [html]]
    [hiccup.page :refer [html5 include-js include-css]]
+   [integrant.core :as ig]
+   [io.pedestal.http.route :as route]
    [manifold.deferred :as dfrd]
    [manifold.stream :as strm]
    [renderer.lib :as lib]
@@ -25,6 +27,12 @@
 ;;; I know I've written a spec for this at some point or other.
 ;;; FIXME: Track that down so I don't need to duplicate it.
 (s/def ::ring-request map?)
+
+;;; TODO: Surely there's a spec for this somewhere.
+;;; It's a s/or of tuples.
+;;; Basic idea is [path verb interceptors (optional route-name-clause) (optional constraints)]
+(s/def ::route any?)
+(s/def ::route-set (s/coll-of ::route))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Internal Helpers
@@ -222,14 +230,6 @@
       [:div.container [:div#app.app-wrapper]]
       (include-js "js/test.js")]))))
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;; Public
-
-;; TODO: Convert the routing to its own component in the system.
-;; Possibly even set up the handler function to call the mapping
-;; dynamically so this can reload without restarting the entire
-;; system
-
 (s/fdef build-routes
   :args (s/cat :lamport-clock ::lamport/clock
                :session-atom ::sessions/atom)
@@ -261,3 +261,54 @@
   (bidi/match-route (build-routes nil nil) "/")
   (bidi/match-route (build-routes nil nil) "/api/fork")
   (bidi/match-route (build-routes nil nil) "/://?initiate"))
+
+(s/fdef build-pedestal-routes
+  :args (s/cat :lamport-clock ::lamport/clock
+               :session-atom ::sessions/session-atom)
+  :ret ::route-set)
+(defn build-pedestal-routes
+  [lamport-clock
+   session-atom]
+  ;; Big Q: How do we server up static files?
+  ;; The obvious approach, "Catch-all parameters" from
+  ;; http://pedestal.io/guides/defining-routes will make
+  ;; all routing slow down drastically.
+  ;; Next idea that comes to mind is to use query params,
+  ;; but that just isn't the way that javascript works.
+  ;; Though it might not be awful in terms of clojurescript
+  ;; and css.
+  ;; FIXME: This part is worth its own branch.
+  ;; Handling static files in general is worth some time/effort,
+  ;; and it's beyond the scope of just translating to Pedestal.
+  #{["/js/*subpage" :get (if (.exists (io/file "dev-output/js"))
+                           (fn [{:keys [:path-params]
+                                 :as req}]
+                             (ring/->Files {:dir "dev-output/js"}))
+                           (fn [_]
+                             (ring/->Resources {:prefix "js"})))]}
+  (throw (RuntimeException. "Write this")))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; Public
+
+(defmethod ig/init-key ::handler-map
+  [_ {:keys [::debug?
+             ::lamport/clock
+             ::sessions/session-atom]
+      :as opts}]
+  ;; It seems like there's an interesting implementation issue here:
+  ;; This doesn't really play nicely with route/url-for-routes.
+  ;; In order to use that, the individual handlers really should
+  ;; have access to the routes table.
+  ;; This is a non-issue.
+  ;; This is why the routing interceptor adds the :url-for key
+  ;; to the context map.
+  {::routes
+   (if-not debug?
+     (route/expand-routes (build-pedestal-routes clock session-atom))
+     ;; Use this to set routes to be reloadable without a
+     ;; full (reset).
+     ;; Note that this will rebuild on every request, which makes it
+     ;; really slow.
+     (fn []
+       (route/expand-routes (build-pedestal-routes clock session-atom))))})

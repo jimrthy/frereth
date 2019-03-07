@@ -1,9 +1,9 @@
 (ns backend.web.service
   (:require [aleph.http.server :as aleph]
+            [backend.web.routes :as routes]
             [clojure.spec.alpha :as s]
             [integrant.core :as ig]
             [io.pedestal.http :as http]
-            [io.pedestal.http.route :as route]
             [io.pedestal.interceptor.chain :as chain]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -138,7 +138,8 @@
 
 (defn build-basic-service-map
   [{:keys [::environment
-           ::port]
+           ::port
+           ::routes/handler-map]
     :or {environment :prod
          port 10555}}]
   {
@@ -150,6 +151,11 @@
 
    :env  environment
 
+   ;; pointless under aleph
+   :join? false
+
+   ::http/routes (::routes/routes handler-map)
+
    ;; This would normally be a keyword indicating the default web server.
    ;;
    ;; Providing a function allows customization
@@ -160,20 +166,16 @@
 
 (defmethod ig/init-key ::chain-provider
   [_ {:keys [::debug?
-             ::route-atom]
+             ::routes/handler-map]
       :as opts}]
   (println "Setting up Pedestal")
+  (when-not handler-map
+    (throw (RuntimeException. "Need a router Component")))
   (let [base-service-map (build-basic-service-map opts)
         almost-runnable-service (if-not debug?
-                                  (assoc base-service-map
-                                         ::http/routes (route/expand-routes @route-atom))
+                                  base-service-map
                                   (-> base-service-map
                                       (merge {:env :dev
-                                              ;; pointless under aleph
-                                              :join? false
-                                              ;; Use this to set routes to be reloadable without a
-                                              ;; full (reset)
-                                              ::http/routes #(route/expand-routes @route-atom)
                                               ;; Ignore CORS for dev mode
                                               ::http/allowed-origins {:creds true :allowed-origins (constantly true)}})))]
     (-> almost-runnable-service

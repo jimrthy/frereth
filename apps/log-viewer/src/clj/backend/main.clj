@@ -13,5 +13,7 @@
   (integrant.repl/set-prep! #(init opts)))
 
 (defn -main [& args]
+  ;; FIXME: Use a library like environ that pulls
+  ;; the configuration from the environment
   (setup-app! {})
   (integrant.repl/go))
