@@ -59,7 +59,7 @@
             [backend.web.routes :as routes]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;; Magic Numbers
+;;;; Magic Constants
 
 (def server-port 32156)
 
@@ -203,6 +203,7 @@
   [opts]
   (require 'backend.system)
   (let [ctor (resolve 'backend.system/monitoring-ctor)]
+    (println "Root initialization")
     (ctor opts)))
 
 (defn setup-monitor! [opts]
@@ -211,7 +212,7 @@
 (println "Run (setup-monitor! {::routes/handler-map {::routes/debug? true}}) and then (go) to start the Monitor")
 
 (comment
-  (setup-monitor! {::routes/handler-map {::routes/debug? true}})
+  (setup-monitor! {:backend.system/routes {::routes/debug? true}})
   (go)
 
   (-> ig-state/system

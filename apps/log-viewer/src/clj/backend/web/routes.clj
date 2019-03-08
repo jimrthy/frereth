@@ -96,91 +96,96 @@
     ;; These parameters need to be serialized into a signed "initiate"
     ;; param.
     (let [{initiate-wrapper "initiate"
-           signature "signature"} query-params
-          ;; It's tempting to think that we don't need/want the
-          ;; Cookie here.
-          ;; But we don't want some rogue World just randomly
-          ;; sending requests to try to interfere with legitimate
-          ;; ones.
-          ;; So the Cookie *is* needed to validate the Session
-          ;; and World keys.
-          {:keys [:frereth/cookie
-                  :frereth/session-id
-                  :frereth/world-key]
-           :as initiate} (serial/deserialize initiate-wrapper)]
-      (if (and cookie session-id world-key)
-        (do
-          (println ::create-world "Trying to decode" cookie
-                   "a" (class cookie))
-          (let [session-id (-> session-id
-                               url/url-decode
-                               edn/read-string)
-                world-key (-> world-key
-                              url/url-decode
-                              edn/read-string)]
-            (println ::create-world "Decoded params:")
-            ;; There's a type mismatch between here and what the lib
-            ;; expects.
-            ;; These values are still JSON.
-            ;; That's expecting cookie as a byte array.
-            ;; session-id and world-key are supposed to be...whatever
-            ;; I'm using to represent keys (the map of JWK values would
-            ;; be most appropriate).
-            ;; So I need to finish deserializing these.
-            ;; At the same time, this should really have been sent as
-            ;; a single signed blob that extracts to these values.
-            (pprint {::cookie cookie
-                     ::session-id session-id
-                     ::world-key world-key
-                     ::signature signature})
-            (try
-              (if-let [body (lib/get-code-for-world @session-atom
-                                                    session-id
-                                                    world-key
-                                                    cookie)]
-                (do
-                  (println ::create-world "Response body:" body)
-                  (try
-                    (lib/register-pending-world! session-atom
-                                                 session-id
-                                                 world-key
-                                                 cookie)
-                    (println ::create-world
-                             "Registration succeeded. Should be good to go")
-                    (catch Throwable ex
-                      (println ::create-world "Registration failed:" ex)
-                      (throw ex)))
-                  (rsp/content-type (rsp/response body)
-                                    ;; Q: What is the response type, really?
-                                    ;; It seems like it would be really nice
-                                    ;; to return a script that sets up an
-                                    ;; environment with its own
-                                    ;; clojurescript compiler and a basic script
-                                    ;; to kick off whatever the World needs to
-                                    ;; do.
-                                    ;; That would be extremely presumptuous and
-                                    ;; wasteful, even for a project as
-                                    ;; extravagant as this one.
-                                    ;; (The fact that that's what I want
-                                    ;; to build/use isn't justification
-                                    ;; to impose that overhead on anyone
-                                    ;; else.
-                                    "application/ecmascript"))
-                (do
-                  (println ::create-world "Missing")
-                  (pprint {:frereth/session-id session-id
-                           :frereth/world-key world-key})
-                  (rsp/not-found "Unknown World")))
-              (catch ExceptionInfo ex
-                (println "Error retrieving code for World\n" ex)
-                (pprint (ex-data ex))
-                (rsp/bad-request "Malformed Request"))
-              (catch Exception ex
-                (println "Unhandled exception:" ex)
-                (throw ex)))))
+           signature "signature"} query-params]
+      ;; It's tempting to think that we don't need/want the
+      ;; Cookie here.
+      ;; But we don't want some rogue World just randomly
+      ;; sending requests to try to interfere with legitimate
+      ;; ones.
+      ;; So the Cookie *is* needed to validate the Session
+      ;; and World keys.
+      (if (and initiate-wrapper signature)
+        (let [{:keys [:frereth/cookie
+                      :frereth/session-id
+                      :frereth/world-key]
+               :as initiate} (serial/deserialize initiate-wrapper)]
+          (if (and cookie session-id world-key)
+            (do
+              (println ::create-world "Trying to decode" cookie
+                       "a" (class cookie))
+              (let [session-id (-> session-id
+                                   url/url-decode
+                                   edn/read-string)
+                    world-key (-> world-key
+                                  url/url-decode
+                                  edn/read-string)]
+                (println ::create-world "Decoded params:")
+                ;; There's a type mismatch between here and what the lib
+                ;; expects.
+                ;; These values are still JSON.
+                ;; That's expecting cookie as a byte array.
+                ;; session-id and world-key are supposed to be...whatever
+                ;; I'm using to represent keys (the map of JWK values would
+                ;; be most appropriate).
+                ;; So I need to finish deserializing these.
+                ;; At the same time, this should really have been sent as
+                ;; a single signed blob that extracts to these values.
+                (pprint {::cookie cookie
+                         ::session-id session-id
+                         ::world-key world-key
+                         ::signature signature})
+                (try
+                  (if-let [body (lib/get-code-for-world @session-atom
+                                                        session-id
+                                                        world-key
+                                                        cookie)]
+                    (do
+                      (println ::create-world "Response body:" body)
+                      (try
+                        (lib/register-pending-world! session-atom
+                                                     session-id
+                                                     world-key
+                                                     cookie)
+                        (println ::create-world
+                                 "Registration succeeded. Should be good to go")
+                        (catch Throwable ex
+                          (println ::create-world "Registration failed:" ex)
+                          (throw ex)))
+                      (rsp/content-type (rsp/response body)
+                                        ;; Q: What is the response type, really?
+                                        ;; It seems like it would be really nice
+                                        ;; to return a script that sets up an
+                                        ;; environment with its own
+                                        ;; clojurescript compiler and a basic script
+                                        ;; to kick off whatever the World needs to
+                                        ;; do.
+                                        ;; That would be extremely presumptuous and
+                                        ;; wasteful, even for a project as
+                                        ;; extravagant as this one.
+                                        ;; (The fact that that's what I want
+                                        ;; to build/use isn't justification
+                                        ;; to impose that overhead on anyone
+                                        ;; else.
+                                        "application/ecmascript"))
+                    (do
+                      (println ::create-world "Missing")
+                      (pprint {:frereth/session-id session-id
+                               :frereth/world-key world-key})
+                      (rsp/not-found "Unknown World")))
+                  (catch ExceptionInfo ex
+                    (println "Error retrieving code for World\n" ex)
+                    (pprint (ex-data ex))
+                    (rsp/bad-request "Malformed Request"))
+                  (catch Exception ex
+                    (println "Unhandled exception:" ex)
+                    (throw ex)))))
+            (do
+              (println "Missing parameter in")
+              (pprint initiate)
+              (rsp/bad-request "Missing required parameter"))))
         (do
           (println "Missing parameter in")
-          (pprint initiate)
+          (pprint query-params)
           (rsp/bad-request "Missing required parameter"))))
     (catch Throwable ex
       (println "Unhandled low-level outer exception:" ex)
@@ -269,24 +274,17 @@
 (defn build-pedestal-routes
   [lamport-clock
    session-atom]
-  ;; Big Q: How do we server up static files?
-  ;; The obvious approach, "Catch-all parameters" from
-  ;; http://pedestal.io/guides/defining-routes will make
-  ;; all routing slow down drastically.
-  ;; Next idea that comes to mind is to use query params,
-  ;; but that just isn't the way that javascript works.
-  ;; Though it might not be awful in terms of clojurescript
-  ;; and css.
-  ;; FIXME: This part is worth its own branch.
-  ;; Handling static files in general is worth some time/effort,
-  ;; and it's beyond the scope of just translating to Pedestal.
-  #{["/js/*subpage" :get (if (.exists (io/file "dev-output/js"))
-                           (fn [{:keys [:path-params]
-                                 :as req}]
-                             (ring/->Files {:dir "dev-output/js"}))
-                           (fn [_]
-                             (ring/->Resources {:prefix "js"})))]}
-  (throw (RuntimeException. "Write this")))
+  #{["/" :get index-page :route-name ::default]
+    ["/index" :get index-page :route-name ::default-index]
+    ["/index.html" :get index-page :route-name ::default-html]
+    ["/index.php" :get index-page :route-name ::default-php]
+    ["/api/fork" :get (partial create-world session-atom) :route-name ::connect-world]
+    ["/echo" :any echo-page :route-name ::echo]
+    ["/test" :any test-page :route-name ::test]
+    ;; Q: How should this work?
+    ["/ws" :get (partial connect-renderer
+                         lamport-clock
+                         session-atom) :route-name ::renderer-ws]})
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Public
@@ -296,6 +294,8 @@
              ::lamport/clock
              ::sessions/session-atom]
       :as opts}]
+  (println "Setting up router. Debug mode:" debug? "\nbased on")
+  (comment (pprint opts))
   ;; It seems like there's an interesting implementation issue here:
   ;; This doesn't really play nicely with route/url-for-routes.
   ;; In order to use that, the individual handlers really should

@@ -1,10 +1,13 @@
 (ns backend.web.service
   (:require [aleph.http.server :as aleph]
             [backend.web.routes :as routes]
+            [clojure.java.io :as io]
+            [clojure.pprint :refer (pprint)]
             [clojure.spec.alpha :as s]
             [integrant.core :as ig]
             [io.pedestal.http :as http]
-            [io.pedestal.interceptor.chain :as chain]))
+            [io.pedestal.interceptor.chain :as chain])
+  (:import [java.net InetSocketAddress SocketAddress]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Specs
@@ -96,6 +99,8 @@
   [service-map]
   (let [interceptors (::http/interceptors service-map)]
     (assoc service-map ::handler (fn [ring-request]
+                                   (println "Incoming request")
+                                   (pprint ring-request)
                                    (let [initial-context (build-request-context ring-request)
                                          resp-ctx (chain/execute initial-context
                                                                  interceptors)]
@@ -124,7 +129,9 @@
                             ;; Which makes sense for a functional
                             ;; environment.
                             (let [details {:port port
-                                           :socket-address host}]
+                                           :socket-address (if (instance? SocketAddress host)
+                                                             host
+                                                             (InetSocketAddress. host port))}]
                               (aleph/start-server handler details))
                             (do
                               (println "WARNING: Trying to restart existing server")
@@ -142,29 +149,35 @@
            ::routes/handler-map]
     :or {environment :prod
          port 10555}}]
-  {
-   ;; nil means the default [servlet-interceptor] chain-provider.
-   ;;
-   ;; This sets up the handler that the server will use to actually
-   ;; execute the Interceptor Chain
-   ::http/chain-provider chain-provider
+  (let [raw
+        {
+         ;; nil means the default [servlet-interceptor] chain-provider.
+         ;;
+         ;; This sets up the handler that the server will use to actually
+         ;; execute the Interceptor Chain
+         ::http/chain-provider chain-provider
 
-   :env  environment
+         :env  environment
 
-   ;; pointless under aleph
-   :join? false
+         ;; pointless under aleph
+         :join? false
 
-   ::http/routes (::routes/routes handler-map)
+         ::http/routes (::routes/routes handler-map)
 
-   ;; This would normally be a keyword indicating the default web server.
-   ;;
-   ;; Providing a function allows customization
-   ::http/type build-server})
+         ;; This would normally be a keyword indicating the default web server.
+         ;;
+         ;; Providing a function allows customization
+         ::http/type build-server}]
+    (apply assoc raw
+           (if (.exists (io/file "dev-output/js"))
+             ;; Q: What are the odds that either of these work?
+             [::http/file-path "dev-output"]
+             [::http/resource-path "/"]))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Public
 
-(defmethod ig/init-key ::chain-provider
+(defmethod ig/init-key ::web-service
   [_ {:keys [::debug?
              ::routes/handler-map]
       :as opts}]
@@ -181,3 +194,12 @@
     (-> almost-runnable-service
         http/create-server
         http/start)))
+
+(defmethod ig/halt-key! ::web-service
+  [_ {:keys [::http/stop-fn]
+      :as service-map}]
+  (println "Trying to halt web-service")
+  (pprint service-map)
+  (if stop-fn
+    (stop-fn)
+    (println "Nothing to stop")))
