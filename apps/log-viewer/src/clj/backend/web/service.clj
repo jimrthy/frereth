@@ -62,7 +62,8 @@
   [{:keys [:uri] :as ring-request}]
   (let [direct-translation (select-keys ring-request [:body
                                                       :query-string
-                                                      :request-method])]
+                                                      :request-method
+                                                      :uri])]
     {:request (assoc direct-translation
                      :path-info uri
                      :async-supported? true)}))
@@ -175,42 +176,51 @@
              [::http/file-path "dev-output"]
              [::http/resource-path "/"]))))
 
+(defn build-definition
+  [{:keys [::debug?
+           ::routes/handler-map]
+    :as opts}]
+  (println "Setting up Pedestal in" (if debug? "" "not") "debug mode")
+  (when-not handler-map
+    (throw (RuntimeException. "Need a router Component")))
+
+  (let [base-service-map (build-basic-service-map opts)]
+    (cond-> base-service-map
+      debug?
+      (-> (merge {:env :dev
+                  ;; Ignore CORS for dev mode
+                  ::http/allowed-origins {:creds true :allowed-origins (constantly true)}})
+          http/default-interceptors
+          #_http/dev-interceptors
+          (update ::http/interceptors (fn [chain]
+                                        (let [intc (interceptor/interceptor {:name ::outer-error-logger
+                                                                             :error (fn [ctx ex]
+                                                                                      (println "oopsie")
+                                                                                      (pprint (ex-data ex))
+                                                                                      (println "Caused by")
+                                                                                      (pprint ctx)
+                                                                                      (assoc ctx ::chain/error ex))})]
+                                          (concat [intc] chain))))))))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Public
 
 (defmethod ig/init-key ::web-service
-  [_ {:keys [::debug?
-             ::routes/handler-map]
-      :as opts}]
-  (println "Setting up Pedestal in" (if debug? "" "not") "debug mode")
-  (when-not handler-map
-    (throw (RuntimeException. "Need a router Component")))
-  (let [base-service-map (build-basic-service-map opts)
-        almost-runnable-service (cond-> base-service-map
-                                  debug?
-                                  (-> (merge {:env :dev
-                                              ;; Ignore CORS for dev mode
-                                              ::http/allowed-origins {:creds true :allowed-origins (constantly true)}})
-                                      http/default-interceptors
-                                      #_http/dev-interceptors
-                                      (update ::http/interceptors (fn [chain]
-                                                                    (let [intc (interceptor/interceptor {:name ::outer-error-logger
-                                                                                                         :error (fn [ctx ex]
-                                                                                                                  (println "oopsie")
-                                                                                                                  (pprint (ex-data ex))
-                                                                                                                  (println "Caused by")
-                                                                                                                  (pprint ctx)
-                                                                                                                  (assoc ctx ::chain/error ex))})]
-                                                                   (concat [intc] chain))))))]
-    (-> almost-runnable-service
-        http/create-server
-        http/start)))
+  [_ opts]
+  (-> opts
+      build-definition
+      http/create-server
+      http/start))
 
 (comment
   (let [handler-map  {::routes/handler-map {::routes/routes #{["/" :get (fn [req] "hi") :route-name ::default]}}}]
     (comment (build-basic-service-map handler-map)
-             (-> handler-map build-basic-service-map http/default-interceptors))
-    (-> handler-map build-basic-service-map http/default-interceptors :io.pedestal.http/interceptors))
+             (-> handler-map build-basic-service-map http/default-interceptors)
+             (-> handler-map build-basic-service-map http/default-interceptors :io.pedestal.http/interceptors)
+             ;; This doesn't add any interceptors
+             (build-definition handler-map))
+    ;; It looks like create-server adds the content-negotiation interceptor
+    (-> handler-map build-definition http/create-server ::http/interceptors))
   )
 
 (defmethod ig/halt-key! ::web-service
