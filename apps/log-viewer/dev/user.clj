@@ -12,6 +12,7 @@
             [backend.web.routes :as routes]
             [byte-streams :as b-s]
             [cider.piggieback]
+            [client.networking :as client-net]
             [client.registrar :as registrar]
             [cljs.repl.browser :as cljs-browser]
             [clojure.core.async :as async]
@@ -51,12 +52,8 @@
             [manifold
              [deferred :as dfrd]
              [stream :as strm]]
-            [integrant.core :as ig]
             [renderer.lib :as renderer]
-            [client.networking :as client-net]
-            [frereth.cp.client.state :as client-state]
-            [renderer.sessions :as sessions]
-            [backend.web.routes :as routes]))
+            [renderer.sessions :as sessions]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Magic Constants
@@ -212,11 +209,16 @@
 (println "Run (setup-monitor! {::routes/handler-map {::routes/debug? true}}) and then (go) to start the Monitor")
 
 (comment
-  (setup-monitor! {:backend.system/routes {::routes/debug? true}})
+  (setup-monitor! {:backend.system/routes {::routes/debug? true}
+                   :backend.system/web-server {:backend.web.service/debug? true}})
   (go)
+  (halt)
 
   (-> ig-state/system
       keys)
+  (-> ig-state/system :backend.web.service/web-service keys)
+  (-> ig-state/system :backend.web.service/web-service :io.pedestal.http/interceptors)
+  (-> ig-state/system :backend.web.service/web-service :io.pedestal.http/interceptors first)
   (-> ig-state/system
       :shared.lamport/clock
       deref)

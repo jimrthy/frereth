@@ -30,8 +30,8 @@
         ;; (Assuming it fixes this problem)
         ;; Plus, being able to change the handlers on the fly without
         ;; a reset is a very nice feature.
-        handler (ring/make-handler (routes/build-routes lamport-clock
-                                                        session-atom))
+        handler (comment (ring/make-handler (routes/build-routes lamport-clock
+                                                                 session-atom)))
         ;; TODO: add a logger interceptor
         ;; On an internal error, the 500 response includes a stack
         ;; trace.

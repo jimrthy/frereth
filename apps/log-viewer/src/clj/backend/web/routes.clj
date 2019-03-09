@@ -211,6 +211,7 @@
 
 (defn index-page
   [_]
+  (println "Handling request for index")
   (rsp/response
    (html
     (html5
@@ -235,37 +236,14 @@
       [:div.container [:div#app.app-wrapper]]
       (include-js "js/test.js")]))))
 
-(s/fdef build-routes
-  :args (s/cat :lamport-clock ::lamport/clock
-               :session-atom ::sessions/atom)
-  ;; FIXME: Track down a spec for this
-  :ret any?)
-(defn build-routes
-  [lamport-clock
-   session-atom]
-  ;; Note: when running uberjar from project dir, it is
-  ;; possible that the dev-output dir exists.
-  ["/" [["js/" (if (.exists (io/file "dev-output/js"))
-                 (ring/->Files {:dir "dev-output/js"})
-                 (ring/->Resources {:prefix "js"}))]
-        ["css/" (if (.exists (io/file "dev-output/css"))
-                  (ring/->Files {:dir "dev-output/js"})
-                  (ring/->Resources {:prefix "css"}))]
-        [#{"" "index" "index.html"} (bidi/tag index-page ::index)]
-        ["api/" {"fork" (bidi/tag (partial create-world
-                                           session-atom) ::connect-world)}]
-        ["echo" (bidi/tag echo-page ::echo)]
-        ["test" (bidi/tag test-page ::test)]
-        ["ws" (bidi/tag (partial connect-renderer
-                                 lamport-clock
-                                 session-atom) ::renderer-ws)]]
-   [[true :not-found]]])
-(comment
-  ;; If I were going to stick with bidi, this would probably be worth
-  ;; converting to a unit test
-  (bidi/match-route (build-routes nil nil) "/")
-  (bidi/match-route (build-routes nil nil) "/api/fork")
-  (bidi/match-route (build-routes nil nil) "/://?initiate"))
+(def error-logger
+  {:name ::error-handler
+   :error (fn [ctx ex]
+            (println "**** Ooopsie")
+            (pprint (ex-data ex))
+            (println "Caused by")
+            (pprint ctx)
+            (assoc ctx :io.pedestal.interceptor.chain/error ex))})
 
 (s/fdef build-pedestal-routes
   :args (s/cat :lamport-clock ::lamport/clock

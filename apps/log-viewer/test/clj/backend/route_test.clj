@@ -5,8 +5,9 @@
              [clojure.test :as t]))
 
 (t/deftest check-matches
-  (let [routes (routes/build-routes nil nil)]
-    (t/is (= ::routes/echo
-             (:tag (bidi/match-route routes "/echo"))))
-    (t/is (= ::routes/index
-             (:tag (bidi/match-route routes "/"))))))
+  (comment (let [routes (routes/build-routes nil nil)]
+             (t/is (= ::routes/echo
+                      (:tag (bidi/match-route routes "/echo"))))
+             (t/is (= ::routes/index
+                      (:tag (bidi/match-route routes "/"))))))
+  (throw (RuntimeException. "Check matching")))
