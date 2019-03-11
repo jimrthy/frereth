@@ -8,6 +8,7 @@
    [clojure.spec.alpha :as s]
    [frereth.apps.shared.lamport :as lamport]
    [integrant.core :as ig]
+   [io.pedestal.http.content-negotiation :as conneg]
    [io.pedestal.http.route :as route]
    [renderer.sessions :as sessions])
   (:import clojure.lang.ExceptionInfo))
@@ -22,13 +23,11 @@
 (s/def ::route-set (s/coll-of ::route))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;; Handlers
-;;;; These really belong in their own ns[es]
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;; Internal
+;;;; Interceptors
+;;;; Q: Do these belong in their own ns?
 
 (def error-logger
+  "Interceptor for last-ditch error logging efforts"
   {:name ::error-handler
    :error (fn [ctx ex]
             (println "**** Ooopsie")
@@ -37,6 +36,9 @@
             (pprint ctx)
             (assoc ctx :io.pedestal.interceptor.chain/error ex))})
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; Internal
+
 (s/fdef build-pedestal-routes
   :args (s/cat :lamport-clock ::lamport/clock
                :session-atom ::sessions/session-atom)
@@ -44,16 +46,17 @@
 (defn build-pedestal-routes
   [lamport-clock
    session-atom]
-  (let [definition
-        #{["/" :get handlers/index-page :route-name ::default]
-          ["/index" :get handlers/index-page :route-name ::default-index]
-          ["/index.html" :get handlers/index-page :route-name ::default-html]
-          ["/index.php" :get handlers/index-page :route-name ::default-php]
-          ["/api/fork" :get (partial create-world session-atom) :route-name ::connect-world]
-          ["/echo" :any handlers/echo-page :route-name ::echo]
-          ["/test" :any handlers/test-page :route-name ::test]
+  (let [content-neg-intc (conneg/negotiate-content "text/html" "application/edn" "text/plain")
+        definition
+        #{["/" :get [content-neg-intc handlers/index-page] :route-name ::default]
+          ["/index" :get [content-neg-intc handlers/index-page] :route-name ::default-index]
+          ["/index.html" :get [content-neg-intc handlers/index-page] :route-name ::default-html]
+          ["/index.php" :get [content-neg-intc handlers/index-page] :route-name ::default-php]
+          ["/api/fork" :get (handlers/create-world-interceptor session-atom) :route-name ::connect-world]
+          ["/echo" :any [content-neg-intc handlers/echo-page] :route-name ::echo]
+          ["/test" :any [content-neg-intc handlers/test-page] :route-name ::test]
           ;; Q: How should this work?
-          ["/ws" :get (partial connect-renderer
+          ["/ws" :get (partial handlers/connect-renderer
                                lamport-clock
                                session-atom) :route-name ::renderer-ws]}]
     (route/expand-routes definition)))
