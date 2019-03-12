@@ -6,6 +6,7 @@
             [clojure.spec.alpha :as s]
             [integrant.core :as ig]
             [io.pedestal.http :as http]
+            [io.pedestal.http.secure-headers :as secure-headers]
             [io.pedestal.interceptor :as interceptor]
             [io.pedestal.interceptor.chain :as chain])
   (:import [java.net InetSocketAddress SocketAddress]))
@@ -61,6 +62,7 @@
 (defn build-request-context
   [{:keys [:uri] :as ring-request}]
   (let [direct-translation (select-keys ring-request [:body
+                                                      :headers
                                                       :query-string
                                                       :request-method
                                                       :uri])]
@@ -165,6 +167,20 @@
          :join? false
 
          ::http/routes (::routes/routes handler-map)
+
+         ::http/secure-headers (let [default-csp (secure-headers/content-security-policy-header)
+                                     ;; Q: Is it worse to do this string concatenation or
+                                     ;; start with the map that Pedestal should have used?
+                                     ;; TODO: Submit a MR with that map refactored into its
+                                     ;; own top-level def/fn.
+                                     ;; A flip side of this is that their default CSP leaves
+                                     ;; a lot to be desired.
+                                     ;; For that matter, there isn't really a good way to
+                                     ;; cope with CSP keys that have multiple values, short of
+                                     ;; just including the strings.
+                                     ;; This definitely needs some thought/attention.
+                                     worker-csp (str )]
+                                 (secure-headers/secure-headers {:content-security-policy-settings worker-csp}))
 
          ;; This would normally be a keyword indicating the default web server.
          ;;

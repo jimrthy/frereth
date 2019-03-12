@@ -218,6 +218,7 @@
       keys)
   (-> ig-state/system :backend.web.service/web-service keys)
   (-> ig-state/system :backend.web.service/web-service :io.pedestal.http/interceptors)
+  (->> ig-state/system :backend.web.service/web-service :io.pedestal.http/interceptors (map :name))
   (-> ig-state/system :backend.web.service/web-service :io.pedestal.http/interceptors first)
   (-> ig-state/system :backend.web.service/web-service :io.pedestal.http/interceptors (nth 4))
   (-> ig-state/system :backend.web.service/web-service :io.pedestal.http/interceptors (nth 4) class reflect/type-reflect)
