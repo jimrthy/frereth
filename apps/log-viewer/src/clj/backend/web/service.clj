@@ -148,11 +148,11 @@
                            nil))))}))
 
 (defn build-basic-service-map
-  [{:keys [::environment
+  [{:keys [::debug?
            ::port
            ::routes/handler-map]
-    :or {environment :prod
-         port 10555}}]
+    :or {port 10555}}]
+  (println "build-basic-service-map debug? =" debug?)
   (let [raw
         {
          ;; nil means the default [servlet-interceptor] chain-provider.
@@ -161,26 +161,36 @@
          ;; execute the Interceptor Chain
          ::http/chain-provider chain-provider
 
-         :env  environment
+         :env  (if-not debug? :prod :debug)
 
          ;; pointless under aleph
          :join? false
 
          ::http/routes (::routes/routes handler-map)
 
-         ::http/secure-headers (let [default-csp (secure-headers/content-security-policy-header)
-                                     ;; Q: Is it worse to do this string concatenation or
-                                     ;; start with the map that Pedestal should have used?
-                                     ;; TODO: Submit a MR with that map refactored into its
-                                     ;; own top-level def/fn.
-                                     ;; A flip side of this is that their default CSP leaves
-                                     ;; a lot to be desired.
-                                     ;; For that matter, there isn't really a good way to
-                                     ;; cope with CSP keys that have multiple values, short of
-                                     ;; just including the strings.
-                                     ;; This definitely needs some thought/attention.
-                                     worker-csp (str )]
-                                 (secure-headers/secure-headers {:content-security-policy-settings worker-csp}))
+         ::http/secure-headers (let [default-csp {:object-src "'none'"
+                                                  ;; Default uses 'unsafe-inline' 'unsafe-eval' 'strict-dynamic' https: http:
+                                                  ;; Q: What are the odds that clojurescript uses 'unsafe-eval'?
+                                                  ;; Q: What about bootstrap clojurescript?
+                                                  ;; TODO: Work through how to set a nonce.
+                                                  ;; This static approach isn't great.
+                                                  ;; Honestly, need to pull out the default "secure header"
+                                                  ;; interceptor and replace it with one that does
+                                                  ;; the Right Thing.
+                                                  ;; Of course, that also means manipulating all the
+                                                  ;; script tags associated with this browser SESSION,
+                                                  ;; so that's its own can of worms.
+                                                  :script-src #_ "'self' 'strict-dynamic' https: http:"
+                                                  ;; unsafe-inline is a Bad Thing.
+                                                  ;; It discards one of the prime advantages of setting
+                                                  ;; up CSP in the first place.
+                                                  ;; For that matter, this really should be tucked away
+                                                  ;; behind https, so http shouldn't be allowed.
+                                                  ;; That's another bigger-picture issue.
+                                                  "'self' 'unsafe-inline' https: http:"}
+                                     worker-csp (cond-> default-csp
+                                                  debug? (update :script-src #(str % " 'unsafe-eval'")))]
+                                 {:content-security-policy-settings worker-csp})
 
          ;; This would normally be a keyword indicating the default web server.
          ;;
@@ -188,8 +198,8 @@
          ::http/type build-server}]
     (apply assoc raw
            (if (.exists (io/file "dev-output/js"))
-             ;; Q: What are the odds that either of these work?
              [::http/file-path "dev-output"]
+             ;; Q: What are the odds that this will work?
              [::http/resource-path "/"]))))
 
 (defn build-definition
