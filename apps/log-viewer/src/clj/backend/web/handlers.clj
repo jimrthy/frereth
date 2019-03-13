@@ -41,7 +41,9 @@
   [lamport-clock session-atom request]
   (try
     (println "connect-renderer: Request from\n"
-             (:remote-addr request))
+             (:remote-addr request) "\nin"
+             (keys request) "\namong")
+    (pprint request)
     (catch Exception ex
       (println ex)))
   (dfrd/let-flow [websocket (dfrd/catch

@@ -60,15 +60,25 @@
 ;;;; Internal Implementation
 
 (defn build-request-context
-  [{:keys [:uri] :as ring-request}]
-  (let [direct-translation (select-keys ring-request [:body
-                                                      :headers
-                                                      :query-string
-                                                      :request-method
-                                                      :uri])]
-    {:request (assoc direct-translation
+  [{:keys [:scheme :server-name :server-port :uri] :as ring-request}]
+  ;; There's one major discrepancy between the Ring and Pedestal specs.
+  ;; Under Ring, the uri:
+  ;;   The request URI, excluding the query string and the "?" separator.
+  ;;   Must start with "/".
+  ;; Under Pedestal, the uri is:
+  ;;  The part of this request's URL from the protocol name up to the
+  ;;  query string in the first line of the HTTP request
+  ;; Pedestal also includes path-info:
+  ;;  Request path, below the context path. Always at least "/", never
+  ;;  an empty string.
+  (let [my-uri (str scheme
+                    "://" server-name
+                    ":" server-port
+                    uri)]
+    {:request (assoc ring-request
+                     :async-supported? true
                      :path-info uri
-                     :async-supported? true)}))
+                     :uri my-uri)}))
 
 (s/fdef translate-response-context
   :args (s/cat :response ::pedestal-response)
@@ -102,6 +112,10 @@
   outbound)"
   [service-map]
   (let [interceptors (::http/interceptors service-map)]
+    ;; The websocket request fails because the secure-headers
+    ;; middleware tries to call assoc on a manifold.Deferred.
+    ;; I think I need to inject an interceptor that converts
+    ;; any Deferred into an async channel.
     (assoc service-map ::handler (fn [ring-request]
                                    (println "Incoming request")
                                    (pprint ring-request)
@@ -170,6 +184,7 @@
 
          ::http/secure-headers (let [default-csp {:object-src "'none'"
                                                   ;; Default uses 'unsafe-inline' 'unsafe-eval' 'strict-dynamic' https: http:
+                                                  ;; c.f. https://github.com/pedestal/pedestal/blob/master/service/src/io/pedestal/http/secure_headers.clj
                                                   ;; Q: What are the odds that clojurescript uses 'unsafe-eval'?
                                                   ;; Q: What about bootstrap clojurescript?
                                                   ;; TODO: Work through how to set a nonce.
