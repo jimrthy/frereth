@@ -4,11 +4,14 @@
             [clojure.java.io :as io]
             [clojure.pprint :refer (pprint)]
             [clojure.spec.alpha :as s]
+            [clojure.core.async]
             [integrant.core :as ig]
             [io.pedestal.http :as http]
             [io.pedestal.http.secure-headers :as secure-headers]
             [io.pedestal.interceptor :as interceptor]
-            [io.pedestal.interceptor.chain :as chain])
+            [io.pedestal.interceptor.chain :as chain]
+            [manifold.deferred :as dfrd]
+            [clojure.core.async :as async])
   (:import [java.net InetSocketAddress SocketAddress]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -112,10 +115,6 @@
   outbound)"
   [service-map]
   (let [interceptors (::http/interceptors service-map)]
-    ;; The websocket request fails because the secure-headers
-    ;; middleware tries to call assoc on a manifold.Deferred.
-    ;; I think I need to inject an interceptor that converts
-    ;; any Deferred into an async channel.
     (assoc service-map ::handler (fn [ring-request]
                                    (println "Incoming request")
                                    (pprint ring-request)
@@ -232,16 +231,37 @@
                   ;; Ignore CORS for dev mode
                   ::http/allowed-origins {:creds true :allowed-origins (constantly true)}})
           http/default-interceptors
-          #_http/dev-interceptors
+          #_http/dev-interceptors  ;; Q: Do I want these?
           (update ::http/interceptors (fn [chain]
-                                        (let [intc (interceptor/interceptor {:name ::outer-error-logger
-                                                                             :error (fn [ctx ex]
-                                                                                      (println "oopsie")
-                                                                                      (pprint (ex-data ex))
-                                                                                      (println "Caused by")
-                                                                                      (pprint ctx)
-                                                                                      (assoc ctx ::chain/error ex))})]
-                                          (concat [intc] chain))))))))
+                                        (let [err-log (interceptor/interceptor {:name ::outer-error-logger
+                                                                                :error (fn [ctx ex]
+                                                                                         (println "oopsie")
+                                                                                         (pprint (ex-data ex))
+                                                                                         (println "Caused by")
+                                                                                         (pprint ctx)
+                                                                                         (assoc ctx ::chain/error ex))})
+                                              dfrd->async (interceptor/interceptor {:name ::dfrd->async
+                                                                                    :leave (fn [{:keys [:response]
+                                                                                                 :as ctx}]
+                                                                                             (println (str "checking for deferred->async in "
+                                                                                                           response ", a "
+                                                                                                           (class response)))
+                                                                                             (update-in ctx [:response :body]
+                                                                                                     ;; Hmm. Now my index returns an empty 200
+                                                                                                     ;; response.
+                                                                                                     ;; This *is* the culprit.
+                                                                                                     (fn [body]
+                                                                                                       (cond-> body
+                                                                                                         (dfrd/deferred? body) (async/go
+                                                                                                                                 @body)))))})]
+                                          (concat [err-log] (conj chain dfrd->async)))))))))
+
+(comment
+  (let [base-service-map (build-basic-service-map {::routes/handler-map {::routes/routes (routes/build-pedestal-routes nil (atom nil))}})
+        default-intc (http/default-interceptors base-service-map)]
+    (keys default-intc)
+    (dissoc default-intc ::http/routes))
+  )
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Public
