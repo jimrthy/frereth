@@ -2,6 +2,7 @@
   (:require
    [aleph.http :as http]
    [cemerick.url :as url]
+   [clojure.core.async :as async]
    [clojure.edn :as edn]
    [clojure.pprint :refer [pprint]]
    [clojure.spec.alpha :as s]
@@ -37,22 +38,33 @@
                :session-atom ::sessions/session-atom
                :request ::ring-request)
   :ret dfrd/deferred?)
-(defn connect-renderer
-  [lamport-clock session-atom request]
-  (try
-    (println "connect-renderer: Request from\n"
-             (:remote-addr request) "\nin"
-             (keys request) "\namong")
-    (pprint request)
-    (catch Exception ex
-      (println ex)))
-  (dfrd/let-flow [websocket (dfrd/catch
-                                 (http/websocket-connection request)
-                                 (fn [_] nil))]
-    (println "connect-renderer: websocket upgrade: '" websocket "'")
-    (if websocket
-      (lib/activate-session! lamport-clock session-atom websocket)
-      non-websocket-request)))
+(defn build-renderer-connection
+  [lamport-clock session-atom]
+  {:name ::connect-renderer!
+   :enter (fn [{:keys [:request]
+                :as ctx}]
+            (try
+              (println "connect-renderer: Request from\n"
+                       (:remote-addr request) "\nin"
+                       (keys request) "\namong")
+              (pprint request)
+              (catch Exception ex
+                (println ex)))
+            (let [dfrd-sock (http/websocket-connection request)]
+              (assoc ctx
+                     :response {:body (async/go
+                                        (dfrd/let-flow [websocket (dfrd/catch
+                                                                      dfrd-sock
+                                                                      (fn [_] nil))]
+                                          (println "connect-renderer: websocket upgrade: '" websocket "'")
+                                          (if websocket
+                                            (do
+                                              (lib/activate-session! lamport-clock session-atom websocket)
+                                              websocket)
+                                            non-websocket-request)))
+                                ;; Q: Does it make sense to return this deferred for
+                                ;; special treatment?
+                                :websocket dfrd-sock})))})
 
 (s/fdef create-world-interceptor
   ;; FIXME: Yet again, need specs for ring request/response
@@ -88,8 +100,8 @@
                        "Received a request for code to fork a new World:")
               ;; These parameters need to be serialized into a signed "initiate"
               ;; param.
-              (let [{initiate-wrapper "initiate"
-                     signature "signature"} query-params]
+              (let [{initiate-wrapper :initiate
+                     :keys [:signature]} query-params]
                 ;; It's tempting to think that we don't need/want the
                 ;; Cookie here.
                 ;; But we don't want some rogue World just randomly
@@ -173,11 +185,11 @@
                               (println "Unhandled exception:" ex)
                               (throw ex)))))
                       (do
-                        (println "Missing parameter in")
+                        (println "Missing piece of initiate")
                         (pprint initiate)
                         (rsp/bad-request "Missing required parameter"))))
                   (do
-                    (println "Missing parameter in")
+                    (println "Missing query param in")
                     (pprint query-params)
                     (rsp/bad-request "Missing required parameter"))))
               (catch Throwable ex

@@ -90,9 +90,9 @@
           ["/echo" :any (conj default-intc handlers/echo-page) :route-name ::echo]
           ["/test" :any (conj default-intc handlers/test-page) :route-name ::test]
           ;; Q: How should this work?
-          ["/ws" :get (partial handlers/connect-renderer
-                               lamport-clock
-                               session-atom) :route-name ::renderer-ws]}]
+          ["/ws" :get (handlers/build-renderer-connection
+                       lamport-clock
+                       session-atom) :route-name ::renderer-ws]}]
     (route/expand-routes definition)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

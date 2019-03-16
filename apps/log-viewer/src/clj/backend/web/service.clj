@@ -235,25 +235,46 @@
           (update ::http/interceptors (fn [chain]
                                         (let [err-log (interceptor/interceptor {:name ::outer-error-logger
                                                                                 :error (fn [ctx ex]
-                                                                                         (println "oopsie")
-                                                                                         (pprint (ex-data ex))
-                                                                                         (println "Caused by")
-                                                                                         (pprint ctx)
+                                                                                         (println (str "oopsie\n"
+                                                                                                       (with-out-str (pprint (ex-data ex)))
+                                                                                                       "Caused by\n"
+                                                                                                       (with-out-str (pprint ctx))))
                                                                                          (assoc ctx ::chain/error ex))})
                                               dfrd->async (interceptor/interceptor {:name ::dfrd->async
                                                                                     :leave (fn [{:keys [:response]
                                                                                                  :as ctx}]
-                                                                                             (println (str "checking for deferred->async in "
-                                                                                                           response ", a "
-                                                                                                           (class response)))
-                                                                                             (update-in ctx [:response :body]
-                                                                                                     ;; Hmm. Now my index returns an empty 200
-                                                                                                     ;; response.
-                                                                                                     ;; This *is* the culprit.
-                                                                                                     (fn [body]
-                                                                                                       (cond-> body
-                                                                                                         (dfrd/deferred? body) (async/go
-                                                                                                                                 @body)))))})]
+                                                                                             (if response
+                                                                                               (do
+                                                                                                 (println (str "Checking for deferred->async in\n"
+                                                                                                               response ",\na "
+                                                                                                               (class response)))
+                                                                                                 #_(update ctx :response
+                                                                                                         ;; If we have a manifold.deferred, convert
+                                                                                                         ;; it into a core.async channel.
+                                                                                                         ;; Pedestal is supposed to wait for those.
+                                                                                                         ;; I thought it happened at each step of
+                                                                                                         ;; the chain-executor, but that doesn't
+                                                                                                         ;; seem to work.
+                                                                                                         ;; I was getting an error about the
+                                                                                                         ;; secure-headers interceptor trying to
+                                                                                                         ;; assoc into the manifold.Deferred.
+                                                                                                         ;; Now I'm getting that same error about
+                                                                                                         ;; a ManyToManyChannel.
+                                                                                                         ;; The problem is that it *is* the body
+                                                                                                         ;; that can be an async channel.
+                                                                                                         (fn [response]
+                                                                                                           (cond-> response
+                                                                                                             (dfrd/deferred? response) (async/go
+                                                                                                                                         @response))))
+                                                                                                 (update-in ctx [:response :body]
+                                                                                                            (fn [body]
+                                                                                                           (cond-> body
+                                                                                                             (dfrd/deferred? body) (async/go
+                                                                                                                                     @body)))))
+                                                                                               (do
+                                                                                                 (println "Missing response in context:")
+                                                                                                 (pprint ctx)
+                                                                                                 ctx)))})]
                                           (concat [err-log] (conj chain dfrd->async)))))))))
 
 (comment
