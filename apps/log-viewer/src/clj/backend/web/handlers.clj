@@ -156,22 +156,23 @@
                                   (catch Throwable ex
                                     (println ::create-world "Registration failed:" ex)
                                     (throw ex)))
-                                (rsp/content-type (rsp/response body)
-                                                  ;; Q: What is the response type, really?
-                                                  ;; It seems like it would be really nice
-                                                  ;; to return a script that sets up an
-                                                  ;; environment with its own
-                                                  ;; clojurescript compiler and a basic script
-                                                  ;; to kick off whatever the World needs to
-                                                  ;; do.
-                                                  ;; That would be extremely presumptuous and
-                                                  ;; wasteful, even for a project as
-                                                  ;; extravagant as this one.
-                                                  ;; (The fact that that's what I want
-                                                  ;; to build/use isn't justification
-                                                  ;; to impose that overhead on anyone
-                                                  ;; else.
-                                                  "application/ecmascript"))
+                                (assoc context :response
+                                       (rsp/content-type (rsp/response body)
+                                                         ;; Q: What is the response type, really?
+                                                         ;; It seems like it would be really nice
+                                                         ;; to return a script that sets up an
+                                                         ;; environment with its own
+                                                         ;; clojurescript compiler and a basic script
+                                                         ;; to kick off whatever the World needs to
+                                                         ;; do.
+                                                         ;; That would be extremely presumptuous and
+                                                         ;; wasteful, even for a project as
+                                                         ;; extravagant as this one.
+                                                         ;; (The fact that that's what I want
+                                                         ;; to build/use isn't justification
+                                                         ;; to impose that overhead on anyone
+                                                         ;; else.
+                                                         "application/ecmascript")))
                               (do
                                 (println ::create-world "Missing")
                                 (pprint {:frereth/session-id session-id

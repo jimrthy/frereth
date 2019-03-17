@@ -618,7 +618,7 @@
                :world-key :frereth/world-key
                :cookie-bytes bytes?)
   ;; Q: What makes sense for the real return value?
-  :ret (s/nilable bytes?))
+  :ret (s/nilable #(instance? java.io.File %)))
 (defn get-code-for-world
   [sessions actual-session-id world-key cookie-bytes]
   (if actual-session-id
@@ -632,7 +632,7 @@
         (if (and pid expected-session-id world-ctor)
           (if (verify-cookie actual-session-id world-key cookie)
             (do
-              (println "Cookie verified")
+              (println ::get-code-for-world "Cookie verified")
               (let [opener (if (.exists (io/file "dev-output/js"))
                              io/file
                              (fn [file-name]
@@ -649,7 +649,7 @@
                 ;; Though, honestly, this needs to adjust all the calls to
                 ;; require to place them under an API route that involves
                 ;; both the session and world IDs.
-                (println "Returning" raw "a" (class raw))
+                (println ::get-code-for-world "Returning" raw "a" (class raw))
                 raw))
             (do
               (println "Bad Initiate packet.\n"

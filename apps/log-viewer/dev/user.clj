@@ -256,6 +256,18 @@
        deref
        vals
        first
+       keys)
+  (->> ig-state/system
+       ::sessions/session-atom
+       deref
+       vals
+       first
+       :frereth.apps.shared.connection/web-socket)
+  (->> ig-state/system
+       ::sessions/session-atom
+       deref
+       vals
+       first
        :frereth/worlds)
   (->> ig-state/system
        ::sessions/session-atom
