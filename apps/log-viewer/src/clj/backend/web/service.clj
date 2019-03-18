@@ -1,6 +1,8 @@
 (ns backend.web.service
   (:require [aleph.http.server :as aleph]
+            [aleph.netty]
             [backend.web.routes :as routes]
+            [clojure.core.async :as async]
             [clojure.java.io :as io]
             [clojure.pprint :refer (pprint)]
             [clojure.spec.alpha :as s]
@@ -11,7 +13,8 @@
             [io.pedestal.interceptor :as interceptor]
             [io.pedestal.interceptor.chain :as chain]
             [manifold.deferred :as dfrd]
-            [clojure.core.async :as async])
+            [ring.core.protocols]
+            [bidi.ring :as ring])
   (:import [java.net InetSocketAddress SocketAddress]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -26,25 +29,55 @@
 (s/def :http/status (s/and integer?
                            #(>= % 100)))
 
-;; TODO: Spec this out.
-;; Technically, ring allows an instance of
+;; Ring allows an instance of
 ;; ring.core.protocols/StreamableResponseBody.
 ;; By default, that's fulfilled by the classes/interfaces
 ;; #{String ISeq File InputStream}
 ;; Those happen to be the same types that satisfy
 ;; the Pedestal body requirements.
-(s/def :ring/body any?)
+(s/def :ring/body #(satisfies? ring.core.protocols/StreamableResponseBody %))
+(s/def :pedestal/body (s/or :string string?
+                            :seq #(instance? clojure.lang.ISeq %)
+                            :file #(instance? java.io.File %)
+                            :input-stream #(instance? java.io.InputStream %)))
 
 (s/def :pedestal/headers (s/or :map (s/map-of string? string?)
                                :seq (s/coll-of string?)))
 (s/def :ring/headers (s/map-of string? string?))
 
-(s/def ::pedestal-response (s/keys :req-un [:http/status]
-                                   :opt-un [:ring/body
-                                            :pedestal/headers]))
-(s/def ::ring-response (s/keys :req-un [:ring/headers
-                                        ::status]
-                               :opt-un [:ring/body]))
+;; There's one major discrepancy between the Ring and Pedestal specs.
+;; Under Ring, the uri:
+;;   The request URI, excluding the query string and the "?" separator.
+;;   Must start with "/".
+(s/def :ring/uri (s/and string?
+                        #(= (first %) \/)
+                        #(not (some #{\?} %))))
+(s/def :ring/request (s/keys :req-un [::scheme
+                                      ::server-name
+                                      ::server-port
+                                      :ring/uri]))
+
+(s/def ::async-supported? boolean?)
+;; Pedestal request also includes path-info:
+;;  Request path, below the context path. Always at least "/", never
+;;  an empty string.
+(s/def :pedestal/path-info :ring/uri)
+;; Under Pedestal, the uri is:
+;;  The part of this request's URL *from the protocol name* up to the
+;;  query string in the first line of the HTTP request
+;; i.e. "http://nowhere.org:port/foo/bar/baz"
+;; TODO: Spec this better
+(s/def :pedestal/uri string?)
+(s/def :pedestal/request (s/keys :req-un [::async-supported?
+                                          :pedestal/path-info
+                                          :pedestal/uri]))
+
+(s/def :pedestal/response (s/keys :req-un [:http/status]
+                                  :opt-un [:ring/body
+                                           :pedestal/headers]))
+(s/def :ring/response (s/keys :req-un [:ring/headers
+                                       ::status]
+                              :opt-un [:ring/body]))
 
 ;;; Q: Is this defined anywhere in Pedestal?
 (s/def ::service-map-sans-handler map?)
@@ -52,8 +85,8 @@
 (s/def ::service-map (s/merge ::service-map-sans-handler
                               (s/keys :req [::handler])))
 
-;; Q: What should this really return?
-(s/def ::server any?)
+;; This is also a java.io.Closeable
+(s/def ::server #(satisfies? aleph.netty.AlephServer %))
 
 (s/def ::start-fn (s/fspec :args nil :ret ::server))
 
@@ -62,18 +95,12 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Internal Implementation
 
-(defn build-request-context
+(s/fdef translate-request
+  :args (s/cat :ring-request :ring/request)
+  :ret :pedestal/request)
+(defn translate-request
+  "Convert aleph's Ring Request into a Pedestal request map"
   [{:keys [:scheme :server-name :server-port :uri] :as ring-request}]
-  ;; There's one major discrepancy between the Ring and Pedestal specs.
-  ;; Under Ring, the uri:
-  ;;   The request URI, excluding the query string and the "?" separator.
-  ;;   Must start with "/".
-  ;; Under Pedestal, the uri is:
-  ;;  The part of this request's URL from the protocol name up to the
-  ;;  query string in the first line of the HTTP request
-  ;; Pedestal also includes path-info:
-  ;;  Request path, below the context path. Always at least "/", never
-  ;;  an empty string.
   (let [my-uri (str scheme
                     "://" server-name
                     ":" server-port
@@ -84,9 +111,10 @@
                      :uri my-uri)}))
 
 (s/fdef translate-response-context
-  :args (s/cat :response ::pedestal-response)
-  :ret ::ring-response)
+  :args (s/cat :response :pedestal/response)
+  :ret :ring/response)
 (defn translate-response-context
+  "Convert a Pedestal response into the Ring Response aleph expects"
   [{:keys [:body :headers :status]
     :as pedestal-response}]
   (cond (map? headers) pedestal-response
@@ -118,7 +146,7 @@
     (assoc service-map ::handler (fn [ring-request]
                                    (println "Incoming request")
                                    (pprint ring-request)
-                                   (let [initial-context (build-request-context ring-request)
+                                   (let [initial-context (translate-request ring-request)
                                          resp-ctx (chain/execute initial-context
                                                                  interceptors)]
                                      (translate-response-context (:response resp-ctx)))))))
@@ -135,7 +163,10 @@
          port 10555}
     :as server-opts}]
   (let [server-atom (atom nil)]
-    {:server server-atom  ;; Q: Does the type matter here?
+    ;; Type really doesn't matter in the :server key
+    ;; It's really designed for the java servlet model where
+    ;; we initialize it here, then start/stop-fn modifies its state
+    {:server server-atom
      :start-fn (fn []
                  (swap! server-atom
                         (fn [existing]
@@ -187,6 +218,12 @@
                                                   ;; Q: What are the odds that clojurescript uses 'unsafe-eval'?
                                                   ;; Q: What about bootstrap clojurescript?
                                                   ;; TODO: Work through how to set a nonce.
+                                                  ;; (I've done this before: add an early Interceptor
+                                                  ;; that adds it to the Context so handlers can
+                                                  ;; add it to script tags, then associate it with
+                                                  ;; the secure headers map before converting it to
+                                                  ;; a string. Or just append it to the standard
+                                                  ;; default string).
                                                   ;; This static approach isn't great.
                                                   ;; Honestly, need to pull out the default "secure header"
                                                   ;; interceptor and replace it with one that does
@@ -207,7 +244,6 @@
                                  {:content-security-policy-settings worker-csp})
 
          ;; This would normally be a keyword indicating the default web server.
-         ;;
          ;; Providing a function allows customization
          ::http/type build-server}]
     (apply assoc raw
@@ -249,23 +285,21 @@
                                                                                                                response ",\na "
                                                                                                                (class response)))
                                                                                                  #_(update ctx :response
-                                                                                                         ;; If we have a manifold.deferred, convert
-                                                                                                         ;; it into a core.async channel.
-                                                                                                         ;; Pedestal is supposed to wait for those.
-                                                                                                         ;; I thought it happened at each step of
-                                                                                                         ;; the chain-executor, but that doesn't
-                                                                                                         ;; seem to work.
-                                                                                                         ;; I was getting an error about the
-                                                                                                         ;; secure-headers interceptor trying to
-                                                                                                         ;; assoc into the manifold.Deferred.
-                                                                                                         ;; Now I'm getting that same error about
-                                                                                                         ;; a ManyToManyChannel.
-                                                                                                         ;; The problem is that it *is* the body
-                                                                                                         ;; that can be an async channel.
-                                                                                                         (fn [response]
-                                                                                                           (cond-> response
-                                                                                                             (dfrd/deferred? response) (async/go
-                                                                                                                                         @response))))
+                                                                                                           ;; If we have a manifold.deferred, convert
+                                                                                                           ;; it into a core.async channel.
+                                                                                                           ;; Pedestal waits for those if an
+                                                                                                           ;; interceptor returns that instead
+                                                                                                           ;; of a Context.
+                                                                                                           ;; In theory.
+                                                                                                           ;; That didn't work out so well
+                                                                                                           ;; for the websocket handler.
+                                                                                                           ;; The problem is that it is the body
+                                                                                                           ;; that can be an async channel rather
+                                                                                                           ;; than the response.
+                                                                                                           (fn [response]
+                                                                                                             (cond-> response
+                                                                                                               (dfrd/deferred? response) (async/go
+                                                                                                                                           @response))))
                                                                                                  (update-in ctx [:response :body]
                                                                                                             (fn [body]
                                                                                                            (cond-> body
@@ -301,7 +335,8 @@
              (-> handler-map build-basic-service-map http/default-interceptors :io.pedestal.http/interceptors)
              ;; This doesn't add any interceptors
              (build-definition handler-map))
-    ;; It looks like create-server adds the content-negotiation interceptor
+    ;; create-server adds the content-negotiation interceptor, but that's about
+    ;; file name extensions rather than anything like the content accepted header.
     (-> handler-map build-definition http/create-server ::http/interceptors))
   )
 

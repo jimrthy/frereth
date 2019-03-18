@@ -3,6 +3,7 @@
    [aleph.http :as http]
    [cemerick.url :as url]
    [clojure.core.async :as async]
+   [clojure.core.async.impl.protocols :as async-protocols]
    [clojure.edn :as edn]
    [clojure.pprint :refer [pprint]]
    [clojure.spec.alpha :as s]
@@ -10,6 +11,7 @@
    [frereth.apps.shared.serialization :as serial]
    [hiccup.core :refer [html]]
    [hiccup.page :refer [html5 include-js include-css]]
+   [io.pedestal.interceptor.chain :as interceptor-chain]
    [manifold.deferred :as dfrd]
    [renderer.lib :as lib]
    [renderer.sessions :as sessions]
@@ -18,6 +20,37 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Specs
+
+;; FIXME: Most of these should honestly be in a Pedestal ns
+;; And there's some definite overlap with the backend.web.service ns
+
+;; FIXME: Specify which keys are expected for Request and Response
+(s/def ::request map?)
+(s/def ::response map?)
+(s/def ::interceptor-chain/error #(instance? ExceptionInfo %))
+(s/def ::async/chan #(satisfies? async-protocols/Channel %))
+
+(s/def ::context (s/keys :req-un [::request]
+                         :opt-un [::interceptor-chain/error
+                                  ::response]))
+
+(s/def ::possibly-deferred-context (s/or :context ::context
+                                         :deferred ::async/chan))
+
+(s/def ::enter (s/fspec :args (s/cat :context ::context)
+                        :ret ::possibly-deferred-context))
+
+(s/def ::leave (s/fspec :args (s/cat :context ::context)
+                        :ret ::possibly-deferred-context))
+
+(s/def ::error (s/fspec :args (s/cat :context ::context
+                                     :exception ::interceptor-chain/error)
+                        :ret ::context))
+
+;; Q: What's actually allowed here?
+(s/def ::name keyword?)
+
+(s/def ::interceptor (s/keys :opt-un [::enter ::error ::leave ::name]))
 
 ;;; I know I've written a spec for this at some point or other.
 ;;; FIXME: Track that down so I don't need to duplicate it.
@@ -33,10 +66,10 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Handlers
 
-(s/fdef connect-renderer
+(s/fdef build-renderer-connection
   :args (s/cat :lamport-clock ::lamport/clock
-               :session-atom ::sessions/session-atom
-               :request ::ring-request)
+               :session-atom ::sessions/session-atom)
+  :ret ::interceptor
   :ret dfrd/deferred?)
 (defn build-renderer-connection
   [lamport-clock session-atom]
@@ -61,23 +94,24 @@
                                             (do
                                               (lib/activate-session! lamport-clock session-atom websocket)
                                               websocket)
-                                            non-websocket-request)))
-                                ;; Q: Does it make sense to return this deferred for
-                                ;; special treatment?
-                                :websocket dfrd-sock})))})
+                                            non-websocket-request)))})))})
 
 (s/fdef create-world-interceptor
-  ;; FIXME: Yet again, need specs for ring request/response
-  :args (s/cat :sessionatom ::sessions/session-atom
-               :ring-request any?)
-  ;; FIXME: Need a spec for interceptors
-  :ret any?)
+  :args (s/cat :session-atom ::sessions/session-atom)
+  :ret ::interceptor)
 ;; FIXME: This name seems misleading.
 ;; It seems like connect-to-possibly-new-world might be more
 ;; accurate.
 ;; Then again...there's a drastic difference between plugging
 ;; into an existing, possibly multi-player world, and forking
 ;; a new instance.
+;; OTOH, interceptor-for-forking-or-joining-world is a
+;; ridiculous name.
+;; Q: Does it make sense to split this into 2?
+;; 1 could handle creation, the other could handle joining.
+;; The ideas are so similar that it seems ridiculous at face
+;; value.
+;; That doesn't mean that it isn't worth contemplating.
 (defn create-world-interceptor
   "This is really Step 2 of a World's life cycle.
 
@@ -171,28 +205,34 @@
                                                          ;; (The fact that that's what I want
                                                          ;; to build/use isn't justification
                                                          ;; to impose that overhead on anyone
-                                                         ;; else.
+                                                         ;; else).
                                                          "application/ecmascript")))
                               (do
                                 (println ::create-world "Missing")
                                 (pprint {:frereth/session-id session-id
                                          :frereth/world-key world-key})
-                                (rsp/not-found "Unknown World")))
+                                (assoc context :response
+                                       (rsp/not-found "Unknown World"))))
                             (catch ExceptionInfo ex
                               (println "Error retrieving code for World\n" ex)
                               (pprint (ex-data ex))
-                              (rsp/bad-request "Malformed Request"))
+                              (assoc context :response
+                                     (rsp/bad-request "Malformed Request")))
                             (catch Exception ex
+                              ;; This seems silly...but what would
+                              ;; be more appropriate?
                               (println "Unhandled exception:" ex)
                               (throw ex)))))
                       (do
                         (println "Missing piece of initiate")
                         (pprint initiate)
-                        (rsp/bad-request "Missing required parameter"))))
+                        (assoc context :response
+                               (rsp/bad-request "Missing required parameter")))))
                   (do
                     (println "Missing query param in")
                     (pprint query-params)
-                    (rsp/bad-request "Missing required parameter"))))
+                    (assoc context :response
+                           (rsp/bad-request "Missing required parameter")))))
               (catch Throwable ex
                 (println "Unhandled low-level outer exception:" ex)
                 (throw ex))))})
@@ -213,6 +253,7 @@
       ;; I have some doubts about that working if I give it a hard-coded string
       ;; this way, rather than the data structure I was passing in when I saw
       ;; that.
+      ;; OTOH, the pretty-print formatting is nice.
       [:div.container [:pre [:code "" (with-out-str (pprint request))]]]]))))
 
 (defn index-page

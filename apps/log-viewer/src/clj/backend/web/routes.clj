@@ -2,7 +2,6 @@
   (:require
    [backend.web.handlers :as handlers]
    [cheshire.core :as json]
-   [clojure.java.io :as io]
    [clojure.pprint :refer [pprint]]
    [clojure.spec.alpha :as s]
    [frereth.apps.shared.lamport :as lamport]
@@ -10,15 +9,50 @@
    [io.pedestal.http.content-negotiation :as conneg]
    [io.pedestal.http.route :as route]
    [renderer.sessions :as sessions])
-  (:import clojure.lang.ExceptionInfo))
+  (:import [clojure.lang ExceptionInfo IFn]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Specs
 
-;;; TODO: Surely there's a spec for this somewhere.
-;;; It's a s/or of tuples.
+;; TODO: Surely I can come up with something more restrictive
+;; Actual spec:
+;; Starts with a "/"
+;; Consists of 0 or mor path segments separated by slashes
+;; Each path segment is one of:
+;; * string literal
+;; * colon (\:) followed by a legal clojure identifier name.
+;;   This is a path parameter (highly discouraged)
+;; * asterisk (\*) followed by a legal clojure identifier name.
+;;   This is a wildcard path
+(s/def ::path string?)
+
+;; Q: Restrict to legal HTTP verbs?
+;; Pretty much anything is legal here now, but this really is all
+;; about the HTTP routes
+(s/def ::verb #_ #{:any :get :put :post :delete :patch :options :head} keyword?)
+
+(s/def ::interceptor-view (s/or :name symbol?
+                                :function #(instance? IFn %)))
+(s/def ::interceptors (s/or :chain (s/coll-of ::interceptor-view)
+                            :handler symbol?
+                            ;; Var fits here.
+                            ;; I'm not sure how clojure.lang.Var fits.
+                            ;; I've tried calling instance? on various
+                            ;; things that seem like they should be,
+                            ;; but they all returned false.
+                            :var any?
+                            :map map?
+                            :list list?))
+
+(s/def ::route-name keyword?)
+
+(s/def ::constraints map?)
+
 ;;; Basic idea is [path verb interceptors (optional route-name-clause) (optional constraints)]
-(s/def ::route any?)
+(s/def ::route (s/or :base (s/tuple ::path ::verb ::interceptors)
+                     :named (s/tuple ::path ::verb ::interceptors #(= :route-name %) ::route-name)
+                     :constrained (s/tuple ::path ::verb ::interceptors #(= :constraints %) ::constraints)
+                     :named&constrained (s/tuple ::path ::verb ::interceptors #(= :route-name %) ::route-name #(= :constraints %) ::constraints)))
 (s/def ::route-set (s/coll-of ::route))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -89,7 +123,6 @@
            :route-name ::connect-world]
           ["/echo" :any (conj default-intc handlers/echo-page) :route-name ::echo]
           ["/test" :any (conj default-intc handlers/test-page) :route-name ::test]
-          ;; Q: How should this work?
           ["/ws" :get (handlers/build-renderer-connection
                        lamport-clock
                        session-atom) :route-name ::renderer-ws]}]
@@ -117,7 +150,7 @@
      (build-pedestal-routes clock session-atom)
      ;; Use this to set routes to be reloadable without a
      ;; full (reset).
-     ;; Note that this will rebuild on every request, which makes it
-     ;; really slow.
+     ;; Note that this will rebuild on every request, which slows it
+     ;; down.
      (fn []
        (build-pedestal-routes clock session-atom)))})

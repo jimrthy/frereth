@@ -207,14 +207,11 @@
   {::routes/handler-map (into {::lamport/clock (ig/ref ::lamport/clock)
                                ::sessions/session-atom (ig/ref ::sessions/session-atom)}
                               (::routes opts))
-   #_[:backend.web.server/web-server (into {::lamport/clock (ig/ref ::lamport/clock)
-                                            ::sessions/session-atom (ig/ref ::sessions/session-atom)}
-                                           (::web-server opts))]
    :backend.web.service/web-service (into {::routes/handler-map (ig/ref ::routes/handler-map)}
                                           (::web-server opts))
    ;; Surely both server and client need access to this.
    ;; The renderer/session manager definitely does.
-   ;; TODO: spread it out
+   ;; TODO: Share it.
    ::lamport/clock (::clock opts)
    ::log-chan (::log-chan opts)
    ;; Note that this is really propagating the Server logs.

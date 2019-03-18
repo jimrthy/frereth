@@ -618,6 +618,10 @@
                :world-key :frereth/world-key
                :cookie-bytes bytes?)
   ;; Q: What makes sense for the real return value?
+  ;; It's a Response body. So lots.
+  ;; handlers depends on this, so we can't use the specs
+  ;; defined in there.
+  ;; That's another reason to move them.
   :ret (s/nilable #(instance? java.io.File %)))
 (defn get-code-for-world
   [sessions actual-session-id world-key cookie-bytes]
@@ -675,7 +679,7 @@
         (println "Missing session key\n"
                  actual-session-id "a" (class actual-session-id)
                  "\namong")
-        (doseq [session-key (sessions/get-by-state ::sessions/active)]
+        (doseq [session-key (sessions/get-by-state sessions ::sessions/active)]
           (println session-key "a" (class session-key)))
         (throw (ex-info "Trying to fork World for missing session"
                         {::sessions/sessions sessions

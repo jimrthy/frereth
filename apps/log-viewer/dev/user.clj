@@ -1,12 +1,5 @@
 (ns user
-  ;; byte-streams.graph is failing with a syntax error at line 108
-  ;; because there's no such var, s/->source.
-  ;; Where s is the manifold.stream ns.
-  ;; I can require that with no problem.
-  ;; Trying to load byte-streams fails because of the failure
-  ;; in byte-streams.graph.
-  ;; This is...odd.
-  (:require [aleph.http.server :as http-server]
+  (:require [aleph.netty :refer (AlephServer)]
             [aleph.udp :as udp]
             [backend.main :as main]
             [backend.web.routes :as routes]
@@ -222,6 +215,11 @@
   (-> ig-state/system :backend.web.service/web-service :io.pedestal.http/interceptors first)
   (-> ig-state/system :backend.web.service/web-service :io.pedestal.http/interceptors (nth 4))
   (-> ig-state/system :backend.web.service/web-service :io.pedestal.http/interceptors (nth 4) class reflect/type-reflect)
+  (-> ig-state/system :backend.web.service/web-service :io.pedestal.http/server)
+  (-> ig-state/system :backend.web.service/web-service :io.pedestal.http/server deref class)
+  (->> ig-state/system :backend.web.service/web-service :io.pedestal.http/server deref
+       (satisfies? AlephServer))
+  aleph.netty$start_server$reify__30279
   (-> ig-state/system
       :shared.lamport/clock
       deref)
@@ -328,23 +326,4 @@
       ::sessions/session-atom
       deref
       (sessions/get-by-state ::sessions/active))
-  )
-
-(comment
-  (def my-server (http-server/start-server (fn [request]
-                                             {:status 200
-                                              :body (with-out-str (pprint request))})
-                                           {:host "127.0.0.1"
-                                            :port 10556}))
-  my-server
-  (let [reflection (reflect/reflect my-server)]
-    (comment
-      (keys reflection)
-      (:flags reflection)
-      (:base reflection))
-    (->> reflection
-         :members
-         (map :name)))
-  (.close my-server)
-  (.start my-server)
   )
