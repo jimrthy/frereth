@@ -162,6 +162,11 @@
                                    :backend.system/socket {:backend.system/server-port server-port})))
   server
   (keys server)
+  ;; Send a basic log message
+  (let [logger (::weald/logger server)
+        log-state (log/init ::repl-test)]
+    (log/flush-logs! logger (log/debug log-state ::repl "Just checking")))
+  ;; Reflect into system
   (:server.networking/server server)
   (-> server :server.networking/server keys)
   (-> server :server.networking/server :server.networking/cp-server keys)

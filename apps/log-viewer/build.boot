@@ -100,7 +100,8 @@
                             [metosin/boot-alt-test "0.3.2" :scope "test"]
                             [metosin/boot-deps-size "0.1.0" :scope "test"]
                             ;; Q: How does 0.6.0 pan out?
-                            [nrepl "0.5.3" :exclusions [org.clojure/clojure]]
+                            #_[nrepl "0.5.3" :exclusions [org.clojure/clojure]]
+                            [nrepl "0.6.0" :exclusions [org.clojure/clojure]]
                             [org.clojure/clojure "1.10.0"]
                             [org.clojure/clojurescript "1.10.520" :scope "test" :exclusions [commons-codec
                                                                                              com.cognitect/transit-clj

@@ -4,7 +4,6 @@
   These include the web/renderer, client, and server."
   (:require [aleph.udp :as udp]
             [backend.web.routes :as routes]
-            [backend.web.server]
             [backend.web.service]
             [client
              [networking :as client-net]
@@ -186,6 +185,7 @@
                                     ;; required
                                     ;; FIXME: Just store the logger instance.
                                     ::weald/logger (ig/ref ::weald/logger)
+                                    ;; FIXME: Can this use a network state?
                                     :server.networking/my-name server-name
                                     :server.networking/socket (ig/ref ::server-socket)}
                                    (::server opts))
