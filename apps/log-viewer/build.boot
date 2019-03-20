@@ -100,7 +100,7 @@
                             [metosin/boot-alt-test "0.3.2" :scope "test"]
                             [metosin/boot-deps-size "0.1.0" :scope "test"]
                             ;; Q: How does 0.6.0 pan out?
-                            #_[nrepl "0.5.3" :exclusions [org.clojure/clojure]]
+                            ;; A: This is now the minimum requirement for CIDER.
                             [nrepl "0.6.0" :exclusions [org.clojure/clojure]]
                             [org.clojure/clojure "1.10.0"]
                             [org.clojure/clojurescript "1.10.520" :scope "test" :exclusions [commons-codec
@@ -206,6 +206,7 @@
       :scm         {:url "https://github.com/jimrthy/frereth"}
       :license     {"Eclipse Public License"
                     "http://www.eclipse.org/legal/epl-v10.html"}}
+ repl {:middleware '[cider.piggieback/wrap-cljs-repl]}
  repl-env {:ip "0.0.0.0"}
  sass {:source-map true}
  ;; Either Weasel or CIDER ignores this setting. Need to run

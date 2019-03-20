@@ -29,19 +29,16 @@ At the command-line:
 
 ### CIDER
 
-Open the connection (theoretically):
+Open the connection from the dev/user.clj ns/file.
 
-    M-x cider-connect    ; specify port 43043 when prompted
-    boot.user> (start-repl)
+    M-x cider-connect    ; specify localhost:43043 when prompted
 
-That should open a new browser tab running your app.
+This starts you in the user ns.
 
-The "new browser tab" part was annoying enough that I tend to start the
-top-level System manually:
+TODO: Do you need to compile the file before you can start using it?
 
-    boot.user> (require 'user)
-    boot.user> (in-ns 'user)
-    user> (setup-monitor! {})
+    user> (setup-monitor! {:backend.system/routes {::routes/debug? true}
+                           :backend.system/web-server {:backend.web.service/debug? true}})
     user> (go)
 
 Then `M-x cider-connect-sibling-cljs` (the connection type is weasel)

@@ -180,7 +180,7 @@
 
 (defn cljs-repl
   ;; The last time I actually tried this, it opened a new browser window with
-  ;; instructions about writing and index.html.
+  ;; instructions about writing an index.html.
 
   ;; In practice, under cider and emacs, running cider-connect-sibling-cljs
   ;; and choosing the weasel REPL type, then reloading the web page works fine.
