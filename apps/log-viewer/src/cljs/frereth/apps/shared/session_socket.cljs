@@ -149,15 +149,15 @@
 
       :frereth/forward
       (if-let [world (world/get-world-in-state worlds world-key ::world/active)]
-        (if-let [worker (::worker world)]
+        (if-let [worker (:frereth/worker world)]
           (.postMessage worker (serial/serialize body))
-          (console.error "Message for"
+          (console.error "Message for\n"
                          world-key
                          "in"
                          envelope
-                         ". Missing worker"
+                         "\nMissing worker\n"
                          (keys world)
-                         "among" world))
+                         "\namong\n" world))
         ;; This should be impossible: it will throw an exception
         (console.error "Missing world" world-key "inside" worlds)))))
 

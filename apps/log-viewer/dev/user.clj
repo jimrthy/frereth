@@ -1,22 +1,19 @@
 (ns user
-  ;; byte-streams.graph is failing with a syntax error at line 108
-  ;; because there's no such var, s/->source.
-  ;; Where s is the manifold.stream ns.
-  ;; I can require that with no problem.
-  ;; Trying to load byte-streams fails because of the failure
-  ;; in byte-streams.graph.
-  ;; This is...odd.
-  (:require [aleph.udp :as udp]
+  (:require [aleph.netty :refer (AlephServer)]
+            [aleph.udp :as udp]
             [backend.main :as main]
+            [backend.web.routes :as routes]
             [byte-streams :as b-s]
             [cider.piggieback]
+            [client.networking :as client-net]
             [client.registrar :as registrar]
             [cljs.repl.browser :as cljs-browser]
             [clojure.core.async :as async]
             [clojure
              [data :as data]
              [edn :as edn]
-             [pprint :refor (pprint)]
+             [pprint :refer (pprint)]
+             [reflect :as reflect]
              [repl :refer (apropos dir doc pst root-cause source)]]
             [clojure.java.io :as io]
             [clojure.spec.alpha :as s]
@@ -48,14 +45,11 @@
             [manifold
              [deferred :as dfrd]
              [stream :as strm]]
-            [integrant.core :as ig]
             [renderer.lib :as renderer]
-            [client.networking :as client-net]
-            [frereth.cp.client.state :as client-state]
             [renderer.sessions :as sessions]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;; Magic Numbers
+;;;; Magic Constants
 
 (def server-port 32156)
 
@@ -168,6 +162,11 @@
                                    :backend.system/socket {:backend.system/server-port server-port})))
   server
   (keys server)
+  ;; Send a basic log message
+  (let [logger (::weald/logger server)
+        log-state (log/init ::repl-test)]
+    (log/flush-logs! logger (log/debug log-state ::repl "Just checking")))
+  ;; Reflect into system
   (:server.networking/server server)
   (-> server :server.networking/server keys)
   (-> server :server.networking/server :server.networking/cp-server keys)
@@ -181,7 +180,7 @@
 
 (defn cljs-repl
   ;; The last time I actually tried this, it opened a new browser window with
-  ;; instructions about writing and index.html.
+  ;; instructions about writing an index.html.
 
   ;; In practice, under cider and emacs, running cider-connect-sibling-cljs
   ;; and choosing the weasel REPL type, then reloading the web page works fine.
@@ -199,19 +198,33 @@
   [opts]
   (require 'backend.system)
   (let [ctor (resolve 'backend.system/monitoring-ctor)]
+    (println "Root initialization")
     (ctor opts)))
 
 (defn setup-monitor! [opts]
   (ig-repl/set-prep! #(initialize opts)))
 
-(println "Run (setup-monitor! {}) and then (go) to start the Monitor")
+(println "Run (setup-monitor! {::routes/handler-map {::routes/debug? true}}) and then (go) to start the Monitor")
 
 (comment
-  (setup-monitor! {})
+  (setup-monitor! {:backend.system/routes {::routes/debug? true}
+                   :backend.system/web-server {:backend.web.service/debug? true}})
   (go)
+  (halt)
 
   (-> ig-state/system
       keys)
+  (-> ig-state/system :backend.web.service/web-service keys)
+  (-> ig-state/system :backend.web.service/web-service :io.pedestal.http/interceptors)
+  (->> ig-state/system :backend.web.service/web-service :io.pedestal.http/interceptors (map :name))
+  (-> ig-state/system :backend.web.service/web-service :io.pedestal.http/interceptors first)
+  (-> ig-state/system :backend.web.service/web-service :io.pedestal.http/interceptors (nth 4))
+  (-> ig-state/system :backend.web.service/web-service :io.pedestal.http/interceptors (nth 4) class reflect/type-reflect)
+  (-> ig-state/system :backend.web.service/web-service :io.pedestal.http/server)
+  (-> ig-state/system :backend.web.service/web-service :io.pedestal.http/server deref class)
+  (->> ig-state/system :backend.web.service/web-service :io.pedestal.http/server deref
+       (satisfies? AlephServer))
+  aleph.netty$start_server$reify__30279
   (-> ig-state/system
       :shared.lamport/clock
       deref)
@@ -241,6 +254,18 @@
        deref
        vals
        count)
+  (->> ig-state/system
+       ::sessions/session-atom
+       deref
+       vals
+       first
+       keys)
+  (->> ig-state/system
+       ::sessions/session-atom
+       deref
+       vals
+       first
+       :frereth.apps.shared.connection/web-socket)
   (->> ig-state/system
        ::sessions/session-atom
        deref

@@ -140,7 +140,7 @@
   ([world-map world-key connection-state pre-check]
    (if pre-check
      (log ::update-world-connection-state "Verifying legal FSM transition")
-     (log ::update-world-connection-state "nil FSM transition"))
+     (log ::update-world-connection-state "Always-legal FSM transition"))
    (let [current (get world-map world-key)
          next-state
          (if (or (not pre-check)

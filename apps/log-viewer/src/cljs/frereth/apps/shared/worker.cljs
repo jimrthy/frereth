@@ -44,6 +44,16 @@
         :as this}
        world-key worker event]
     (let [data (.-data event)
+          ;; This is dubious:
+          ;; We're calling deserialize here to get the dispatch
+          ;; value.
+          ;; However: the actual implementation method is almost
+          ;; required to call it again to get to any data.
+          ;; TODO: Move the deserialization up to the caller.
+          ;; Or, more realistically, make this a simple public
+          ;; function that does the deserialization and then
+          ;; calls a multimethod that can just dispatch on
+          ;; :frereth/action
           {:keys [:frereth/action]} (serial/deserialize data)]
       (console.log "Message from" worker ":" action)
       action)))
