@@ -13,8 +13,7 @@
             [io.pedestal.interceptor :as interceptor]
             [io.pedestal.interceptor.chain :as chain]
             [manifold.deferred :as dfrd]
-            [ring.core.protocols]
-            [bidi.ring :as ring])
+            [ring.core.protocols])
   (:import [java.net InetSocketAddress SocketAddress]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

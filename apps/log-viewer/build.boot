@@ -40,14 +40,15 @@
       default-version)))
 
 (def project 'com.frereth/log-viewer)
-(def version #_"0.1.0-SNAPSHOT" (deduce-version-from-git))
+(def version (deduce-version-from-git))
 
 (set-env! :dependencies   '[[adzerk/boot-cljs "2.1.5" :scope "test"]
                             [adzerk/boot-cljs-repl "0.4.0" :scope "test"]
                             [adzerk/boot-reload "0.6.0" :scope "test"]
                             ;; Q: Will this make any sense after switching the server
                             ;; to pedestal?
-                            [bidi "2.1.5"]
+                            ;; A: Probably not, except possibly on the browser. Eliminate it.
+                            #_[bidi "2.1.5"]
                             [boot/core "2.8.2" :scope "provided"]
                             [buddy/buddy-auth "2.1.0"]
                             [cider/piggieback "0.4.0" :scope "test" :exclusions [com.google.guava/guava
@@ -99,8 +100,6 @@
                             [io.pedestal/pedestal.immutant "0.5.5"]
                             [metosin/boot-alt-test "0.3.2" :scope "test"]
                             [metosin/boot-deps-size "0.1.0" :scope "test"]
-                            ;; Q: How does 0.6.0 pan out?
-                            ;; A: This is now the minimum requirement for CIDER.
                             [nrepl "0.6.0" :exclusions [org.clojure/clojure]]
                             [org.clojure/clojure "1.10.0"]
                             [org.clojure/clojurescript "1.10.520" :scope "test" :exclusions [commons-codec
@@ -139,7 +138,13 @@
                                                                  org.clojure/core.specs.alpha
                                                                  org.clojure/spec.alpha
                                                                  org.clojure/tools.namespace]]
-                            [javax.servlet/servlet-api "3.0-alpha-1"]  ; for ring multipart middleware
+                            ;; for ring multipart middleware
+                            ;; Q: Does this make sense under pedestal?
+                            #_[javax.servlet/servlet-api "3.0-alpha-1"]
+                            ;; Q: Is there any point to this?
+                            ;; A: It has some nice conveniences that I don't have to reinvent.
+                            ;; TODO: Look through its code and decide whether that's enough
+                            ;; value to justify its inclusion.
                             [metosin/ring-http-response "0.9.1" :exclusions [clj-time
                                                                              commons-codec
                                                                              commons-fileupload
@@ -150,6 +155,8 @@
                                                                              ring/ring-core]]
                             [org.clojure/tools.namespace "0.3.0-alpha4" :exclusions [org.clojure/clojure
                                                                                      org.clojure/tools.reader]]
+                            ;; Q: Is this worth retaining?
+                            ;; This defines things like protocols
                             [ring/ring-core "1.7.1" :exclusions [org.clojure/clojure]]
 
                             ;; Frontend
@@ -159,7 +166,7 @@
                             ;; It has something to do with the clojurescript watcher.
                             [http-kit "2.4.0-alpha3" :scope "test"]
                             [binaryage/devtools "0.9.10" :scope "test" :exclusions [org.clojure/tools.reader]]
-                            ;; Q: Why?
+                            ;; Q: Why do we need this?
                             [cljsjs/babel-standalone "6.18.1-3" :scope "test" :exclusions [org.clojure/clojure]]
                             ;; This has been upgraded to 4.3.1, but that version doesn't work
                             ;; (the file bootstrap/less/bootstrap.less no longer exists).
@@ -193,6 +200,7 @@
 ;; Really need to consider less vs. sass vs. garden
 (task-options!
  aot {:namespace   #{'backend.main}}
+ ;; Ironically, this is also where the clj REPL connects
  cljs-repl {:nrepl-opts {:bind "0.0.0.0" :port 43043}
             :ip "0.0.0.0"}
  jar {:file        (str "frereth-log-viewer-" version ".jar")
@@ -207,12 +215,12 @@
       :license     {"Eclipse Public License"
                     "http://www.eclipse.org/legal/epl-v10.html"}}
  repl {:middleware '[cider.piggieback/wrap-cljs-repl]}
- repl-env {:ip "0.0.0.0"}
+ repl-env {:ip "0.0.0.0"}  ; Q: Is this still needed?
  sass {:source-map true}
- ;; Either Weasel or CIDER ignores this setting. Need to run
- ;; (start-repl) manually and then open a browser connection
- ;; to http://localhost:10555/index
- start-repl {:ip "0.0.0.0" :port 9001})
+ ;; Q: Is this setting useful?
+ ;; (This is the value for piggieback. I'm just not sure that
+ ;; it comes from here)
+ #_#_start-repl {:ip "0.0.0.0" :port 9001})
 
 (deftask check-conflicts
   "Verify there are no dependency conflicts."
