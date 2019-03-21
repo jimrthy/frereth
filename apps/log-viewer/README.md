@@ -33,9 +33,7 @@ Open the connection from the dev/user.clj ns/file.
 
     M-x cider-connect    ; specify localhost:43043 when prompted
 
-This starts you in the user ns.
-
-TODO: Do you need to compile the file before you can start using it?
+This starts you in the user ns. Use `C-c C-k` to compile it.
 
     user> (setup-monitor! {:backend.system/routes {::routes/debug? true}
                            :backend.system/web-server {:backend.web.service/debug? true}})

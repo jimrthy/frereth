@@ -45,10 +45,6 @@
 (set-env! :dependencies   '[[adzerk/boot-cljs "2.1.5" :scope "test"]
                             [adzerk/boot-cljs-repl "0.4.0" :scope "test"]
                             [adzerk/boot-reload "0.6.0" :scope "test"]
-                            ;; Q: Will this make any sense after switching the server
-                            ;; to pedestal?
-                            ;; A: Probably not, except possibly on the browser. Eliminate it.
-                            #_[bidi "2.1.5"]
                             [boot/core "2.8.2" :scope "provided"]
                             [buddy/buddy-auth "2.1.0"]
                             [cider/piggieback "0.4.0" :scope "test" :exclusions [com.google.guava/guava
@@ -138,9 +134,6 @@
                                                                  org.clojure/core.specs.alpha
                                                                  org.clojure/spec.alpha
                                                                  org.clojure/tools.namespace]]
-                            ;; for ring multipart middleware
-                            ;; Q: Does this make sense under pedestal?
-                            #_[javax.servlet/servlet-api "3.0-alpha-1"]
                             ;; Q: Is there any point to this?
                             ;; A: It has some nice conveniences that I don't have to reinvent.
                             ;; TODO: Look through its code and decide whether that's enough
@@ -173,7 +166,6 @@
                             ;; TODO: Consider changing this and whatever depends on it.
                             [org.webjars/bootstrap "3.3.7-1"]
                             ;; SASS
-                            #_[org.webjars.bower/bootstrap "4.1.3" :exclusions [org.webjars.bower/jquery]]
                             [org.webjars.bower/bootstrap "4.3.1" :exclusions [org.webjars.bower/jquery]]]
           :project project
           ;; Q: Do I want to add "resources" to this?
@@ -216,11 +208,7 @@
                     "http://www.eclipse.org/legal/epl-v10.html"}}
  repl {:middleware '[cider.piggieback/wrap-cljs-repl]}
  repl-env {:ip "0.0.0.0"}  ; Q: Is this still needed?
- sass {:source-map true}
- ;; Q: Is this setting useful?
- ;; (This is the value for piggieback. I'm just not sure that
- ;; it comes from here)
- #_#_start-repl {:ip "0.0.0.0" :port 9001})
+ sass {:source-map true})
 
 (deftask check-conflicts
   "Verify there are no dependency conflicts."
@@ -265,8 +253,6 @@
    (sift :to-asset #{#"^js/.*"})
    ;; Write the resources to filesystem for dev server
    (target :dir #{"dev-output"})
-   ;; TODO: Experiment with this when I get web workers to compile correctly
-   #_(repl :server true)
    (if speak
      (boot.task.built-in/speak)
      identity)))

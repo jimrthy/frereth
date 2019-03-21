@@ -62,6 +62,7 @@
     ;; cljs.
     ;; (It is, but it still seems like overkill for these purposes)
     ;; On the other hand...this approach should be fast.
+    ;; Q: Worth switching to a Pedestal router/event chain?
     (condp = action
       :frereth/ack-forked
       (if-let [world (world/get-world-in-state worlds

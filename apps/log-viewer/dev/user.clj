@@ -133,6 +133,7 @@
     (ig/init config)))
 
 (comment
+  ;; Sample code for exploring what we have now
   ig-state/system
   (keys ig-state/system)
   (-> ig-state/system
@@ -152,9 +153,10 @@
   ;; Experiment to see what the smallest use-case really looks like.
   (def sample-port (udp/socket {:port 47659}))
   @sample-port
-  (.close @sample-port)
+  (.close @sample-port))
 
-  ;;; To actually put that to use and create a server
+;;; To actually put that to use and create a server
+(comment
   (def server-cfg (build-server-cfg ig-state/system))
   server-cfg
   (keys server-cfg)
@@ -165,7 +167,8 @@
   ;; Send a basic log message
   (let [logger (::weald/logger server)
         log-state (log/init ::repl-test)]
-    (log/flush-logs! logger (log/debug log-state ::repl "Just checking")))
+    (log/flush-logs! logger (log/debug log-state ::repl "Just checking"))))
+(comment
   ;; Reflect into system
   (:server.networking/server server)
   (-> server :server.networking/server keys)
@@ -204,7 +207,9 @@
 (defn setup-monitor! [opts]
   (ig-repl/set-prep! #(initialize opts)))
 
-(println "Run (setup-monitor! {::routes/handler-map {::routes/debug? true}}) and then (go) to start the Monitor")
+(println "Run (setup-monitor! {:backend.system/routes {::routes/debug? true}
+                 :backend.system/web-server {:backend.web.service/debug? true}})
+ and then (go) to start the Monitor")
 
 (comment
   (setup-monitor! {:backend.system/routes {::routes/debug? true}
