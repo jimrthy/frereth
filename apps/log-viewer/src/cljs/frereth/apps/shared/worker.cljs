@@ -19,7 +19,6 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Specs
 
-;; This is actually an instance of js/WebWorker
 (s/def ::web-worker #(= js/Worker (type %)))
 
 (s/def ::worker-instance (s/keys :req [:frereth/cookie
@@ -38,25 +37,12 @@
                                ::web-socket/wrapper
                                ::workers]))
 
-(defmulti on-worker-message
+(defmulti handle-worker-message
   "Cope with message from Worker"
-  (fn [{:keys [::web-socket/wrapper]
-        :as this}
-       world-key worker event]
-    (let [data (.-data event)
-          ;; This is dubious:
-          ;; We're calling deserialize here to get the dispatch
-          ;; value.
-          ;; However: the actual implementation method is almost
-          ;; required to call it again to get to any data.
-          ;; TODO: Move the deserialization up to the caller.
-          ;; Or, more realistically, make this a simple public
-          ;; function that does the deserialization and then
-          ;; calls a multimethod that can just dispatch on
-          ;; :frereth/action
-          {:keys [:frereth/action]} (serial/deserialize data)]
-      (console.log "Message from" worker ":" action)
-      action)))
+  ;; Q: Is this even worth using a multi-method?
+  ;; It's very tempting to use a 1-way Pedestal event chain
+  (fn [this action world-key worker event data]
+    action))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Internal Implementation
@@ -179,41 +165,36 @@
       (catch :default ex
         (console.error "Sending message failed:" ex)))))
 
-(defmethod on-worker-message :default
+(defmethod handle-worker-message :default
   [{:keys [:web-socket/wrapper]
     :as this}
-   world-key worker event]
-  (let [data (.-data event)
-        {:keys [::web-socket/socket]} wrapper
-        {:keys [:frereth/action]
-         :as raw-message} (serial/deserialize data)]
-    (console.error "Unhandled action:" action
-                   "\nfrom world:" world-key)))
+   action world-key worker event raw-message]
+  (console.error "Unhandled action:" action
+                 "\nfrom world:" world-key))
 
-(defmethod on-worker-message :frereth/forked
+(defmethod handle-worker-message :frereth/forked
   [{:keys [::web-socket/wrapper
            ::session/manager]
     :as this}
-   world-key worker event]
+   action world-key worker event raw-message]
   (let [worlds (session/get-worlds manager)
         {:keys [::world/cookie]
          :as world-state} (world/get-world worlds
                                            world-key)]
     (if cookie
-      (let [data (.-data event)
-            raw-message (serial/deserialize data)
-            decorated (assoc raw-message
+      (let [decorated (assoc raw-message
                              :frereth/cookie cookie
                              :frereth/pid world-key)
             {:keys [::web-socket/socket]} wrapper]
         (send-message! this
                        world-key
                        ;; send-message! will serialize this again.
-                       ;; Which is wasteful.
+                       ;; Which seems wasteful.
                        ;; Would be better to just have this :action as
                        ;; a tag, followed by the body.
+                       ;; Except that we have added details to the value
                        #_data
-                       ;; But that's premature optimization.
+                       ;; Anyway, that's premature optimization.
                        ;; Worry about that detail later.
                        ;; Even though this is the boundary area where
                        ;; it's probably the most important.
@@ -225,71 +206,39 @@
                      "\nin" worlds
                      "\nfrom" this))))
 
-(defmethod on-worker-message :frereth/render
-  [this world-key worker event]
-  (let [data (.-data event)
-        {:keys [:frereth/action]
-         :as raw-message} (serial/deserialize data)
-        dom (sanitize-scripts worker
+(defmethod handle-worker-message :frereth/render
+  [this action world-key worker event raw-message]
+  (let [dom (sanitize-scripts worker
                               (:frereth/body raw-message))]
     (r/render-component [(constantly dom)]
                         (js/document.getElementById "app"))))
 
-;;; FIXME: Make this go away
-(defn on-worker-message-obsolete
-  "Cope with message from Worker"
-  [{:keys [::session/manager
-           :frereth/worlds
-           ::web-socket/wrapper]
+(s/fdef on-worker-message
+  :args (s/cat :this ::manager
+               :world-key :frereth/world-key
+               :worker ::worker-instance
+               ;; Q: What is this?
+               :event any?))
+(defn on-worker-message
+  "Dispatch message from Worker"
+  [{:keys [::web-socket/wrapper]
     :as this}
    world-key worker event]
-  (let [data (.-data event)
-        {:keys [::web-socket/socket]} wrapper]
-    (try
-      (let [{:keys [:frereth/action]
-             :as raw-message} (serial/deserialize data)]
-        (console.log "Message from" worker ":" action)
-        (condp = action
-          :frereth/render
-          (let [dom (sanitize-scripts worker
-                                      (:frereth/body raw-message))]
-            (r/render-component [(constantly dom)]
-                                (js/document.getElementById "app")))
-          :frereth/forked
-          (let [{:keys [::cookie]
-                 :as world-state} (world/get-world worlds
-                                                   world-key)
-                decorated (assoc raw-message
-                                 :frereth/cookie cookie
-                                 :frereth/pid world-key)]
-            (if cookie
-              (do
-                (send-message! this
-                               world-key
-                               ;; send-message! will
-                               ;; serialize this
-                               ;; again.
-                               ;; Which is wasteful.
-                               ;; Would be better to
-                               ;; just have this
-                               ;; :action as a tag,
-                               ;; followed by the
-                               ;; body.
-                               #_data
-                               ;; But that's premature
-                               ;; optimization.
-                               ;; Worry about that
-                               ;; detail later.
-                               ;; Even though this is
-                               ;; the boundary area
-                               ;; where it's probably
-                               ;; the most important.
-                               ;; (Well, not here. But in general)
-                               decorated)
-                (session/do-mark-forked manager world-key worker))
-              (console.error "Missing ::cookie among" world-state)))))
-      (catch :default ex
-        (console.error ex "Trying to deserialize" data)))))
+  (let [raw-data (.-data event)
+        ;; This is dubious:
+        ;; We're calling deserialize here to get the dispatch
+        ;; value.
+        ;; However: the actual implementation method is almost
+        ;; required to call it again to get to any data.
+        ;; TODO: Move the deserialization up to the caller.
+        ;; Or, more realistically, make this a simple public
+        ;; function that does the deserialization and then
+        ;; calls a multimethod that can just dispatch on
+        ;; :frereth/action
+        {:keys [:frereth/action]
+         :as data} (serial/deserialize raw-data)]
+    (console.log "Message from" worker ":" action)
+    (handle-worker-message this action world-key worker event data)))
 
 (s/fdef spawn-worker!
   :args (s/cat :crypto ::subtle-crypto
