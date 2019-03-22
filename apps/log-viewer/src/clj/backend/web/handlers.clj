@@ -86,6 +86,11 @@
             (let [dfrd-sock (http/websocket-connection request)]
               (assoc ctx
                      :response {:body (async/go
+                                        ;; The person who's probably taking over as
+                                        ;; the maintainer for aleph strongly dislikes
+                                        ;; let-flow.
+                                        ;; That seems like a sign that it's probably
+                                        ;; worth avoiding it.
                                         (dfrd/let-flow [websocket (dfrd/catch
                                                                       dfrd-sock
                                                                       (fn [_] nil))]
@@ -112,6 +117,7 @@
 ;; The ideas are so similar that it seems ridiculous at face
 ;; value.
 ;; That doesn't mean that it isn't worth contemplating.
+;; Because, after all, they're totally distinct.
 (defn create-world-interceptor
   "This is really Step 2 of a World's life cycle.
 

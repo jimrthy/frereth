@@ -224,17 +224,12 @@
   [{:keys [::web-socket/wrapper]
     :as this}
    world-key worker event]
+  ;; I'd really like to feed this through a pedestal interceptor chain.
+  ;; Since that's currently server-side only, I'll probably have to
+  ;; bring bidi back into the mix.
+  ;; Then again, there aren't really enough variations to justify
+  ;; that.
   (let [raw-data (.-data event)
-        ;; This is dubious:
-        ;; We're calling deserialize here to get the dispatch
-        ;; value.
-        ;; However: the actual implementation method is almost
-        ;; required to call it again to get to any data.
-        ;; TODO: Move the deserialization up to the caller.
-        ;; Or, more realistically, make this a simple public
-        ;; function that does the deserialization and then
-        ;; calls a multimethod that can just dispatch on
-        ;; :frereth/action
         {:keys [:frereth/action]
          :as data} (serial/deserialize raw-data)]
     (console.log "Message from" worker ":" action)

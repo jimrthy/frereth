@@ -15,7 +15,9 @@
             [frereth.apps.shared.specs]
             [frereth.apps.shared.serialization :as serial]
             [renderer.sessions :as sessions]
-            [frereth.weald.logging :as log])
+            [frereth.weald.logging :as log]
+            [io.pedestal.interceptor :as intc]
+            [io.pedestal.interceptor.chain :as intc-chain])
   (:import clojure.lang.ExceptionInfo
            java.util.Base64))
 
@@ -114,6 +116,29 @@
      (println "Adding" value "to message")
      result)))
 
+(def request-deserializer
+  "Convert raw message string into a clojure map"
+  {:name ::request-deserializer
+   ;; This isn't quite right.
+   ;; To minimize code I have to rewrite, also need to
+   ;; convert the
+   :enter #(update % :request serial/deserialize)})
+
+(s/fdef build-ticker
+  :args (s/cat :clock ::lamport/clock)
+  ;; This returns an interceptor.
+  ;; FIXME: track down that definition
+  :ret any?)
+(defn build-ticker
+  "Update the Lamport clock"
+  [clock]
+  {:name :lamport-ticker
+   :enter (fn [{{remote-clock :frereth/lamport} :request
+                :as context}]
+            ;; Q: Do I want to handle it this way?
+            (update-in context [:request :frereth/lampont]
+                       (partial lamport/do-tick clock)))})
+
 (s/fdef on-message!
   :args (s/cat :session-atom ::sessions/session-atom
                :clock ::lamport/clock
@@ -124,12 +149,27 @@
 (defn on-message!
   "Deserialize and dispatch a raw message from browser"
   [session-atom clock session-id message-string]
+  ;; TODO: Break this up into a Pedestal interceptor chain
+
   ;; It shouldn't be possible to get here if the session isn't
   ;; active.
   ;; It seems worth checking for that scenario out of paranoia.
   (if (sessions/get-active-session @session-atom session-id)
     (try
-      (let [{:keys [:frereth/body]
+      (let [terminators #{}  ; Q: Anything useful to put into here?
+            raw-interceptors [request-deserializer
+                              (build-ticker clock)
+                              ;; FIXME: Need to call a router,
+                              ;; which means I need route definitions.
+                              ]
+            ;; This isn't an HTTP request handler, so the details are
+            ;; a little different.
+            ;; Especially: use the :action as the request's :verb
+            context {:request message-string
+                     ::intc-chain/terminators terminators}
+            context (intc-chain/enqueue (map intc/interceptor
+                                             raw-interceptors))
+            {:keys [:frereth/body]
              remote-clock :frereth/lamport
              :as wrapper} (serial/deserialize message-string)
             local-clock (lamport/do-tick clock remote-clock)]
