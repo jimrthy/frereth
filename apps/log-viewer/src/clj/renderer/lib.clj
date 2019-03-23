@@ -86,7 +86,62 @@
         :as body}]
     action))
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; Interceptors
+
+(def request-deserializer
+  "Convert raw message string into a clojure map"
+  {:name ::request-deserializer
+   :enter (fn [context]
+            (update context :request
+                    (fn [request]
+                      (let [{:keys [:frereth/body]
+                             :as result} (serial/deserialize request)]
+                        (println (str ::request-deserializer
+                                      " handling\n"
+                                      body
+                                      ", a " (type body)))
+                        result))))})
+
+(s/fdef build-ticker
+  :args (s/cat :clock ::lamport/clock)
+  ;; This returns an interceptor.
+  ;; FIXME: track down that definition
+  :ret any?)
+(defn build-ticker
+  "Update the Lamport clock"
+  [clock]
+  {:name ::lamport-ticker
+   :enter (fn [{{remote-clock :frereth/lamport} :request
+                :as context}]
+            ;; Q: Do I want to handle it this way?
+            ;; (it associates the current clock-tick, rather
+            ;; than an actual clock)
+            (update-in context [:request :frereth/lamport]
+                       (partial lamport/do-tick clock)))})
+
+(def session-active?
+  "Is the invoked session active?"
+  {:name ::session-active?
+   :enter (fn [{:keys [::lamport/clock
+                       ::sessions/session-atom
+                       ::sessions/session-id]
+                :as context}]
+            ;; It shouldn't be possible to get here if the session isn't
+            ;; active.
+            ;; It seems worth checking for that scenario out of paranoia.
+            (if (sessions/get-active-session @session-atom session-id)
+              context
+              (do
+                (lamport/do-tick clock)
+                (throw (ex-info "Websocket message for inactive session. This should be impossible"
+                                (assoc context
+                                       ::sessions/active (keys (sessions/get-by-state @session-atom
+                                                                                      ::sessions/active))
+                                       ::sessions/pending (sessions/get-by-state @session-atom
+                                                                                 ::sessions/pending)))))))})
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Internal Implementation
 
 (s/fdef do-wrap-message
@@ -116,29 +171,6 @@
      (println "Adding" value "to message")
      result)))
 
-(def request-deserializer
-  "Convert raw message string into a clojure map"
-  {:name ::request-deserializer
-   ;; This isn't quite right.
-   ;; To minimize code I have to rewrite, also need to
-   ;; convert the
-   :enter #(update % :request serial/deserialize)})
-
-(s/fdef build-ticker
-  :args (s/cat :clock ::lamport/clock)
-  ;; This returns an interceptor.
-  ;; FIXME: track down that definition
-  :ret any?)
-(defn build-ticker
-  "Update the Lamport clock"
-  [clock]
-  {:name :lamport-ticker
-   :enter (fn [{{remote-clock :frereth/lamport} :request
-                :as context}]
-            ;; Q: Do I want to handle it this way?
-            (update-in context [:request :frereth/lampont]
-                       (partial lamport/do-tick clock)))})
-
 (s/fdef on-message!
   :args (s/cat :session-atom ::sessions/session-atom
                :clock ::lamport/clock
@@ -148,70 +180,62 @@
   :ret any?)
 (defn on-message!
   "Deserialize and dispatch a raw message from browser"
+  ;; This consumes messages from the websocket associated
+  ;; with public-key until that websocket closes.
   [session-atom clock session-id message-string]
-  ;; TODO: Break this up into a Pedestal interceptor chain
-
-  ;; It shouldn't be possible to get here if the session isn't
-  ;; active.
-  ;; It seems worth checking for that scenario out of paranoia.
-  (if (sessions/get-active-session @session-atom session-id)
-    (try
-      (let [terminators #{}  ; Q: Anything useful to put into here?
-            raw-interceptors [request-deserializer
-                              (build-ticker clock)
-                              ;; FIXME: Need to call a router,
-                              ;; which means I need route definitions.
-                              ]
-            ;; This isn't an HTTP request handler, so the details are
-            ;; a little different.
-            ;; Especially: use the :action as the request's :verb
-            context {:request message-string
-                     ::intc-chain/terminators terminators}
-            context (intc-chain/enqueue (map intc/interceptor
-                                             raw-interceptors))
-            {:keys [:frereth/body]
-             remote-clock :frereth/lamport
-             :as wrapper} (serial/deserialize message-string)
-            local-clock (lamport/do-tick clock remote-clock)]
-        (println (str "lib/on-message! handling\n"
-                      body
-                      ", a " (type body)))
-        ;; The actual point.
-        ;; It's easy to miss this in the middle of the error handling.
-        ;; Which is one reason this is worth keeping separate from the
-        ;; dispatching code.
-        ;; Doing this inside a swap! seems iffy.
-        ;; Realistically, dispatch should return something like a
-        ;; tuple of:
-        ;; a) the new state
-        ;; b) seq of functions to call to trigger side-effects
-        ;; That isn't quite right. The side-effecting functions
-        ;; could result in a different end state for this...call
-        ;; it a transaction.
-        ;; But it's better than having a big, synchronous
-        ;; transformation that seems very likely to either block
-        ;; updates or trigger multiple side-effects.
-        ;; (Q: Isn't it?)
-        ;; TODO: Review how atoms really work. Especially in terms
-        ;; of conflict resolution.
-        ;; Seriously. Get back to this.
-        (swap! session-atom dispatch clock session-id body))
-      (catch Exception ex
-        (println ex "trying to deserialize/dispatch" message-string)))
-    (do
-      (lamport/do-tick clock)
-      ;; This consumes messages from the websocket associated
-      ;; with public-key until that websocket closes.
-      (println "This should be impossible\n"
-               "No"
-               session-id
-               "\namong\n"
-               (keys (sessions/get-by-state @session-atom
-                                            ::sessions/active))
-               "\nPending:\n"
-               (sessions/get-by-state @session-atom
-                                      ::sessions/pending)
-               "\nat" @clock))))
+  ;; STARTED: Break this up into a Pedestal interceptor chain
+  (try
+    ;; TODO: Build the terminators/interceptors/routers elsewhere.
+    ;; It's very tempting to make the routes part of the specific
+    ;; session.
+    ;; Need something equivalent to create-server or create-servlet
+    ;; to set up the router.
+    ;; Don't want to use either of those, because it injects far
+    ;; too many interceptors that just don't fit here.
+    (let [terminators #{}  ; TODO: Find useful pieces to put in here
+          raw-interceptors [session-active?
+                            request-deserializer
+                            (build-ticker clock)
+                            ;; FIXME: Need to call a router,
+                            ;; which means I need route definitions.
+                            ]
+          ;; This isn't an HTTP request handler, so the details are
+          ;; a little different.
+          ;; Especially: use the :action as the request's :verb
+          context {::lamport/clock clock
+                   :request message-string
+                   ::sessions/session-atom session-atom
+                   ::sessions/session-id session-id
+                   ::intc-chain/terminators terminators
+                   ;; Need a router to replace dispatch
+                   }
+          context (intc-chain/enqueue (map intc/interceptor
+                                           raw-interceptors))]
+      ;; The actual point.
+      ;; It's easy to miss this in the middle of the error handling.
+      ;; Which is one reason this is worth keeping separate from the
+      ;; dispatching code.
+      ;; Doing this inside a swap! seems iffy.
+      ;; Realistically, dispatch should return something like a
+      ;; tuple of:
+      ;; a) the new state
+      ;; b) seq of functions to call to trigger side-effects
+      ;; That isn't quite right. The side-effecting functions
+      ;; could result in a different end state for this...call
+      ;; it a transaction.
+      ;; But it's better than having a big, synchronous
+      ;; transformation that seems very likely to either block
+      ;; updates or trigger multiple side-effects.
+      ;; (Q: Isn't it?)
+      ;; TODO: Review how atoms really work. Especially in terms
+      ;; of conflict resolution.
+      ;; Seriously. Get back to this.
+      (swap! session-atom dispatch clock session-id #_body)
+      (let [{:keys [:response]
+             :as context} (intc-chain/execute context)]
+        (throw (RuntimeException. "Need swap! that response into the correct session"))))
+    (catch Exception ex
+      (println ex "trying to deserialize/dispatch" message-string))))
 
 (s/fdef build-cookie
   :args (s/cat :session-id ::session-id
