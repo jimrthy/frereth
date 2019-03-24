@@ -5,6 +5,7 @@
             [clojure.spec.alpha :as s]
             [frereth.apps.shared.world :as world]
             [frereth.cp.shared.crypto :as crypto]
+            [io.pedestal.http.route :as route]
             [manifold
              [deferred :as dfrd]
              [stream :as strm]]
@@ -120,8 +121,8 @@
             (update-in context [:request :frereth/lamport]
                        (partial lamport/do-tick clock)))})
 
-(def session-active?
-  "Is the invoked session active?"
+(def session-extractor
+  "Pull the session out of the session atom"
   {:name ::session-active?
    :enter (fn [{:keys [::lamport/clock
                        ::sessions/session-atom
@@ -130,8 +131,10 @@
             ;; It shouldn't be possible to get here if the session isn't
             ;; active.
             ;; It seems worth checking for that scenario out of paranoia.
-            (if (sessions/get-active-session @session-atom session-id)
-              context
+            (if-let [session (sessions/get-active-session @session-atom session-id)]
+              (-> context
+                  (dissoc ::sessions/session-atom ::sessions/session-id)
+                  (assoc :frereth/session session))
               (do
                 (lamport/do-tick clock)
                 (throw (ex-info "Websocket message for inactive session. This should be impossible"
@@ -193,17 +196,67 @@
     ;; Don't want to use either of those, because it injects far
     ;; too many interceptors that just don't fit here.
     (let [terminators #{}  ; TODO: Find useful pieces to put in here
-          raw-interceptors [session-active?
+          ;; FIXME: need route definitions
+          ;; Also need an option, especially in debug mode, for this
+          ;; to be function that gets called each time.
+          processed-routes (route/expand-routes #_routes #{})
+          raw-interceptors [session-extractor
                             request-deserializer
                             (build-ticker clock)
-                            ;; FIXME: Need to call a router,
-                            ;; which means I need route definitions.
-                            ]
+                            ;; This brings up an interesting point.
+                            ;; Right now, I'm strictly basing dispatch
+                            ;; on the :action, which is basically the
+                            ;; HTTP verb.
+                            ;; At least, that's the way I've been
+                            ;; thinking about it.
+                            ;; Q: Would it make sense to get more
+                            ;; extensive about the options here?
+                            ;; Right now, the "verbs" amount to
+                            ;; :frereth/forked
+                            ;; :frereth/forking
+                            ;; And an error reporter for :default
+                            ;; The fact that there are so few options
+                            ;; for this makes me question this design
+                            ;; decision to feed those messages through
+                            ;; an interceptor chain.
+                            ;; This *is* a deliberately stupid app with
+                            ;; no real reason to provide feedback to the
+                            ;; server.
+                            ;; So...maybe there will be more options
+                            ;; along these lines in some future
+                            ;; iteration.
+                            ;; However...dragging this out for the sake
+                            ;; of hypothetical future benefit seems like
+                            ;; a really bad idea.
+                            ;; For now, just skip the idea of query-params.
+                            route/query-params
+                            ;; It might make sense to parameterize this,
+                            ;; but it doesn't seem likely.
+                            ;; If I do add the concept of a URI path
+                            ;; here, I don't see adding in path params.
+                            ;; This dispatch needs to happen fast.
+                            (route/router processed-routes :map-tree)]
           ;; This isn't an HTTP request handler, so the details are
           ;; a little different.
           ;; Especially: use the :action as the request's :verb
           context {::lamport/clock clock
                    :request message-string
+                   ;; Putting the session atom into here
+                   ;; seems like a bad idea.
+                   ;; dispatch currently pulls out the actual
+                   ;; session, if needed.
+                   ;; It seems wiser to extract it first and
+                   ;; pass the specific session value to the
+                   ;; handler.
+                   ;; That way there's no risk of cross-
+                   ;; pollination.
+                   ;; At the same time...realistically, this
+                   ;; should really start by restricting the
+                   ;; message to a specific world.
+                   ;; TODO: Think about locking this down
+                   ;; thoroughly.
+                   ;; But I need to get it working before I
+                   ;; worry about the next round of cleanup.
                    ::sessions/session-atom session-atom
                    ::sessions/session-id session-id
                    ::intc-chain/terminators terminators
@@ -233,6 +286,7 @@
       (swap! session-atom dispatch clock session-id #_body)
       (let [{:keys [:response]
              :as context} (intc-chain/execute context)]
+
         (throw (RuntimeException. "Need swap! that response into the correct session"))))
     (catch Exception ex
       (println ex "trying to deserialize/dispatch" message-string))))

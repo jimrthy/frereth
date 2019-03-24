@@ -266,7 +266,18 @@
                   ;; Ignore CORS for dev mode
                   ::http/allowed-origins {:creds true :allowed-origins (constantly true)}})
           http/default-interceptors
-          #_http/dev-interceptors  ;; Q: Do I want these?
+          ;; TODO: replace(?) middlewares/resource with
+          ;; (middlewares/fast-resource resource-path)
+          ;; see pedestal/service/src/io/pedestal/http.clj
+
+          ;; Q: Do I want these?
+          ;; A: There's io.pedestal.http.cors/dev-allow-origin and
+          ;; servlet-interceptor/exception-debug
+          ;; Even though I'm not using servlets, it seems like I might
+          ;; want both of those.
+          ;; Though dev-allow-origin sounds like it might be a bad
+          ;; idea (want to keep dev mode as close to prod as feasible)
+          #_http/dev-interceptors
           (update ::http/interceptors (fn [chain]
                                         (let [err-log (interceptor/interceptor {:name ::outer-error-logger
                                                                                 :error (fn [ctx ex]
