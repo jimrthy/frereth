@@ -74,7 +74,8 @@
   ;; Q: What should this spec?
   ;; The return value of the defmulti dispatcher?
   ;; Or the actual multi-method?
-  ;; Currently, this doesn't seem to be supported at all.
+  ;; Currently, defining a spec on a multimethod doesn't seem to be
+  ;; supported at all.
   :ret ::sessions/sessions)
 (defmulti dispatch
   "Browser sent message to a World associated with session-id"
@@ -85,7 +86,13 @@
        session-id  ; ::sessions/session-id
        {:keys [:frereth/action]
         :as body}]
+    ;; FIXME: This should go away
     action))
+
+;; Needing to do this smells.
+;; This means it should move into its own ns.
+;; Then again...so should pretty much everything else in here.
+(declare post-message!)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Interceptors
@@ -126,13 +133,15 @@
   {:name ::session-active?
    :enter (fn [{:keys [::lamport/clock
                        ::sessions/session-atom
-                       ::sessions/session-id]
+                       ::connection/session-id]
                 :as context}]
             ;; It shouldn't be possible to get here if the session isn't
             ;; active.
             ;; It seems worth checking for that scenario out of paranoia.
             (if-let [session (sessions/get-active-session @session-atom session-id)]
               (-> context
+                  ;; Interceptors that need the session-id can get it
+                  ;; from the session
                   (dissoc ::sessions/session-atom ::sessions/session-id)
                   (assoc :frereth/session session))
               (do
@@ -143,6 +152,156 @@
                                                                                       ::sessions/active))
                                        ::sessions/pending (sessions/get-by-state @session-atom
                                                                                  ::sessions/pending)))))))})
+
+(def world-forked
+  {:name ::world-forked
+   :enter (fn [{{:keys [::connection/session-id
+                        :frereth/worlds]
+                 :as session} :frereth/session
+                lamport ::lamport/clock
+                :as context}
+
+               {world-key :frereth/pid
+                :keys [:frereth/cookie]
+                :as params}]
+            ;; Once the browser has its worker up and running, we need to start
+            ;; interacting.
+            ;; Actually, there's an entire lifecycle here.
+            ;; It's probably worth contemplating the way React handles the entire
+            ;; idea (though it may not fit at all).
+            ;; Main point:
+            ;; This needs to start up a new System of Component(s) that
+            ;; :frereth/forking prepped.
+            (if-let [world (world/get-pending worlds world-key)]
+              (let [{actual-pid :frereth/pid
+                     actual-session :frereth/session-id
+                     constructor-key :frereth/world-ctor
+                     :as decrypted} (decode-cookie cookie)]
+                (if (and (= session-id actual-session)
+                         (= world-key actual-pid))
+                  (let [connector (registrar/lookup session-id constructor-key)
+                        world-stop-signal (gensym "frereth.stop.")
+                        client (connector world-stop-signal
+                                          ;; FIXME: Refactor this into its own
+                                          ;; top-level function to reduce some of
+                                          ;; the noise in here.
+                                          ;; Q: Where should that top-level function
+                                          ;; live? (that isn't rhetorical)
+                                          (fn [raw-message]
+                                            (if (not= raw-message world-stop-signal)
+                                              (post-message! session
+                                                             lamport
+                                                             world-key
+                                                             :frereth/forward
+                                                             raw-message)
+                                              (do
+                                                (post-message! session
+                                                               lamport
+                                                               world-key
+                                                               :frereth/disconnect
+                                                               true)
+                                                (sessions/deactivate-world sessions
+                                                                           session-id
+                                                                           world-key)))))]
+                    (post-message! session
+                                   lamport
+                                   world-key
+                                   :frereth/ack-forked)
+                    (sessions/activate-forking-world sessions
+                                                     session-id
+                                                     world-key
+                                                     client))
+                  ;; This could be a misbehaving World.
+                  ;; Or it could be a nasty bug in the rendering code.
+                  ;; Well, it would have to be a nasty bug for a World to misbehave
+                  ;; this way.
+                  ;; At this point, we should probably assume that the browser is
+                  ;; completely compromised and take drastic measures.
+                  ;; Notifying the user and closing the websocket to end the session
+                  ;; might be a reasonable start.
+                  (let [error-message
+                        (str "session/world mismatch\n"
+                             (cond
+                               (not= session-id actual-session) (str session-id
+                                                                     ", a "
+                                                                     (class session-id)
+                                                                     " != "
+                                                                     actual-session
+                                                                     ", a "
+                                                                     (class actual-session))
+                               :else (str world-key ", a " (class world-key)
+                                          " != "
+                                          actual-pid ", a " (class actual-pid)))
+                             "\nQ: notify browser?")]
+                    (println error-message)
+                    sessions)))
+              (do
+                (println "Need to make world lookup simpler. Could not find world")
+                (pprint {::active-sessions (sessions/get-by-state sessions
+                                                                  ::sessions/active)
+                         ::among params
+                         ::world-key world-key
+                         ::world-key-class (class world-key)})
+                sessions)))})
+
+(def world-forking
+  {:name ::world-forking
+   :enter (fn [{:keys []
+                lamport ::lamport/clock
+                :as context}
+               sessions
+
+               session-id
+               {:keys [:frereth/command
+                       ;; It seems like it would be better to make this explicitly a
+                       ;; :frereth/world-key instead.
+                       :frereth/pid]}]
+            (if (and command pid)
+              (when-let [session (sessions/get-active-session sessions session-id)]
+                (if-not (connection/get-world session pid)
+                  ;; TODO: Need to check with the Client registry
+                  ;; to verify that command is legal for the current
+                  ;; session (at the very least, this means authorization)
+                  (let [cookie (build-cookie session-id pid command)]
+                    (try
+                      (post-message! sessions
+                                     lamport
+                                     session-id
+                                     pid
+                                     :frereth/ack-forking
+                                     {:frereth/cookie cookie})
+                      (catch Exception ex
+                        (println "Error:" ex
+                                 "\nTrying to post :frereth/ack-forking to"
+                                 session-id
+                                 "\nabout"
+                                 pid)))
+                    ;; It's tempting to add the world to the session here.
+                    ;; Actually, there doesn't seem like any good reason
+                    ;; not to (and not earlier)
+                    ;; There are lots of places for things to break along
+                    ;; the way, but this is an important starting point.
+                    ;; It's also very tempting to set up an Actor model
+                    ;; sort of thing inside the Session to handle this
+                    ;; World that we're trying to create.
+                    ;; This makes me think this this is working at too high
+                    ;; a layer in the abstraction tree.
+                    ;; We should really be running something like update-in
+                    ;; with just the piece that's being changed here (in
+                    ;; this case, the appropriate Session).
+                    sessions)
+                  (do
+                    (println "Error: trying to re-fork pid" pid
+                             "\namong\n"
+                             sessions)
+                    sessions)))
+              (do
+                (println (str "Missing either/both of '"
+                              command
+                              "' or/and '"
+                              pid
+                              "'"))
+                sessions)))})
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Internal Implementation
@@ -195,11 +354,13 @@
     ;; to set up the router.
     ;; Don't want to use either of those, because it injects far
     ;; too many interceptors that just don't fit here.
-    (let [terminators #{}  ; TODO: Find useful pieces to put in here
+    (let [terminators #{}  ; Q: Is there anything useful to put in here?
           ;; FIXME: need route definitions
           ;; Also need an option, especially in debug mode, for this
           ;; to be function that gets called each time.
-          processed-routes (route/expand-routes #_routes #{})
+          routes #{["/" :frereth/forked world-forked]
+                   ["/" :frereth/forking world-forking]}
+          processed-routes (route/expand-routes routes)
           raw-interceptors [session-extractor
                             request-deserializer
                             (build-ticker clock)
@@ -228,7 +389,7 @@
                             ;; However...dragging this out for the sake
                             ;; of hypothetical future benefit seems like
                             ;; a really bad idea.
-                            ;; For now, just skip the idea of query-params.
+                            ;; For now, just skip the idea of url-params.
                             route/query-params
                             ;; It might make sense to parameterize this,
                             ;; but it doesn't seem likely.
@@ -283,11 +444,12 @@
       ;; TODO: Review how atoms really work. Especially in terms
       ;; of conflict resolution.
       ;; Seriously. Get back to this.
-      (swap! session-atom dispatch clock session-id #_body)
+      (swap! session-atom dispatch clock session-id message-string)
       (let [{:keys [:response]
              :as context} (intc-chain/execute context)]
-
-        (throw (RuntimeException. "Need swap! that response into the correct session"))))
+        (if response
+          (throw (RuntimeException. "Need to swap! that response into the correct session"))
+          (println "Unhandled action:" message-string))))
     (catch Exception ex
       (println ex "trying to deserialize/dispatch" message-string))))
 
@@ -349,8 +511,7 @@
     (serial/deserialize cookie-string)))
 
 (s/fdef post-real-message!
-  :args (s/cat :sessions ::sessions/sessions
-               :sesion-id :frereth/session-id
+  :args (s/cat :session ::sessions/session
                :world-key :frereth/world-key
                ;; This needs to be anything that we can cleanly
                ;; serialize
@@ -358,226 +519,71 @@
   :ret any?)
 (defn post-real-message!
   "Forward serialized value to the associated World"
-  [sessions session-id world-key wrapper]
+  [{:keys [::connection/session-id
+           ::connection/state
+           ::connection/web-socket]
+    :as session} world-key wrapper]
   (println (str "Trying to send "
                 wrapper
                 "\nto "
                 world-key
                 "\nin\n"
                 session-id))
-  (if-let [session (get sessions session-id)]
-    (if (= ::connection/active (::connection/state session))
-      (try
-        (let [envelope (serial/serialize wrapper)]
-          (try
-            (let [success (strm/try-put! (::connection/web-socket session)
-                                         envelope
-                                         500
-                                         ::timed-out)]
-              ;; FIXME: Add context about what we just tried to
-              ;; forward
-              (dfrd/on-realized success
-                                #(println "Forwarded:" %)
-                                #(println "Forwarding failed:" %)))
-            (catch Exception ex
-              (println "Message forwarding failed:" ex))))
-        (catch Exception ex
-          (println "Serializing message failed:" ex)))
-      (do
-        (println "Session not active")
-        (throw (ex-info "Trying to POST to inactive Session"
-                        {::all sessions
-                         ::connected (sessions/get-by-state sessions
-                                                            ::sessions/active)
-                         ::current session
-                         ::pending (sessions/get-by-state sessions
-                                                          ::sessions/pending)
-                         ::world-id session-id}))))
+  ;; Q: Would calling post! to an inactive session really be so
+  ;; terrible?
+  ;; A: Maybe not. But it doesn't make any sense.
+  (if (= ::connection/active state)
+    (try
+      (let [envelope (serial/serialize wrapper)]
+        (try
+          (let [success (strm/try-put! web-socket
+                                       envelope
+                                       500
+                                       ::timed-out)]
+            ;; FIXME: Add context about what we just tried to
+            ;; forward
+            (dfrd/on-realized success
+                              #(println "Forwarded:" %)
+                              #(println "Forwarding failed:" %)))
+          (catch Exception ex
+            (println "Message forwarding failed:" ex))))
+      (catch Exception ex
+        (println "Serializing message failed:" ex)))
     (do
-      (println "No such session")
-      (throw (ex-info "Trying to POST to unconnected Session"
-                      {::pending (sessions/get-by-state sessions
-                                                        ::sessions/pending)
-                       ::world-id session-id
-                       ::connected (sessions/get-by-state sessions
-                                                          ::sessions/active)})))))
+      (println "Session not active")
+      (throw (ex-info "Trying to POST to inactive Session"
+                      {::connection/session session
+                       :frereth/world-key world-key})))))
 
 (s/fdef post-message!
-  :args (s/or :with-value (s/cat :sessions ::sessions/sessions
+  :args (s/or :with-value (s/cat :session :frereth/session
                                  :lamport ::lamport/clock
-                                 :session-id :frereth/session-id
                                  :world-key :frereth/world-key
                                  :action :frereth/action
                                  :value :frereth/body)
-              :sans-value (s/cat :sessions ::sessions/sessions
+              :sans-value (s/cat :session :frereth/session
                                  :lamport ::lamport/clock
-                                 :session-id :frereth/session-id
                                  :world-key :frereth/world-key
                                  :action :frereth/action))
   :ret any?)
 (defn post-message!
   "Marshalling wrapper around post-real-message!"
-  ([sessions lamport session-id world-key action value]
+  ([session lamport world-key action value]
    (println ::post-message! " with value " value)
    (let [wrapper (do-wrap-message lamport world-key action value)]
-     (post-real-message! sessions session-id world-key wrapper)))
-  ([sessions lamport session-id world-key action]
+     (post-real-message! session world-key wrapper)))
+  ([session lamport world-key action]
    (println ::post-message! " without value")
    (let [wrapper (do-wrap-message lamport world-key action)]
-     (post-real-message! sessions session-id world-key wrapper))))
+     (post-real-message! session world-key wrapper))))
 
 (defmethod dispatch :default
   [sessions
    lamport
    session-id
    body]
-  (println "Unhandled action:" body)
+
   sessions)
-
-(defmethod dispatch :frereth/forked
-  [sessions
-   lamport
-   session-id
-   {world-key :frereth/pid
-    :keys [:frereth/cookie]
-    :as params}]
-  ;; Once the browser has its worker up and running, we need to start
-  ;; interacting.
-  ;; Actually, there's an entire lifecycle here.
-  ;; It's probably worth contemplating the way React handles the entire
-  ;; idea (though it may not fit at all).
-  ;; Main point:
-  ;; This needs to start up a new System of Component(s) that
-  ;; :frereth/forking prepped.
-  (if-let [world (sessions/get-pending-world sessions session-id world-key)]
-    (let [{actual-pid :frereth/pid
-           actual-session :frereth/session-id
-           constructor-key :frereth/world-ctor
-           :as decrypted} (decode-cookie cookie)]
-      (if (and (= session-id actual-session)
-               (= world-key actual-pid))
-        (let [connector (registrar/lookup session-id constructor-key)
-              world-stop-signal (gensym "frereth.stop.")
-              client (connector world-stop-signal
-                                ;; FIXME: Refactor this into its own
-                                ;; top-level function to reduce some of
-                                ;; the noise in here.
-                                ;; Q: Where should that top-level function
-                                ;; live? (that isn't rhetorical)
-                                (fn [raw-message]
-                                  (if (not= raw-message world-stop-signal)
-                                    (post-message! sessions
-                                                   lamport
-                                                   session-id
-                                                   world-key
-                                                   :frereth/forward
-                                                   raw-message)
-                                    (do
-                                      (post-message! sessions
-                                                     lamport
-                                                     session-id
-                                                     world-key
-                                                     :frereth/disconnect
-                                                     true)
-                                      (sessions/deactivate-world sessions
-                                                                 session-id
-                                                                 world-key)))))]
-          (post-message! sessions
-                         lamport
-                         session-id
-                         world-key
-                         :frereth/ack-forked)
-          (sessions/activate-forking-world sessions
-                                           session-id
-                                           world-key
-                                           client))
-        ;; This could be a misbehaving World.
-        ;; Or it could be a nasty bug in the rendering code.
-        ;; Well, it would have to be a nasty bug for a World to misbehave
-        ;; this way.
-        ;; At this point, we should probably assume that the browser is
-        ;; completely compromised and take drastic measures.
-        ;; Notifying the user and closing the websocket to end the session
-        ;; might be a reasonable start.
-        (let [error-message
-              (str "session/world mismatch\n"
-                   (cond
-                     (not= session-id actual-session) (str session-id
-                                                           ", a "
-                                                           (class session-id)
-                                                           " != "
-                                                           actual-session
-                                                           ", a "
-                                                           (class actual-session))
-                     :else (str world-key ", a " (class world-key)
-                                " != "
-                                actual-pid ", a " (class actual-pid)))
-                   "\nQ: notify browser?")]
-          (println error-message)
-          sessions)))
-    (do
-      (println "Need to make world lookup simpler. Could not find world")
-      (pprint {::active-sessions (sessions/get-by-state sessions
-                                                        ::sessions/active)
-               ::among params
-               ::world-key world-key
-               ::world-key-class (class world-key)})
-      sessions)))
-
-(defmethod dispatch :frereth/forking
-  [sessions
-   lamport
-   session-id
-   {:keys [:frereth/command
-           ;; It seems like it would be better to make this explicitly a
-           ;; :frereth/world-key instead.
-           :frereth/pid]}]
-  (if (and command pid)
-    (when-let [session (sessions/get-active-session sessions session-id)]
-      (if-not (connection/get-world session pid)
-        ;; TODO: Need to check with the Client registry
-        ;; to verify that command is legal for the current
-        ;; session (at the very least, this means authorization)
-        (let [cookie (build-cookie session-id pid command)]
-          (try
-            (post-message! sessions
-                           lamport
-                           session-id
-                           pid
-                           :frereth/ack-forking
-                           {:frereth/cookie cookie})
-            (catch Exception ex
-              (println "Error:" ex
-                       "\nTrying to post :frereth/ack-forking to"
-                       session-id
-                       "\nabout"
-                       pid)))
-          ;; It's tempting to add the world to the session here.
-          ;; Actually, there doesn't seem like any good reason
-          ;; not to (and not earlier)
-          ;; There are lots of places for things to break along
-          ;; the way, but this is an important starting point.
-          ;; It's also very tempting to set up an Actor model
-          ;; sort of thing inside the Session to handle this
-          ;; World that we're trying to create.
-          ;; This makes me think this this is working at too high
-          ;; a layer in the abstraction tree.
-          ;; We should really be running something like update-in
-          ;; with just the piece that's being changed here (in
-          ;; this case, the appropriate Session).
-          sessions)
-        (do
-          (println "Error: trying to re-fork pid" pid
-                   "\namong\n"
-                   sessions)
-          sessions)))
-    (do
-      (println (str "Missing either/both of '"
-                    command
-                    "' or/and '"
-                    pid
-                    "'"))
-      sessions)))
 
 (s/fdef login-finalized!
   :args (s/cat :lamport ::lamport/clock

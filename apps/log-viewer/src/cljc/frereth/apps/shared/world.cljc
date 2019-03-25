@@ -231,6 +231,14 @@
   [world-map world-key]
   (get-world-in-state world-map world-key ::active))
 
+(s/fdef get-pending
+  :args (s/cat :world-map :frereth/worlds
+               :world-key :frereth/world-key)
+  :ret (s/nilable ::world))
+(defn get-pending
+  [world-map world-key]
+  (get-world-in-state world-map world-key ::pending))
+
 (s/fdef activate-forked
   :args (s/cat :world-map ::world-map
                :world-key ::world-key

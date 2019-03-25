@@ -9,6 +9,7 @@
             [clojure.core.async]
             [integrant.core :as ig]
             [io.pedestal.http :as http]
+            [io.pedestal.http.impl.servlet-interceptor :as servlet-interceptor]
             [io.pedestal.http.secure-headers :as secure-headers]
             [io.pedestal.interceptor :as interceptor]
             [io.pedestal.interceptor.chain :as chain]
@@ -319,7 +320,8 @@
                                                                                                  (println "Missing response in context:")
                                                                                                  (pprint ctx)
                                                                                                  ctx)))})]
-                                          (concat [err-log] (conj chain dfrd->async)))))))))
+                                          (concat [err-log servlet-interceptor/terminator-injector]
+                                                  (conj chain dfrd->async)))))))))
 
 (comment
   (let [base-service-map (build-basic-service-map {::routes/handler-map {::routes/routes (routes/build-pedestal-routes nil (atom nil))}})
