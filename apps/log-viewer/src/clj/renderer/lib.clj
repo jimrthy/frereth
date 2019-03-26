@@ -1,24 +1,26 @@
 (ns renderer.lib
   "Library functions specific for the web renderer"
-  (:require [client.registrar :as registrar]
-            [clojure.pprint :refer [pprint]]
-            [clojure.spec.alpha :as s]
-            [frereth.apps.shared.world :as world]
-            [frereth.cp.shared.crypto :as crypto]
-            [io.pedestal.http.route :as route]
-            [manifold
-             [deferred :as dfrd]
-             [stream :as strm]]
-            [clojure.java.io :as io]
-            [clojure.core.async :as async]
-            [frereth.apps.shared.connection :as connection]
-            [frereth.apps.shared.lamport :as lamport]
-            [frereth.apps.shared.specs]
-            [frereth.apps.shared.serialization :as serial]
-            [renderer.sessions :as sessions]
-            [frereth.weald.logging :as log]
-            [io.pedestal.interceptor :as intc]
-            [io.pedestal.interceptor.chain :as intc-chain])
+  (:require
+   [backend.event-bus :as bus]
+   [client.registrar :as registrar]
+   [clojure.pprint :refer [pprint]]
+   [clojure.spec.alpha :as s]
+   [frereth.apps.shared.world :as world]
+   [frereth.cp.shared.crypto :as crypto]
+   [io.pedestal.http.route :as route]
+   [manifold
+    [deferred :as dfrd]
+    [stream :as strm]]
+   [clojure.java.io :as io]
+   [clojure.core.async :as async]
+   [frereth.apps.shared.connection :as connection]
+   [frereth.apps.shared.lamport :as lamport]
+   [frereth.apps.shared.specs]
+   [frereth.apps.shared.serialization :as serial]
+   [renderer.sessions :as sessions]
+   [frereth.weald.logging :as log]
+   [io.pedestal.interceptor :as intc]
+   [io.pedestal.interceptor.chain :as intc-chain])
   (:import clojure.lang.ExceptionInfo
            java.util.Base64))
 
@@ -153,96 +155,126 @@
                                        ::sessions/pending (sessions/get-by-state @session-atom
                                                                                  ::sessions/pending)))))))})
 
+(defn handle-world-message!
+  [{:keys [::bus/event-bus
+           :request
+           :frereth/session]
+    lamport ::lamport/clock
+    :as context}
+   raw-message]
+  (let [{:keys [::connection/session-id
+                :frereth/world-key
+                ::world-stop-signal]} session]
+    (throw (RuntimeException. "Still not quite there"))
+    (if (not= raw-message world-stop-signal)
+      ;; TODO: This should be a call to bus/publish!
+      (post-message! session
+                     lamport
+                     world-key
+                     :frereth/forward
+                     raw-message)
+      (do
+        ;; It seems like it would be wiser to have the
+        ;; deactivate-world handler trigger this
+        ;; post-message!.
+        (post-message! session
+                       lamport
+                       world-key
+                       :frereth/disconnect
+                       true)
+        (bus/publish! event-bus ::deactivate-world
+                      (select-keys session
+                                   [::connection/session-id
+                                    :frereth/world-key]))))))
 (def world-forked
   {:name ::world-forked
    :enter (fn [{{:keys [::connection/session-id
                         :frereth/worlds]
                  :as session} :frereth/session
                 lamport ::lamport/clock
-                :as context}
-
-               {world-key :frereth/pid
-                :keys [:frereth/cookie]
-                :as params}]
-            ;; Once the browser has its worker up and running, we need to start
-            ;; interacting.
-            ;; Actually, there's an entire lifecycle here.
-            ;; It's probably worth contemplating the way React handles the entire
-            ;; idea (though it may not fit at all).
-            ;; Main point:
-            ;; This needs to start up a new System of Component(s) that
-            ;; :frereth/forking prepped.
-            (if-let [world (world/get-pending worlds world-key)]
-              (let [{actual-pid :frereth/pid
-                     actual-session :frereth/session-id
-                     constructor-key :frereth/world-ctor
-                     :as decrypted} (decode-cookie cookie)]
-                (if (and (= session-id actual-session)
-                         (= world-key actual-pid))
-                  (let [connector (registrar/lookup session-id constructor-key)
-                        world-stop-signal (gensym "frereth.stop.")
-                        client (connector world-stop-signal
-                                          ;; FIXME: Refactor this into its own
-                                          ;; top-level function to reduce some of
-                                          ;; the noise in here.
-                                          ;; Q: Where should that top-level function
-                                          ;; live? (that isn't rhetorical)
-                                          (fn [raw-message]
-                                            (if (not= raw-message world-stop-signal)
-                                              (post-message! session
-                                                             lamport
-                                                             world-key
-                                                             :frereth/forward
-                                                             raw-message)
-                                              (do
-                                                (post-message! session
-                                                               lamport
-                                                               world-key
-                                                               :frereth/disconnect
-                                                               true)
-                                                (sessions/deactivate-world sessions
-                                                                           session-id
-                                                                           world-key)))))]
-                    (post-message! session
-                                   lamport
-                                   world-key
-                                   :frereth/ack-forked)
-                    (sessions/activate-forking-world sessions
-                                                     session-id
-                                                     world-key
-                                                     client))
-                  ;; This could be a misbehaving World.
-                  ;; Or it could be a nasty bug in the rendering code.
-                  ;; Well, it would have to be a nasty bug for a World to misbehave
-                  ;; this way.
-                  ;; At this point, we should probably assume that the browser is
-                  ;; completely compromised and take drastic measures.
-                  ;; Notifying the user and closing the websocket to end the session
-                  ;; might be a reasonable start.
-                  (let [error-message
-                        (str "session/world mismatch\n"
-                             (cond
-                               (not= session-id actual-session) (str session-id
-                                                                     ", a "
-                                                                     (class session-id)
-                                                                     " != "
-                                                                     actual-session
-                                                                     ", a "
-                                                                     (class actual-session))
-                               :else (str world-key ", a " (class world-key)
-                                          " != "
-                                          actual-pid ", a " (class actual-pid)))
-                             "\nQ: notify browser?")]
-                    (println error-message)
-                    sessions)))
-              (do
-                (println "Need to make world lookup simpler. Could not find world")
-                (pprint {::active-sessions (sessions/get-by-state sessions
-                                                                  ::sessions/active)
-                         ::among params
-                         ::world-key world-key
-                         ::world-key-class (class world-key)})
-                sessions)))})
+                request :request
+                :as context}]
+            (let [{:keys [:params]} request
+                  {world-key :frereth/pid
+                   :keys [:frereth/cookie]} params]
+              ;; Once the browser has its worker up and running, we need to start
+              ;; interacting.
+              ;; Actually, there's an entire lifecycle here.
+              ;; It's probably worth contemplating the way React handles the entire
+              ;; idea (though it may not fit at all).
+              ;; Main point:
+              ;; This needs to start up a new System of Component(s) that
+              ;; :frereth/forking prepped.
+              (if-let [world (world/get-pending worlds world-key)]
+                (let [{actual-pid :frereth/pid  ; TODO: Refactor/rename this to :frereth/world-key
+                       actual-session :frereth/session-id
+                       constructor-key :frereth/world-ctor
+                       :as decrypted} (decode-cookie cookie)]
+                  (if (and (= session-id actual-session)
+                           (= world-key actual-pid))
+                    (let [connector (registrar/lookup session-id constructor-key)
+                          world-stop-signal (gensym "frereth.stop.")
+                          client (connector world-stop-signal
+                                            ;; FIXME: Refactor this into its own
+                                            ;; top-level function to reduce some of
+                                            ;; the noise in here.
+                                            ;; Q: Where should that top-level function
+                                            ;; live? (that isn't rhetorical)
+                                            (partial handle-world-message! (assoc context
+                                                                                  :frereth/world-key world-key
+                                                                                  ::world-stop-signal world-stop-signal)))]
+                      ;; TODO: publish! this message to the event bus.
+                      ;; Its handler should know enough to handle both
+                      ;; the post-message! and call to
+                      ;; activate-forking-world
+                      (throw (RuntimeException. "Nope"))
+                      (post-message! session
+                                     lamport
+                                     world-key
+                                     :frereth/ack-forked)
+                      ;; This needs to post another message instead
+                      ;; Better alt: Have a second subscriber on an internal
+                      ;; message bus that listens for
+                      ;; the :frereth/ack-forked.
+                      (post-message! session
+                                     lamport
+                                     world-key)
+                      {:response #(sessions/activate-forking-world sessions
+                                                                   session-id
+                                                                   world-key
+                                                                   client)})
+                    ;; This could be a misbehaving World.
+                    ;; Or it could be a nasty bug in the rendering code.
+                    ;; Well, it would have to be a nasty bug for a World to misbehave
+                    ;; this way.
+                    ;; At this point, we should probably assume that the browser is
+                    ;; completely compromised and take drastic measures.
+                    ;; Notifying the user and closing the websocket to end the session
+                    ;; might be a reasonable start.
+                    (let [error-message
+                          (str "session/world mismatch\n"
+                               (cond
+                                 (not= session-id actual-session) (str session-id
+                                                                       ", a "
+                                                                       (class session-id)
+                                                                       " != "
+                                                                       actual-session
+                                                                       ", a "
+                                                                       (class actual-session))
+                                 :else (str world-key ", a " (class world-key)
+                                            " != "
+                                            actual-pid ", a " (class actual-pid)))
+                               "\nQ: notify browser?")]
+                      (println error-message)
+                      sessions)))
+                (do
+                  (println "Need to make world lookup simpler. Could not find world")
+                  (pprint {::active-sessions (sessions/get-by-state sessions
+                                                                    ::sessions/active)
+                           ::among params
+                           ::world-key world-key
+                           ::world-key-class (class world-key)})
+                  sessions))))})
 
 (def world-forking
   {:name ::world-forking
@@ -335,8 +367,10 @@
 
 (s/fdef on-message!
   :args (s/cat :session-atom ::sessions/session-atom
-               :clock ::lamport/clock
                :session-id ::sessions/session-id
+               :clock ::lamport/clock
+               ;; FIXME: This needs an ::event-bus parameter
+               ;; also
                :message-string string?)
   ;; Called for side-effects
   :ret any?)
@@ -344,7 +378,7 @@
   "Deserialize and dispatch a raw message from browser"
   ;; This consumes messages from the websocket associated
   ;; with public-key until that websocket closes.
-  [session-atom clock session-id message-string]
+  [session-atom session-id clock  message-string]
   ;; STARTED: Break this up into a Pedestal interceptor chain
   (try
     ;; TODO: Build the terminators/interceptors/routers elsewhere.
@@ -420,9 +454,7 @@
                    ;; worry about the next round of cleanup.
                    ::sessions/session-atom session-atom
                    ::sessions/session-id session-id
-                   ::intc-chain/terminators terminators
-                   ;; Need a router to replace dispatch
-                   }
+                   ::intc-chain/terminators terminators}
           context (intc-chain/enqueue (map intc/interceptor
                                            raw-interceptors))]
       ;; The actual point.
@@ -633,8 +665,8 @@
                                        ;; That's really more relevant
                                        ;; for the world-state.
                                        session-atom
-                                       lamport
-                                       session-id)
+                                       session-id
+                                       lamport)
                               websocket)]
             ;; Cope with it closing
             (dfrd/on-realized connection-closed

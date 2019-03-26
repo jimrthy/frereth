@@ -3,6 +3,7 @@
 
   These include the web/renderer, client, and server."
   (:require [aleph.udp :as udp]
+            [backend.event-bus :as bus]
             [backend.web.routes :as routes]
             [backend.web.service]
             [client
@@ -209,6 +210,7 @@
                               (::routes opts))
    :backend.web.service/web-service (into {::routes/handler-map (ig/ref ::routes/handler-map)}
                                           (::web-server opts))
+   ::event-bus (::event-bus opts)
    ;; Surely both server and client need access to this.
    ;; The renderer/session manager definitely does.
    ;; TODO: Share it.
