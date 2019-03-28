@@ -9,9 +9,18 @@
    [manifold.bus :as bus]
    [manifold.stream :as strm]))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; Specs
+
 (s/def ::bus #(instance? (class (bus/event-bus)) %))
 
 (s/def ::event-bus (s/keys :req [::bus]))
+
+;; This is mostly a guess. It looks like any immutable value will work
+(s/def ::topic any?)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; Public
 
 (defmethod ig/init-key ::event-bus
   [_ {:keys [::stream-generator]
@@ -23,7 +32,11 @@
     :as event-bus} topic message]
   (bus/publish! bus topic message))
 
+(s/fdef subscribe
+  :args (s/cat :event-bus ::event-bus
+               :topic ::topic))
 (defn subscribe
   [{:keys [::bus]
-    :as event-bus} topic]
+    :as event-bus}
+   topic]
   (bus/subscribe bus topic))

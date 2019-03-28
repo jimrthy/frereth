@@ -23,6 +23,7 @@
              [crypto :as crypto]
              [specs :as shared-specs]]
             [frereth.apps.shared.lamport :as lamport]
+            [renderer.handlers :as handlers]
             [renderer.sessions :as sessions]
             [server.networking]))
 
@@ -206,11 +207,16 @@
   ;; should really be an atomic whole, but that's the basic reality of
   ;; what I'm building here.
   {::routes/handler-map (into {::lamport/clock (ig/ref ::lamport/clock)
-                               ::sessions/session-atom (ig/ref ::sessions/session-atom)}
+                               ::sessions/session-atom (ig/ref ::sessions/session-atom)
+                               ::bus/event-bus (ig/ref ::bus/event-bus)}
                               (::routes opts))
    :backend.web.service/web-service (into {::routes/handler-map (ig/ref ::routes/handler-map)}
                                           (::web-server opts))
-   ::event-bus (::event-bus opts)
+   ::bus/event-bus (::event-bus opts)
+   ::handlers/internal (into {::bus/event-bus (ig/ref ::bus/event-bus)
+                              ::lamport/clock (ig/ref ::lamport/clock)
+                              ::sessions/session-atom (ig/ref ::sessions/session-atom)}
+                             (::internal-handlers opts))
    ;; Surely both server and client need access to this.
    ;; The renderer/session manager definitely does.
    ;; TODO: Share it.
