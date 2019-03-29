@@ -32,6 +32,12 @@
                                         :frereth/lamport
                                         :frereth/world-key]))
 
+(s/def ::world-connection (s/keys :req [::bus/event-bus
+                                        ::lamport/clock
+                                        ::connection/session-id
+                                        :frereth/world-key
+                                        ::world-stop-signal]))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Internal Helpers
 
@@ -75,6 +81,18 @@
     ;; key before we encode it.
     ;; Q: Is it worth keeping a copy of the encoder around persistently?
     (.encode (Base64/getEncoder) world-system-bytes)))
+
+(s/fdef connect-handler
+  :args (s/cat :event-bus ::bus/event-bus
+               :signal keyword?
+               :handler (s/fspec :args (s/cat :message any?)
+                                 :ret any?))
+  :ret strm/stream?)
+(defn connect-handler
+  [event-bus signal handler]
+  (let [stream (bus/subscribe event-bus signal)]
+    (strm/consume handler stream)
+    stream))
 
 (s/fdef do-wrap-message
   :args (s/or :with-body (s/cat :lamport ::lamport/clock
@@ -179,6 +197,21 @@
 ;;;; These have access to things like the session atom
 ;;;; These probably belong in a generic frereth.apps.lib workspace.
 
+;;;; It's tempting to write a macro to generate these and the
+;;;; integrant methods.
+;;;; That's doable but seems dubious. We really need a data
+;;;; structure that maps the key names to function bodies
+;;;; et al.
+;;;; Then we could process those to generate the functions and
+;;;; methods we need.
+
+(defn handle-disconnected
+  [{:keys [::sessions/session-atom]}
+   {:keys [::connection/session-id
+           :frereth/world-key]}]
+  (swap! session-atom
+         #(sessions/deactivate-world % session-id world-key)))
+
 (defn handle-forked
   [{:keys [::sessions/session-atom]}
    {:keys [::client
@@ -275,37 +308,47 @@
              cookie-bytes "a" (class cookie-bytes))
     (serial/deserialize cookie-string)))
 
+(s/fdef handle-world-message!
+  :args (s/cat :world-connection ::world-connection
+               :global-bus ::bus/event-bus
+               ;; Q: Right?
+               :raw-message bytes?))
 (defn handle-world-message!
+  "Forward message from the browser to a world"
   [{:keys [::bus/event-bus
-           :request
-           :frereth/session]
-    lamport ::lamport/clock
-    :as context}
+           ::lamport/clock
+           ::world-stop-signal]
+    :as world-connection}
+   ;; This is really just for the sake of the stop
+   ;; notification
+   global-bus
    raw-message]
-  (let [{:keys [::connection/session-id
-                :frereth/world-key
-                ::world-stop-signal]} session]
-    (throw (RuntimeException. "Still not quite there"))
-    (if (not= raw-message world-stop-signal)
-      ;; TODO: This should be a call to bus/publish!
-      (post-message! session
-                     lamport
-                     world-key
-                     :frereth/forward
-                     raw-message)
-      (do
-        ;; It seems like it would be wiser to have the
-        ;; deactivate-world handler trigger this
-        ;; post-message!.
-        (post-message! session
-                       lamport
-                       world-key
-                       :frereth/disconnect
-                       true)
-        (bus/publish! event-bus ::deactivate-world
-                      (select-keys session
-                                   [::connection/session-id
-                                    :frereth/world-key]))))))
+  (lamport/do-tick clock)
+  (if (not= raw-message world-stop-signal)
+    ;; Just forward this along
+    (bus/publish! event-bus raw-message)
+    (do
+      ;; Tell the world that a browser connection has disconnected from.
+      ;; it.
+      ;; FIXME: Need to specify which connection.
+      ;; It's tempting to use the session-id.
+      ;; That temptation almost seems like a yellow, if not red, flag.
+      ;; It seems like it would be safer to give each world its own
+      ;; version of the session-id.
+      ;; Then maintain a map of "real" session-ids to what the world
+      ;; sees.
+      ;; This way, one world doesn't have any way to identify its
+      ;; sessions in other worlds.
+      (bus/publish! event-bus :frereth/disconnect)
+      ;; FIXME: This needs its own handler that can
+      ;; update the session atom to mark the world
+      ;; deactivated.
+      ;; Which means that we need both the session-id
+      ;; and world-key.
+      (bus/publish! global-bus :frereth/disconnect-world
+                    (select-keys world-connection
+                                 [::connection/session-id
+                                  :frereth/world-key])))))
 
 (def world-forked
   {:name ::world-forked
@@ -327,6 +370,7 @@
               ;; Main point:
               ;; This needs to start up a new System of Component(s) that
               ;; :frereth/forking prepped.
+              ;; Or however that's configured.
               (if-let [world (world/get-pending worlds world-key)]
                 (let [{actual-pid :frereth/pid  ; TODO: Refactor/rename this to :frereth/world-key
                        actual-session :frereth/session-id
@@ -334,19 +378,29 @@
                        :as decrypted} (decode-cookie cookie)]
                   (if (and (= session-id actual-session)
                            (= world-key actual-pid))
-                    (let [connector (registrar/lookup session-id constructor-key)
-                          world-stop-signal (gensym "frereth.stop.")
-                          client (connector world-stop-signal
-                                            (partial handle-world-message! (assoc context
-                                                                                  :frereth/world-key world-key
-                                                                                  ::world-stop-signal world-stop-signal)))]
-                      (bus/publish! event-bus
-                                    :frereth/ack-forked
-                                    (assoc (select-keys context
-                                                        [::connection/session
-                                                         ::lamport/clock])
-                                           :frereth/world-key world-key
-                                           ::client client)))
+                    (if-let [connector (registrar/lookup session-id constructor-key)]
+                      (let [world-stop-signal (gensym "frereth.stop.")
+                            ;; Q: Is there a better way to do this?
+                            world-bus (ig/init-key ::bus/event-bus {})
+                            client (connector world-stop-signal
+                                              (partial handle-world-message!
+                                                       {::bus/event-bus world-bus
+                                                        ::world-stop-signal world-stop-signal}
+                                                       event-bus))]
+                        (bus/publish! event-bus
+                                      :frereth/ack-forked
+                                      (assoc (select-keys context
+                                                          [::connection/session
+                                                           ::lamport/clock])
+                                             :frereth/world-key world-key
+                                             ::client client)))
+                      (let [error-message (str "Cookie for unregistered World"
+                                               "\nSession ID: " session-id
+                                               "\nConstructor Key: " constructor-key
+                                               ;; FIXME: This should be a Component in the System instead
+                                               "\nRegistry: " (with-out-str (pprint registrar/registry)))]
+                        (println error-message)
+                        context))
                     ;; This could be a misbehaving World.
                     ;; Or it could be a nasty bug in the rendering code.
                     ;; Well, it would have to be a nasty bug for a World to misbehave
@@ -558,8 +612,11 @@
   [_ {:keys [::bus/event-bus]
       :as component}]
   (assoc component
-         ::forked (bus/subscribe event-bus :frereth/ack-forked)))
+         ::disconnected (connect-handler event-bus :frereth/disconnect-world handle-disconnected)
+         ::forked (connect-handler event-bus :frereth/ack-forked handle-forked)))
 
 (defmethod ig/halt-key! ::internal
-  [_ {:keys [::forked]}]
-  (strm/close! forked))
+  [_ {:keys [::disconnected
+             ::forked]}]
+  (doseq [stream [disconnected forked]]
+    (strm/close! stream)))
