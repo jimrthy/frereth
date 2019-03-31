@@ -205,17 +205,71 @@
 ;;;; Then we could process those to generate the functions and
 ;;;; methods we need.
 
+;;; These seem dubious and extra-convoluted.
+;;; Having them as their own function makes total sense. But is it
+;;; really worth the extra convolution of keeping them isolated on an
+;;; event bus?
+
+;; If I do decide to do this, I really need to use it in conjunction
+;; with a macro that sets up these handlers and wires them into the
+;; integrant methods.
+;; Q: Are there any other places involved in setting this up? (The
+;; more there are, the more justification there is for this sort of
+;; approach).
+(defmacro defhandler
+  [handler-name handler-arg & handler-body]
+  `(defn ~handler-name
+     [~'{:keys [::client
+               ::lamport/clock
+               :frereth/world-key]
+        {:keys [::sessions/session-id]
+         :as session} ::connection/session}
+      ;; Syntax Q: How could I use handler-arg multiple times?
+      ~(first handler-arg)]
+     ~@handler-body))
+
+(comment
+  (macroexpand-1 '(defhandler handle-forked
+                    [{:keys [::connection/session-id
+                             :frereth/world-key]
+                      :as message}]
+                    (post-message! session
+                                   clock
+                                   world-key
+                                   :frereth/ack-forked)
+                    (sessions/activate-forking-world session-atom
+                                                     session-id
+                                                     world-key
+                                                     client)))
+(clojure.core/defn handle-forked [{:keys [:renderer.handlers/client :frereth.apps.shared.lamport/clock :frereth/world-key], {:keys [:renderer.sessions/session-id], :as session} :frereth.apps.shared.connection/session} {:keys [:frereth.apps.shared.connection/session-id :frereth/world-key], :as message}] (post-message! session clock world-key :frereth/ack-forked) (sessions/activate-forking-world session-atom session-id world-key client))
+
+  (defhandler handle-forked
+    [{:keys [::connection/session-id
+             :frereth/world-key]}]
+    (post-message! session
+                   clock
+                   world-key
+                   :frereth/ack-forked)
+    (sessions/activate-forking-world session-atom
+                                     session-id
+                                     world-key
+                                     client))
+)
+
 (defn handle-disconnected
   [{:keys [::sessions/session-atom]}
    {:keys [::connection/session-id
+           ;; It looks like I was planning to assign world-key as part
+           ;; of the first...whatever-it-is param.
+           ;; This is still very wobbly.
            :frereth/world-key]}]
   (swap! session-atom
          #(sessions/deactivate-world % session-id world-key)))
 
 (defn handle-forked
-  [{:keys [::sessions/session-atom]}
-   {:keys [::client
+  [{:keys [::client
            ::lamport/clock
+           ::sessions/session-atom
            :frereth/world-key]
     {:keys [::sessions/session-id]
      :as session} ::connection/session
