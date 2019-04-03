@@ -662,15 +662,83 @@
     (catch Exception ex
       (println ex "trying to deserialize/dispatch" message-string))))
 
-(defmethod ig/init-key ::internal
-  [_ {:keys [::bus/event-bus]
-      :as component}]
-  (assoc component
-         ::disconnected (connect-handler event-bus :frereth/disconnect-world handle-disconnected)
-         ::forked (connect-handler event-bus :frereth/ack-forked handle-forked)))
+;;; It seems like this shouldn't be this difficult.
+;;; The trick is that I need to generate a bunch of defhandler calls,
+;;; followed by rolling them up into the :ig/init- and :ig/halt-key!
+;;; methods.
 
-(defmethod ig/halt-key! ::internal
-  [_ {:keys [::disconnected
-             ::forked]}]
-  (doseq [stream [disconnected forked]]
-    (strm/close! stream)))
+;;; This approach...just no. Everything is wrong about it.
+(comment
+  ;; Incoming:
+  {::disconnected {::event :frereth/disconect-world
+                   ::handler-name handle-disconnected
+                   ::handler-body ((foo a)
+                                   (bar b))
+                   :handler-args [{:keys [::connection/session-id
+                                          :frereth/world-key]
+                                   :as message}]}
+   ;; ...
+   }
+  (defmacro wire-events
+    [event-map]
+    )
+  ;; Output:
+  (do
+    (defhandler handle-disconnected
+      [{:keys [::connection/session-id
+               :frereth/world-key]
+        :as message}]
+      (foo a) (bar b))
+    ;; other handlers...
+    (defmethod ig/init-key ::internal
+      [_ {:keys [::bus/event-bus]
+          :as componet}]
+      (assoc component
+             ::disconnected (connect-handler event-bus :frereth/disconnect-world handle-disconnected)
+             ;; ...
+             ))
+    (defmethod ig/hald-key! ::internal
+      [_ {:keys [::disconnected ;; ...
+                 ]}]
+      (doseq [stream [disconnected ;; ...
+                      ]]
+        (strm/close! stream)))
+    ))
+
+;;; Q: How about:
+(comment
+  (defroutes
+    #{{:frereth/disconnect-world [::disconnected
+                                  ;; This probably won't work:
+                                  ;; fn is a special form.
+                                  ;; And handler methods actually take 2
+                                  ;; args.
+                                  (fn [{:keys [::connection/session-id
+                                               :frereth/world-key]
+                                        :as message}]
+                                    (post-message! session
+                                                   clock
+                                                   world-key
+                                                   :frereth/ack-forked)
+                                    (sessions/activate-forking-world session-atom
+                                                                     session-id
+                                                                     world-key
+                                                                     client))]}
+    ;;;
+      }))
+
+(let [handlers {::disconnected [:frereth/disconnect-world
+                                handle-disconnected]
+                ::forked [:frereth/ack-forked handle-forked]}]
+  (defmethod ig/init-key ::internal
+    [_ {:keys [::bus/event-bus]
+        :as component}]
+    (reduce (fn [acc [tag [event-id handler]]]
+              (assoc acc tag (connect-handler event-bus event-id handler)))
+            component
+            handlers))
+
+  (defmethod ig/halt-key! ::internal
+    [_ component]
+    (doseq [tag (keys handlers)]
+      (strm/close! (tag component)))))
