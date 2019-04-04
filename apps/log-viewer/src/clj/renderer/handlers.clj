@@ -9,6 +9,7 @@
    [frereth.apps.shared.lamport :as lamport]
    [frereth.apps.shared.serialization :as serial]
    [frereth.apps.shared.world :as world]
+   [frereth.cp.shared.util :as util]
    [integrant.core :as ig]
    [io.pedestal.interceptor :as intc]
    [io.pedestal.interceptor.chain :as intc-chain]
@@ -199,85 +200,82 @@
 
 ;;;; It's tempting to write a macro to generate these and the
 ;;;; integrant methods.
-;;;; That's doable but seems dubious. We really need a data
-;;;; structure that maps the key names to function bodies
-;;;; et al.
-;;;; Then we could process those to generate the functions and
-;;;; methods we need.
+;;;; That's doable but doesn't seems worth the effort.
+;; Q: Are there any other places involved in setting this up?
+;; Or other places that need to do the same sort of thing?
+;;; (The
+;;; more there are, the more justification there is for fancier
+;;; macrology).
 
 ;;; These seem dubious and extra-convoluted.
 ;;; Having them as their own function makes total sense. But is it
 ;;; really worth the extra convolution of keeping them isolated on an
 ;;; event bus?
 
-;; If I do decide to do this, I really need to use it in conjunction
-;; with a macro that sets up these handlers and wires them into the
-;; integrant methods.
-;; Q: Are there any other places involved in setting this up? (The
-;; more there are, the more justification there is for this sort of
-;; approach).
 (defmacro defhandler
-  [handler-name handler-arg & handler-body]
-  `(defn ~handler-name
-     [~'{:keys [::client
-               ::lamport/clock
-               :frereth/world-key]
-        {:keys [::sessions/session-id]
-         :as session} ::connection/session}
-      ;; Syntax Q: How could I use handler-arg multiple times?
-      ~(first handler-arg)]
-     ~@handler-body))
+  [handler-name
+   ;; It's really tempting to try to combine message-spec
+   ;; and message-arg.
+   ;; After all, message-arg will pretty much always be the
+   ;; list of required keys...right?
+   message-spec
+   message-arg
+   & handler-body]
+  (let [real-handler-name handler-name]
+    `(do
+       (s/fdef ~real-handler-name
+         :args (s/cat :this ::internal
+                      ;; I think I've managed to jumble this
+                      ;; argument up hopelessly.
+                      ;; When I set these handlers up during
+                      ;; System startup, there is no good way
+                      ;; to assign it.
+                      ;; At the same time, adding its details
+                      ;; into every handler that needs it
+                      ;; seems unduly burdensome.
+                      ;; For now, that "every" means 3.
+                      ;; So worry about it later.
+                      ;; FIXME: This parameter doesn't exist
+                      ;; and must go away.
+                      :connection ::world-connection
+                      :message ~message-spec)
+         :ret any?)
+       (defn ~real-handler-name
+         [~'{:keys [::bus/event-bus
+                    ::lamport/clock
+                    ::connection/session-atom
+                    :frereth/world-key
+                    ::world-stop-signal]
+             {:keys [::sessions/session-id]
+              :as session} ::connection/session}
+          ~(first message-arg)]
+         ~@handler-body))))
 
-(comment
-  (macroexpand-1 '(defhandler handle-forked
-                    [{:keys [::connection/session-id
-                             :frereth/world-key]
-                      :as message}]
-                    (post-message! session
-                                   clock
-                                   world-key
-                                   :frereth/ack-forked)
-                    (sessions/activate-forking-world session-atom
-                                                     session-id
-                                                     world-key
-                                                     client)))
-(clojure.core/defn handle-forked [{:keys [:renderer.handlers/client :frereth.apps.shared.lamport/clock :frereth/world-key], {:keys [:renderer.sessions/session-id], :as session} :frereth.apps.shared.connection/session} {:keys [:frereth.apps.shared.connection/session-id :frereth/world-key], :as message}] (post-message! session clock world-key :frereth/ack-forked) (sessions/activate-forking-world session-atom session-id world-key client))
+(defhandler handle-disconnected
+  (s/keys :req [::connection/session-id :frereth/world-key])
+  [{supplied-session-id ::connection/session-id
+    supplied-world-key :frereth/world-key}]
+  (if (and (= session-id supplied-session-id)
+           (= world-key supplied-world-key))
+    (swap! session-atom
+           #(sessions/deactivate-world % session-id world-key))
+    (println (str "Disconnection mismatch. Trying to disconnect\n"
+                  (util/pretty supplied-world-key)
+                  "\ninstead of\n"
+                  (util/pretty world-key)
+                  "\ninside\n"
+                  (util/pretty session-id)
+                  "\ninstead of\n"
+                  (util/pretty supplied-session-id)))))
 
-  (defhandler handle-forked
-    [{:keys [::connection/session-id
-             :frereth/world-key]}]
-    (post-message! session
-                   clock
-                   world-key
-                   :frereth/ack-forked)
-    (sessions/activate-forking-world session-atom
-                                     session-id
-                                     world-key
-                                     client))
-)
 
-(defn handle-disconnected
-  [{:keys [::sessions/session-atom]}
-   {:keys [::connection/session-id
-           ;; It looks like I was planning to assign world-key as part
-           ;; of the first...whatever-it-is param.
-           ;; This is still very wobbly.
-           :frereth/world-key]}]
-  (swap! session-atom
-         #(sessions/deactivate-world % session-id world-key)))
-
-(defn handle-forked
+(defhandler handle-forked
+  (s/keys :req [::client
+                ::connection/session-id
+                :frereth/world-key])
   [{:keys [::client
-           ::lamport/clock
-           ::sessions/session-atom
-           :frereth/world-key]
-    {:keys [::sessions/session-id]
-     :as session} ::connection/session
-    :as message}]
-  ;; This needs to post another message instead
-  ;; Better alt: Have a second subscriber on an internal
-  ;; message bus that listens for
-  ;; the :frereth/ack-forked.
+           ::connection/session-id
+           :frereth/world-key]}]
   (post-message! session
                  clock
                  world-key
@@ -286,6 +284,37 @@
                                    session-id
                                    world-key
                                    client))
+
+(defhandler handle-forking
+  any?
+  [{:keys [::cookie
+           :frereth/world-key]}]
+  (try
+    ;; It's tempting to add the world to the session here.
+    ;; Actually, there doesn't seem like any good reason
+    ;; not to (if not earlier)
+    ;; There are lots of places for things to break along
+    ;; the way, but this is an important starting point.
+    ;; It's also very tempting to set up an Actor model
+    ;; sort of thing inside the Session to handle this
+    ;; World that we're trying to create.
+    ;; This makes me think this this is working at too high
+    ;; a layer in the abstraction tree.
+    ;; We should really be running something like update-in
+    ;; with just the piece that's being changed here (in
+    ;; this case, the appropriate Session).
+    (post-message! session
+                   clock
+                   session-id
+                   world-key
+                   :frereth/ack-forking
+                   {:frereth/cookie cookie})
+    (catch Exception ex
+      (println "Error:" ex
+               "\nTrying to post :frereth/ack-forking to"
+               session-id
+               "\nabout"
+               world-key))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Outer Handlers and their Interceptors
@@ -443,6 +472,8 @@
                                                        event-bus))]
                         (bus/publish! event-bus
                                       :frereth/ack-forked
+                                      ;; Q: How many of these parameters are redundant?
+                                      ;; We have the ones that are associated with the
                                       (assoc (select-keys context
                                                           [::connection/session
                                                            ::lamport/clock])
@@ -488,66 +519,48 @@
 
 (def world-forking
   {:name ::world-forking
-   :enter (fn [{:keys []
+   :enter (fn [{:keys [::bus/event-bus
+                       :request]
                 lamport ::lamport/clock
-                :as context}
-               ;; FIXME: These parameters are totally wrong.
-               ;; Should have a session in the context.
-               sessions
-               session-id
-               {:keys [:frereth/command
-                       ;; It seems like it would be better to make this explicitly a
-                       ;; :frereth/world-key instead.
-                       ;; TODO: Refactor it
-                       :frereth/pid]
-                :as body}]
-            (throw (RuntimeException. "Needs the same treatment as forked"))
-            (if (and command pid)
-              (when-let [session (sessions/get-active-session sessions session-id)]
-                (if-not (connection/get-world session pid)
-                  ;; TODO: Need to check with the Client registry
-                  ;; to verify that command is legal for the current
-                  ;; session (at the very least, this means authorization)
-                  (let [cookie (build-cookie session-id pid command)]
-                    (try
-                      (post-message! sessions
-                                     lamport
-                                     session-id
-                                     pid
-                                     :frereth/ack-forking
-                                     {:frereth/cookie cookie})
-                      (catch Exception ex
-                        (println "Error:" ex
-                                 "\nTrying to post :frereth/ack-forking to"
-                                 session-id
-                                 "\nabout"
-                                 pid)))
-                    ;; It's tempting to add the world to the session here.
-                    ;; Actually, there doesn't seem like any good reason
-                    ;; not to (and not earlier)
-                    ;; There are lots of places for things to break along
-                    ;; the way, but this is an important starting point.
-                    ;; It's also very tempting to set up an Actor model
-                    ;; sort of thing inside the Session to handle this
-                    ;; World that we're trying to create.
-                    ;; This makes me think this this is working at too high
-                    ;; a layer in the abstraction tree.
-                    ;; We should really be running something like update-in
-                    ;; with just the piece that's being changed here (in
-                    ;; this case, the appropriate Session).
-                    sessions)
+                {:keys [::sessions/session-id]
+                 :as session} :frereth/session
+                :as context}]
+            (let [{:keys [:frereth/command
+                          ;; It seems like it would be better to make this explicitly a
+                          ;; :frereth/world-key instead.
+                          ;; TODO: Refactor it
+                          :frereth/pid]
+                   :as body} request]
+              ;; TODO: Look into clojure core functionality.
+              ;; Surely there's a better approach than these nested ifs
+              (if (and command pid)
+                (if session
+                  (if-not (connection/get-world session pid)
+                    ;; TODO: Need to check with the Client registry
+                    ;; to verify that command is legal for the current
+                    ;; session (at the very least, this means authorization)
+                    (let [cookie (build-cookie session-id pid command)]
+                      (bus/publish! event-bus
+                                    :frereth/ack-forking
+                                    {::cookie cookie
+                                     :frereth/world-key pid})
+                      (assoc context :response ::done))
+                    (do
+                      (println "Error: trying to re-fork pid" pid
+                               "\namong\n"
+                               session)
+                      context))
                   (do
-                    (println "Error: trying to re-fork pid" pid
-                             "\namong\n"
-                             sessions)
-                    sessions)))
-              (do
-                (println (str "Missing either/both of '"
-                              command
-                              "' or/and '"
-                              pid
-                              "'"))
-                sessions)))})
+                    (println (str "Missing session inside\n"
+                                  (util/pretty context)))
+                    context))
+                (do
+                  (println (str "Missing either/both of '"
+                                command
+                                "' or/and '"
+                                pid
+                                "'"))
+                  context))))})
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Public
@@ -662,79 +675,19 @@
     (catch Exception ex
       (println ex "trying to deserialize/dispatch" message-string))))
 
-;;; It seems like this shouldn't be this difficult.
-;;; The trick is that I need to generate a bunch of defhandler calls,
-;;; followed by rolling them up into the :ig/init- and :ig/halt-key!
-;;; methods.
-
-;;; This approach...just no. Everything is wrong about it.
-(comment
-  ;; Incoming:
-  {::disconnected {::event :frereth/disconect-world
-                   ::handler-name handle-disconnected
-                   ::handler-body ((foo a)
-                                   (bar b))
-                   :handler-args [{:keys [::connection/session-id
-                                          :frereth/world-key]
-                                   :as message}]}
-   ;; ...
-   }
-  (defmacro wire-events
-    [event-map]
-    )
-  ;; Output:
-  (do
-    (defhandler handle-disconnected
-      [{:keys [::connection/session-id
-               :frereth/world-key]
-        :as message}]
-      (foo a) (bar b))
-    ;; other handlers...
-    (defmethod ig/init-key ::internal
-      [_ {:keys [::bus/event-bus]
-          :as componet}]
-      (assoc component
-             ::disconnected (connect-handler event-bus :frereth/disconnect-world handle-disconnected)
-             ;; ...
-             ))
-    (defmethod ig/hald-key! ::internal
-      [_ {:keys [::disconnected ;; ...
-                 ]}]
-      (doseq [stream [disconnected ;; ...
-                      ]]
-        (strm/close! stream)))
-    ))
-
-;;; Q: How about:
-(comment
-  (defroutes
-    #{{:frereth/disconnect-world [::disconnected
-                                  ;; This probably won't work:
-                                  ;; fn is a special form.
-                                  ;; And handler methods actually take 2
-                                  ;; args.
-                                  (fn [{:keys [::connection/session-id
-                                               :frereth/world-key]
-                                        :as message}]
-                                    (post-message! session
-                                                   clock
-                                                   world-key
-                                                   :frereth/ack-forked)
-                                    (sessions/activate-forking-world session-atom
-                                                                     session-id
-                                                                     world-key
-                                                                     client))]}
-    ;;;
-      }))
-
+;; It's really tempting to try to define everything in one place.
+;; There might be a use-case for a macro that lets me do that.
+;; I'm skeptical about whether it would be an improvement.
+;; Much less enough of an improvement to justify its existence.
 (let [handlers {::disconnected [:frereth/disconnect-world
                                 handle-disconnected]
-                ::forked [:frereth/ack-forked handle-forked]}]
+                ::forked [:frereth/ack-forked handle-forked]
+                ::forking [:frereth/forking handle-forking]}]
   (defmethod ig/init-key ::internal
     [_ {:keys [::bus/event-bus]
         :as component}]
     (reduce (fn [acc [tag [event-id handler]]]
-              (assoc acc tag (connect-handler event-bus event-id handler)))
+              (assoc acc tag (connect-handler event-bus event-id (partial handler component))))
             component
             handlers))
 
