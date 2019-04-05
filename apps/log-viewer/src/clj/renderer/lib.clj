@@ -5,16 +5,18 @@
 ;; Then again, any such hypothetical renderers will be built around a
 ;; totally different architecture, so probably not.
   (:require
+   [backend.event-bus :as bus]
    [clojure.core.async :as async]
    [clojure.java.io :as io]
    [clojure.pprint :refer [pprint]]
    [clojure.spec.alpha :as s]
    [frereth.apps.shared.world :as world]
-   [frereth.cp.shared.crypto :as crypto]
    [frereth.apps.shared.connection :as connection]
    [frereth.apps.shared.lamport :as lamport]
    [frereth.apps.shared.specs]
    [frereth.apps.shared.serialization :as serial]
+   [frereth.cp.shared.crypto :as crypto]
+   [frereth.cp.shared.util :as cp-util]
    [frereth.weald.logging :as log]
    [manifold
     [deferred :as dfrd]
@@ -216,42 +218,45 @@
   [{lamport-clock ::lamport/clock
     :keys [::sessions/session-atom ::connection/web-socket]
     :as session}]
-  (try
-    ;; FIXME: Better handshake (need an authentication phase)
-    (println ::activate-session!
-             "Trying to pull the Renderer's key from new websocket"
-             "\namong"
-             @session-atom)
-    (let [first-message (strm/try-take! web-socket ::drained 500 ::timed-out)]
-      ;; TODO: Need the login exchange before this.
-      ;; Do that before opening the websocket, using something like SRP.
-      ;; Except that people generally agree that it's crap.
-      ;; Look into something like OPAQUE instead.
-      ;; The consensus seems to be that mutual TLS is really the way
-      ;; to go.
-      ;; Q: Is there a way to do this for web site auth?
-      ;; That should add the Session's short-term key to the ::pending
-      ;; session map.
-      ;; In order to authenticate, it had to already contact its Server.
-      ;; So it should also have its view of what's going on with this
-      ;; Session.
-      ;; Honestly, this is mostly a FSM manager for the initial handshake.
-      ;; Though passing messages back and forth over the web socket later
-      ;; should/will be a much bigger drain on system resources.
-      ;; TODO: Check this FSM handshake with stack overflow's security
-      ;; board.
-      (dfrd/on-realized first-message
-                        (partial login-finalized! session)
-                        (fn [error]
-                          (println ::activate-session!
-                                   "Failed pulling initial key:" error))))
-    (catch ExceptionInfo ex
-      ;; FIXME: Better error handling via tap>
-      ;; As ironic as that seems
+  (if session-atom
+    (try
+      ;; FIXME: Better handshake (need an authentication phase)
       (println ::activate-session!
-               "Renderer connection completion failed")
-      (pprint ex)
-      (.close web-socket))))
+               "Trying to pull the Renderer's key from new websocket"
+               "\namong"
+               @session-atom)
+      (let [first-message (strm/try-take! web-socket ::drained 500 ::timed-out)]
+        ;; TODO: Need the login exchange before this.
+        ;; Do that before opening the websocket, using something like SRP.
+        ;; Except that people generally agree that it's crap.
+        ;; Look into something like OPAQUE instead.
+        ;; The consensus seems to be that mutual TLS is really the way
+        ;; to go.
+        ;; Q: Is there a way to do this for web site auth?
+        ;; That should add the Session's short-term key to the ::pending
+        ;; session map.
+        ;; In order to authenticate, it had to already contact its Server.
+        ;; So it should also have its view of what's going on with this
+        ;; Session.
+        ;; Honestly, this is mostly a FSM manager for the initial handshake.
+        ;; Though passing messages back and forth over the web socket later
+        ;; should/will be a much bigger drain on system resources.
+        ;; TODO: Check this FSM handshake with stack overflow's security
+        ;; board.
+        (dfrd/on-realized first-message
+                          (partial login-finalized! session)
+                          (fn [error]
+                            (println ::activate-session!
+                                     "Failed pulling initial key:" error))))
+      (catch ExceptionInfo ex
+        ;; FIXME: Better error handling via tap>
+        ;; As ironic as that seems
+        (println ::activate-session!
+                 "Renderer connection completion failed")
+        (pprint ex)
+        (.close web-socket)))
+    (throw (ex-info (str "Missing session-atom")
+                    session))))
 
 (s/fdef get-code-for-world
   :args (s/cat :sessions ::sessions/sessions
@@ -269,10 +274,14 @@
   (if actual-session-id
     (if-let [session (sessions/get-active-session sessions
                                                   actual-session-id)]
+      ;; decode-cookie gets called during the world-forked interceptor
+      ;; in renderer.handlers.
+      ;; It seems silly to call it again here.
+      ;; FIXME: Eliminate the spare.
       (let [{:keys [:frereth/pid
                     :frereth/world-ctor]
              expected-session-id :frereth/session-id
-             :as cookie} (decode-cookie cookie-bytes)]
+             :as cookie} (handlers/decode-cookie cookie-bytes)]
         (println ::get-code-for-world "Have a session. Decoded cookie")
         (if (and pid expected-session-id world-ctor)
           (if (verify-cookie actual-session-id world-key cookie)

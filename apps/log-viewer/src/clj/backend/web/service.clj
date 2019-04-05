@@ -121,6 +121,8 @@
         (nil? headers) (assoc pedestal-response :headers {})
         :else (update pedestal-response :headers #(apply hash-map %))))
 
+(def request-printer (agent nil))
+
 (s/fdef chain-provider
   :args (s/cat :service-map ::service-map-sans-handler)
   :ret ::service-map)
@@ -144,8 +146,15 @@
   [service-map]
   (let [interceptors (::http/interceptors service-map)]
     (assoc service-map ::handler (fn [ring-request]
-                                   (println "Incoming request")
-                                   (pprint ring-request)
+                                   ;; FIXME: As long as I'm going to do this, it needs
+                                   ;; to be thread-safe.
+                                   ;; These things come in hot/fast enough to get totally
+                                   ;; jumbled.
+                                   (send request-printer
+                                         (fn [_]
+                                           (println "Incoming request")
+                                           (pprint ring-request)
+                                           _))
                                    (let [initial-context (translate-request ring-request)
                                          resp-ctx (chain/execute initial-context
                                                                  interceptors)]

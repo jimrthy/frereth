@@ -583,6 +583,7 @@
   ;; This part's specific to the web-socket interface.
   ;; I don't think anything else is.
   [session-atom session-id clock  message-string]
+  (println ::on-message! "Incoming:" message-string)
   ;; STARTED: Break this up into a Pedestal interceptor chain
   (try
     ;; TODO: Build the terminators/interceptors/routers elsewhere.

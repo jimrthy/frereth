@@ -30,6 +30,9 @@
 (defn publish!
   [{:keys [::bus]
     :as event-bus} topic message]
+  ;; FIXME: Honestly, need a way to flag events that get published
+  ;; with no handlers.
+  ;; I don't think manifold offers that possibility.
   (bus/publish! bus topic message))
 
 (s/fdef subscribe
