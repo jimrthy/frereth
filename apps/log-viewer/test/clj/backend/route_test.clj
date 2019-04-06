@@ -1,6 +1,5 @@
 (ns backend.route-test
   (:require  [backend.web.routes :as routes]
-             [backend.web.server :as server]
              [clojure.test :as t :refer [are is]]
              [io.pedestal.http.route :as route]))
 

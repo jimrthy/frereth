@@ -159,9 +159,9 @@
     ;; TODO: Check that bufferedAmount is low enough
     ;; to send more
     (try
-      (println "Trying to send-message!" envelope)
+      (console.log "Trying to send-message!" envelope)
       (.send socket (serial/serialize envelope))
-      (println body "sent successfully")
+      (console.log body "sent successfully")
       (catch :default ex
         (console.error "Sending message failed:" ex)))))
 

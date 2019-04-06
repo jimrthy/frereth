@@ -97,9 +97,15 @@
                                           (println "connect-renderer: websocket upgrade: '" websocket "'")
                                           (if websocket
                                             (do
+                                              (println "Have a websocket")
+                                              ;; This next call fails. It has to be due to an arity
+                                              ;; problem.
+                                              ;; Q: Why isn't this getting handled somewhere?
                                               (lib/activate-session! lamport-clock session-atom websocket)
                                               websocket)
-                                            non-websocket-request)))})))})
+                                            (do
+                                              (println "No websock")
+                                              non-websocket-request))))})))})
 
 (s/fdef create-world-interceptor
   :args (s/cat :session-atom ::sessions/session-atom)
@@ -264,7 +270,8 @@
 
 (defn index-page
   [_]
-  (println "Handling request for index")
+  (comment
+    (println "Handling request for index"))
   (let [response
         (rsp/response
          (html
@@ -278,9 +285,10 @@
            [:body
             [:div.container [:div#app.app-wrapper]]
             (include-js "js/main.js")])))]
-    (println "Response:")
-    (pprint response)
-    (println "a" (class response))
+    (comment
+      (println "Response:")
+      (pprint response)
+      (println "a" (class response)))
     response))
 
 (defn test-page

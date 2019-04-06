@@ -146,14 +146,17 @@
   [service-map]
   (let [interceptors (::http/interceptors service-map)]
     (assoc service-map ::handler (fn [ring-request]
-                                   ;; FIXME: As long as I'm going to do this, it needs
+                                   ;; As long as I'm going to do this, it needs
                                    ;; to be thread-safe.
                                    ;; These things come in hot/fast enough to get totally
                                    ;; jumbled.
                                    (send request-printer
                                          (fn [_]
-                                           (println "Incoming request")
-                                           (pprint ring-request)
+                                           (let [{:keys [headers]} ring-request
+                                                 upgrade (get headers "upgrade")]
+                                             (when (= upgrade "websocket")
+                                               (println ::chain-provider "Incoming request:")
+                                               (pprint ring-request)))
                                            _))
                                    (let [initial-context (translate-request ring-request)
                                          resp-ctx (chain/execute initial-context
@@ -301,7 +304,7 @@
                                                                                                  :as ctx}]
                                                                                              (if response
                                                                                                (do
-                                                                                                 (println (str "Checking for deferred->async in\n"
+                                                                                                 #_(println (str "Checking for deferred->async in\n"
                                                                                                                response ",\na "
                                                                                                                (class response)))
                                                                                                  #_(update ctx :response

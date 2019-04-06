@@ -218,6 +218,10 @@
   [{lamport-clock ::lamport/clock
     :keys [::sessions/session-atom ::connection/web-socket]
     :as session}]
+  (println ::activate-session! "session-atom:"
+           session-atom "\namong\n"
+           (cp-util/pretty session))
+
   (if session-atom
     (try
       ;; FIXME: Better handshake (need an authentication phase)
@@ -255,8 +259,10 @@
                  "Renderer connection completion failed")
         (pprint ex)
         (.close web-socket)))
-    (throw (ex-info (str "Missing session-atom")
-                    session))))
+    (do
+
+      (throw (ex-info (str "Missing session-atom")
+                      session)))))
 
 (s/fdef get-code-for-world
   :args (s/cat :sessions ::sessions/sessions

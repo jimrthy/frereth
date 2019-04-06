@@ -72,7 +72,8 @@
 (defn accepted-type
   [{:keys [:request]
     :as context}]
-  (println "Looking for accepted response type among" request)
+  (comment
+    (println "Looking for accepted response type among" request))
   (get-in request [:accept :field] "text/plain"))
 
 (defn transform-content
