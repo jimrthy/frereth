@@ -9,6 +9,9 @@
    [clojure.spec.alpha :as s]
    [frereth.apps.shared.lamport :as lamport]
    [frereth.apps.shared.serialization :as serial]
+   [frereth.cp.shared.util :as cp-util]
+   [frereth.weald.logging :as log]
+   [frereth.weald.specs :as weald]
    [hiccup.core :refer [html]]
    [hiccup.page :refer [html5 include-js include-css]]
    [io.pedestal.interceptor.chain :as interceptor-chain]
@@ -67,22 +70,36 @@
 ;;;; Handlers
 
 (s/fdef build-renderer-connection
-  :args (s/cat :lamport-clock ::lamport/clock
-               :session-atom ::sessions/session-atom)
+  :args (s/keys :req [::lamport/clock
+                      ::sessions/session-atom
+                      ::weald/logger
+                      ::weald/state-atom])
   :ret ::interceptor
   :ret dfrd/deferred?)
 (defn build-renderer-connection
-  [lamport-clock session-atom]
+  [{:keys [::sessions/session-atom
+           ::weald/logger
+           ::weald/state-atom]
+    lamport-clock ::lamport/clock
+    :as component}]
   {:name ::connect-renderer!
    :enter (fn [{:keys [:request]
                 :as ctx}]
+            (when-not state-atom
+              (println "WARNING: Missing state-atom among"
+                       (keys component)
+                       "\nin\n"
+                       (cp-util/pretty component)))
             (try
-              (println "connect-renderer: Request from\n"
-                       (:remote-addr request) "\nin"
-                       (keys request) "\namong")
-              (pprint request)
+              (swap! state-atom
+                     #(log/flush-logs! logger
+                                       (log/info % ::connect-renderer!
+                                                 "Incoming renderer connection request"
+                                                 request)))
               (catch Exception ex
-                (println ex)))
+                (swap! state-atom
+                       #(log/flush-logs! logger
+                                         (log/exception % ex ::connect-renderer)))))
             (let [dfrd-sock (http/websocket-connection request)]
               (assoc ctx
                      :response {:body (async/go
@@ -94,17 +111,30 @@
                                         (dfrd/let-flow [websocket (dfrd/catch
                                                                       dfrd-sock
                                                                       (fn [_] nil))]
-                                          (println "connect-renderer: websocket upgrade: '" websocket "'")
+                                                       (swap! state-atom
+                                                              #(log/flush-logs! logger
+                                                                                (log/info % ::connect-renderer!
+                                                                                          "websocket upgrade"
+                                                                                          {::result websocket})))
                                           (if websocket
                                             (do
-                                              (println "Have a websocket")
-                                              ;; This next call fails. It has to be due to an arity
-                                              ;; problem.
-                                              ;; Q: Why isn't this getting handled somewhere?
-                                              (lib/activate-session! lamport-clock session-atom websocket)
-                                              websocket)
+                                              (swap! state-atom
+                                                     #(log/flush-logs! logger
+                                                                       (log/info % ::connect-renderer!
+                                                                                 "Have a websocket")))
+                                              (try
+                                                (lib/activate-session! component websocket)
+                                                websocket
+                                                (catch Exception ex
+                                                  (swap! state-atom
+                                                         #(log/flush-logs! logger
+                                                                           (log/exception % ex ::connect-renderer!)))
+)))
                                             (do
-                                              (println "No websock")
+                                              (swap! state-atom
+                                                     #(log/flush-logs! logger
+                                                                       (log/warn % ::connect-renderer!
+                                                                                 "No websock")))
                                               non-websocket-request))))})))})
 
 (s/fdef create-world-interceptor

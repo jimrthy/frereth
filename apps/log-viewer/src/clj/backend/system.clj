@@ -11,9 +11,8 @@
              [propagate :as propagate]]
             [clojure.core.async :as async]
             [clojure.spec.alpha :as s]
-            [frereth.weald
-             [logging :as log]
-             [specs :as weald]]
+            [frereth.weald.logging :as log]
+            [frereth.weald.specs :as weald]
             [integrant.core :as ig]
             [frereth.cp.message.specs :as msg-specs]
             [frereth.cp.client :as client]
@@ -89,19 +88,20 @@
                 async-logger)
               (catch Exception ex
                 (println ex "Creating the async-logger failed")
-                nil))
-            actual-logger
-            (if async-logger
-              (log/composite-log-factory [async-logger
-                                          std-out-logger])
-              std-out-logger)]
-        (assoc opts
-               ::weald/logger actual-logger)))))
+                nil))]
+        (if async-logger
+          (log/composite-log-factory [async-logger
+                                      std-out-logger])
+          std-out-logger)))))
 ;; It's tempting to add a corresponding halt! handler for ::logger,
 ;; to call flush! a final time.
 ;; But we don't actually have a log-state here.
 ;; Q: Change that?
 ;; And decide which is the chicken vs. the egg.
+
+(defmethod ig/init-key ::weald/state-atom
+  [_ {:keys [::weald/context]}]
+  (atom (log/init context)))
 
 ;; FIXME: Move this into its own ns.
 ;; server.networking needs to reference the key, and I'd
@@ -137,12 +137,14 @@
                                    ::shared-specs/port
                                    ::weald/logger]
                              :opt [::connection-opts
-                                   ::socket-opts]))
+                                   ::socket-opts
+                                   ::weald/context]))
   :ret (s/keys :req [::client-net/connection
                      ::client-net/socket]))
 (defn client-ctor
   [{:keys [::weald/logger
            ::connection-opts]
+    log-context ::weald/context
     socket-opts ::socket-opts
     server-pk ::shared-specs/public-long
     server-port ::shared-specs/port
@@ -163,18 +165,20 @@
                                                      ::client-state/server-addresses [[127 0 0 1]]
                                                      ::shared-specs/port server-port
                                                      ::weald/logger logger
-                                                     ::weald/state (log/init ::connection)
-                                                     }
+                                                     ::weald/state-atom (assoc {::weald/context ::client-connection}
+                                                                          log-context)}
                                         connection-opts)
    ::client-net/socket socket-opts})
 
 (s/fdef server-ctor
-  :args (s/cat :opts (s/keys :req [::weald/logger
+  :args (s/cat :opts (s/keys :req [::weald/context
+                                   ::weald/logger
                                    ::socket]))
   :ret (s/keys :req [:server.networking/server
                      ::server-socket]))
 (defn server-ctor
   [{:keys [::weald/logger]
+    log-context ::weald/context
     socket-opts ::socket
     :as opts}]
   (when-not logger
@@ -187,16 +191,27 @@
                                     ;; required
                                     ;; FIXME: Just store the logger instance.
                                     ::weald/logger (ig/ref ::weald/logger)
+                                    ::weald/state (ig/ref ::weald/state-atom)
                                     ;; FIXME: Can this use a network state?
                                     :server.networking/my-name server-name
                                     :server.networking/socket (ig/ref ::server-socket)}
                                    (::server opts))
    ::server-socket (into {::server-port 34122}
                          socket-opts)
-   ::weald/logger logger})
+   ::weald/logger logger
+   ::weald/state-atom (assoc {::weald/context ::local-server}
+                             log-context)})
 
 (defn monitoring-ctor
-  [opts]
+  [{:keys [::clock
+           ::event-bus
+           ::internal-handlers
+           ::log-chan
+           ::log-context
+           ::logger
+           ::monitor
+           ::routes]
+    :as opts}]
   (println "Defining the Monitoring portion of the System")
   ;; The web-server portion is a baseline that I want to just
   ;; run in general.
@@ -207,32 +222,36 @@
   ;; should really be an atomic whole, but that's the basic reality of
   ;; what I'm building here.
   {::routes/handler-map (into {::lamport/clock (ig/ref ::lamport/clock)
+                               ::bus/event-bus (ig/ref ::bus/event-bus)
                                ::sessions/session-atom (ig/ref ::sessions/session-atom)
-                               ::bus/event-bus (ig/ref ::bus/event-bus)}
-                              (::routes opts))
+                               ::weald/logger (ig/ref ::weald/logger)
+                               ::weald/state-atom (ig/ref ::weald/state-atom)}
+                              routes)
    :backend.web.service/web-service (into {::routes/handler-map (ig/ref ::routes/handler-map)}
                                           (::web-server opts))
-   ::bus/event-bus (::event-bus opts)
+   ::bus/event-bus event-bus
    ::handlers/internal (into {::bus/event-bus (ig/ref ::bus/event-bus)
                               ::lamport/clock (ig/ref ::lamport/clock)
                               ::sessions/session-atom (ig/ref ::sessions/session-atom)}
-                             (::internal-handlers opts))
+                             internal-handlers)
    ;; Surely both server and client need access to this.
    ;; The renderer/session manager definitely does.
    ;; TODO: Share it.
-   ::lamport/clock (::clock opts)
-   ::log-chan (::log-chan opts)
+   ::lamport/clock clock
+   ::log-chan log-chan
    ;; Note that this is really propagating the Server logs.
    ;; The Client logs are really quite different...though it probably
    ;; makes sense to also send those here, at least for an initial
    ;; implementation.
    ::propagate/monitor (into {::propagate/log-chan (ig/ref ::log-chan)}
-                             (::monitor opts))
+                             monitor)
    ::sessions/session-atom (::sessions/session-atom opts)
-   ;; FIXME: Can I get away with just storing a logger instance here?
+   ;; Q: Can I get away with just storing a logger instance here?
    ;; And is there any real reason not to?
    ::weald/logger (into {::chan (ig/ref ::log-chan)}
-                        (::logger opts))})
+                        logger)
+   ::weald/state-atom (into {::weald/context ::global}
+                             log-context)})
 
 (defn ctor [opts]
   "Set up monitor/server/client all at once"

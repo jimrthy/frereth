@@ -5,6 +5,7 @@
    [clojure.pprint :refer [pprint]]
    [clojure.spec.alpha :as s]
    [frereth.apps.shared.lamport :as lamport]
+   [frereth.weald.specs :as weald]
    [integrant.core :as ig]
    [io.pedestal.http.content-negotiation :as conneg]
    [io.pedestal.http.route :as route]
@@ -105,12 +106,15 @@
 ;;;; Internal
 
 (s/fdef build-pedestal-routes
-  :args (s/cat :lamport-clock ::lamport/clock
-               :session-atom ::sessions/session-atom)
+  :args (s/keys :req [::lamport/clock
+                      ::sessions/session-atom
+                      ::weald/state-atom])
   :ret ::route-set)
 (defn build-pedestal-routes
-  [lamport-clock
-   session-atom]
+  [{:keys [::lamport/clock
+           ::sessions/session-atom
+           ::weald/state-atom]
+    :as component}]
   (let [content-neg-intc (conneg/negotiate-content ["text/html" "application/edn" "text/plain"])
         default-intc [coerce-content-type content-neg-intc]
         definition
@@ -124,18 +128,15 @@
            :route-name ::connect-world]
           ["/echo" :any (conj default-intc handlers/echo-page) :route-name ::echo]
           ["/test" :any (conj default-intc handlers/test-page) :route-name ::test]
-          ["/ws" :get (handlers/build-renderer-connection
-                       lamport-clock
-                       session-atom) :route-name ::renderer-ws]}]
+          ["/ws" :get (handlers/build-renderer-connection component)
+           :route-name ::renderer-ws]}]
     (route/expand-routes definition)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Public
 
 (defmethod ig/init-key ::handler-map
-  [_ {:keys [::debug?
-             ::lamport/clock
-             ::sessions/session-atom]
+  [_ {:keys [::debug?]
       :as opts}]
   (println "Setting up router. Debug mode:" debug? "\nbased on")
   (comment (pprint opts))
@@ -148,10 +149,10 @@
   ;; to the context map.
   {::routes
    (if-not debug?
-     (build-pedestal-routes clock session-atom)
+     (build-pedestal-routes opts)
      ;; Use this to set routes to be reloadable without a
      ;; full (reset).
      ;; Note that this will rebuild on every request, which slows it
      ;; down.
      (fn []
-       (build-pedestal-routes clock session-atom)))})
+       (build-pedestal-routes opts)))})
