@@ -365,6 +365,5 @@
   :args (s/cat :world ::world))
 (defn trigger-disconnection!
   [world]
-  ;; Need to send a signal to the world to do whatever it needs to
-  ;; disconnect.
-  (throw (ex-info "write this" {})))
+  (throw (ex-info "Need to send a ::disconnect signal to the world"
+                  {})))

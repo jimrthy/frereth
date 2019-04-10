@@ -10,6 +10,8 @@
    [frereth.apps.shared.serialization :as serial]
    [frereth.apps.shared.world :as world]
    [frereth.cp.shared.util :as util]
+   [frereth.weald.logging :as log]
+   [frereth.weald.specs :as weald]
    [integrant.core :as ig]
    [io.pedestal.interceptor :as intc]
    [io.pedestal.interceptor.chain :as intc-chain]
@@ -33,11 +35,18 @@
                                         :frereth/lamport
                                         :frereth/world-key]))
 
-(s/def ::world-connection (s/keys :req [::bus/event-bus
-                                        ::lamport/clock
-                                        ::connection/session-id
-                                        :frereth/world-key
-                                        ::world-stop-signal]))
+(s/def ::common-connection (s/keys :req [::bus/event-bus
+                                         ::lamport/clock
+                                         ::weald/logger
+                                         ::weald/state-atom
+                                         ::connection/session-id]))
+
+(s/def ::world-connection (s/merge ::common-connection
+                                   (s/keys :req [:frereth/world-key
+                                                 ::world-stop-signal])))
+
+(s/def ::session-connection (s/merge ::common-connection
+                                     (s/keys :req [::sessions/session-atom])))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Internal Helpers
@@ -566,11 +575,7 @@
 ;;;; Public
 
 (s/fdef on-message!
-  :args (s/cat :session-atom ::sessions/session-atom
-               :session-id ::sessions/session-id
-               :clock ::lamport/clock
-               ;; FIXME: This needs an ::event-bus parameter
-               ;; also
+  :args (s/cat :session-connection ::session-connection
                :message-string string?)
   ;; Called for side-effects
   :ret any?)
@@ -582,9 +587,22 @@
   ;; this really belong in a shared frereth.app.renderer.lib ns.
   ;; This part's specific to the web-socket interface.
   ;; I don't think anything else is.
-  [session-atom session-id clock  message-string]
-  (println ::on-message! "Incoming:" message-string)
+  [{:keys [:lamport/clock
+           ::bus/event-bus
+           ::weald/logger
+           ::sessions/session-atom
+           ::connection/session-id]
+    log-state-atom ::weald/state-atom
+    :as session-connection}
+   message-string]
+  (swap! log-state-atom
+         #(log/flush-logs! logger (log/info %
+                                            ::on-message!
+                                            "Incoming"
+                                            {::body message-string})))
   ;; STARTED: Break this up into a Pedestal interceptor chain
+  ;; Things fail silently and the websocket closes without
+  ;; explanation somewhere after this.
   (try
     ;; TODO: Build the terminators/interceptors/routers elsewhere.
     ;; It's very tempting to make the routes part of the specific
@@ -659,9 +677,10 @@
           context (intc-chain/enqueue (map intc/interceptor
                                            raw-interceptors))]
       ;; The actual point.
-      ;; It's easy to miss this in the middle of the error handling.
+      ;; It's easy to miss this in the middle of setting up the
+      ;; chain handler.
       ;; Which is one reason this is worth keeping separate from the
-      ;; dispatching code.
+      ;; dispatching code and that needs to move elsewhere.
       ;; Current theory:
       ;; Follow the front-end idea of "data down, events up."
       ;; Any side-effects that should happen get triggered by
@@ -674,7 +693,13 @@
                         (with-out-str (pprint response))))
           (println "No 'response' for:\n" message-string))))
     (catch Exception ex
-      (println ex "trying to deserialize/dispatch" message-string))))
+      (swap! log-state-atom
+             #(log/flush-logs! logger
+                               (log/exception %
+                                              ex
+                                              ::on-mesage!
+                                              "trying to deserialize/dispatch"
+                                              {::body message-string}))))))
 
 ;; It's really tempting to try to define everything in one place.
 ;; There might be a use-case for a macro that lets me do that.

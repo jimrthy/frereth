@@ -18,6 +18,7 @@
    [frereth.cp.shared.crypto :as crypto]
    [frereth.cp.shared.util :as cp-util]
    [frereth.weald.logging :as log]
+   [frereth.weald.specs :as weald]
    [manifold
     [deferred :as dfrd]
     [stream :as strm]]
@@ -34,6 +35,8 @@
 
 (s/def ::pre-session (s/keys :req [::lamport/clock
                                    ::bus/event-bus
+                                   ::weald/logger
+                                   ::weald/log-state
                                    ::sessions/session-atom
                                    ::connection/web-socket]))
 
@@ -42,7 +45,8 @@
 (s/def ::terminator (s/fspec :args (s/cat :context ::context)
                              :ret boolean?))
 (s/def ::terminators (s/coll-of ::terminator))
-(s/def ::session (s/keys :req [::terminators]))
+(s/def ::session (s/merge ::pre-session
+                          (s/keys :req [::terminators])))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Globals
@@ -65,39 +69,8 @@
          (vec @previous-minute-key)
          test-key)
 
-(s/fdef dispatch
-  :args (s/cat :session ::sessions/sessions
-               :lamport ::lamport/clock
-               :session-id ::sessions/session-id
-               :body :frereth/body)
-  ;; Q: What should this spec?
-  ;; The return value of the defmulti dispatcher?
-  ;; Or the actual multi-method?
-  ;; Currently, defining a spec on a multimethod doesn't seem to be
-  ;; supported at all.
-  :ret ::sessions/sessions)
-(defmulti dispatch
-  "Browser sent message to a World associated with session-id"
-  ;; Probably worth mentioning that this is mainly for the sake of
-  ;; calling swap! on a session atom
-  (fn [session  ; ::sessions/sessions
-       lamport  ; ::lamport/clock
-       session-id  ; ::sessions/session-id
-       {:keys [:frereth/action]
-        :as body}]
-    ;; FIXME: This should go away
-    action))
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Internal Implementation
-
-(defmethod dispatch :default
-  [sessions
-   lamport
-   session-id
-   body]
-
-  sessions)
 
 (s/fdef login-finalized!
   :args (s/cat :session ::session
@@ -106,7 +79,13 @@
 (defn login-finalized!
   "Client might have authenticated over websocket"
   [{lamport ::lamport/clock
-    :keys [::sessions/session-atom ::connection/web-socket]} wrapper]
+    :keys [::bus/event-bus
+           ::sessions/session-atom
+           ::connection/web-socket]
+    :as session}
+   ;; FIXME: refactor-rename this to message wrapper
+   ;; or something along those lines
+   wrapper]
   (println ::login-finalized! "Received initial websocket message:" wrapper)
   (if (and (not= ::drained wrapper)
            (not= ::timed-out wrapper))
@@ -153,9 +132,13 @@
                                        ;; with the current session,
                                        ;; handlers wouldn't be able to
                                        ;; pick up state changes
-                                       session-atom
-                                       session-id
-                                       lamport)
+                                       (select-keys session
+                                                    [::bus/event-bus
+                                                     ::lamport/clock
+                                                     ::weald/logger
+                                                     ::weald/state-atom
+                                                     ::sessions/session-atom
+                                                     ::connection/session-id]))
                               web-socket)]
             ;; Cope with it closing
             (dfrd/on-realized connection-closed
@@ -216,7 +199,9 @@
 (defn activate-session!
   "Browser is trying to initiate a new Session"
   [{lamport-clock ::lamport/clock
-    :keys [::sessions/session-atom ::connection/web-socket]
+    :keys [::bus/event-bus
+           ::sessions/session-atom
+           ::connection/web-socket]
     :as session}]
   (println ::activate-session! "session-atom:"
            session-atom "\namong\n"

@@ -7,6 +7,7 @@
    [clojure.edn :as edn]
    [clojure.pprint :refer [pprint]]
    [clojure.spec.alpha :as s]
+   [frereth.apps.shared.connection :as connection]
    [frereth.apps.shared.lamport :as lamport]
    [frereth.apps.shared.serialization :as serial]
    [frereth.cp.shared.util :as cp-util]
@@ -123,7 +124,8 @@
                                                                        (log/info % ::connect-renderer!
                                                                                  "Have a websocket")))
                                               (try
-                                                (lib/activate-session! component websocket)
+                                                (lib/activate-session! (assoc component
+                                                                              ::connection/web-socket websocket))
                                                 websocket
                                                 (catch Exception ex
                                                   (swap! state-atom
