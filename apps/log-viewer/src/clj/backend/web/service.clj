@@ -100,6 +100,9 @@
   :ret :pedestal/request)
 (defn translate-request
   "Convert aleph's Ring Request into a Pedestal request map"
+  ;; Pedestal can use Zero-copy requests.
+  ;; Look at and consider
+  ;; https://github.com/pedestal/pedestal/pull/422
   [{:keys [:scheme :server-name :server-port :uri] :as ring-request}]
   (let [my-uri (str scheme
                     "://" server-name
@@ -223,6 +226,8 @@
          :join? false
 
          ::http/routes (::routes/routes handler-map)
+         ;; TODO: Supposedly, service.clj has suggestions about ways
+         ;; to tailor CSP for production
 
          ::http/secure-headers (let [default-csp {:object-src "'none'"
                                                   ;; Default uses 'unsafe-inline' 'unsafe-eval' 'strict-dynamic' https: http:

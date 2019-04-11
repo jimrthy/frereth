@@ -16,6 +16,7 @@
    [io.pedestal.interceptor :as intc]
    [io.pedestal.interceptor.chain :as intc-chain]
    [io.pedestal.http.route :as route]
+   [io.pedestal.http.route.definition.table :as table-route]
    [manifold.deferred :as dfrd]
    [manifold.stream :as strm]
    [renderer.sessions :as sessions])
@@ -376,6 +377,8 @@
                   (dissoc ::sessions/session-atom ::sessions/session-id)
                   (assoc :frereth/session session))
               (do
+                ;; Getting down to here now before throwing NPE due
+                ;; to missing clock
                 (lamport/do-tick clock)
                 (throw (ex-info "Websocket message for inactive session. This should be impossible"
                                 (assoc context
@@ -608,12 +611,20 @@
     ;; It's very tempting to make the routes part of the specific
     ;; session.
     (let [terminators #{}  ; Q: Is there anything useful to put in here?
-          ;; FIXME: need route definitions
-          ;; Also need an option, especially in debug mode, for this
+          verbs #{:frereth/forked :frereth/forking}
+          ;; TODO: need an option, especially in debug mode, for this
           ;; to be function that gets called each time.
-          routes #{["/" :frereth/forked world-forked]
-                   ["/" :frereth/forking world-forking]}
-          processed-routes (route/expand-routes routes)
+          routes #{["/" :frereth/forked world-forked :route-name ::forked]
+                   ["/" :frereth/forking world-forking :route-name ::forking]}
+          processed-routes (try (table-route/table-routes {:verbs verbs}
+                                                          routes)
+                                (catch Throwable ex
+                                  (swap! log-state-atom
+                                         #(log/flush-logs! logger
+                                                           (log/exception %
+                                                                          ex
+                                                                          ::on-message!
+                                                                          "Expanding Routes failed")))))
           raw-interceptors [session-extractor
                             request-deserializer
                             (build-ticker clock)
@@ -674,24 +685,36 @@
                    ::sessions/session-atom session-atom
                    ::sessions/session-id session-id
                    ::intc-chain/terminators terminators}
-          context (intc-chain/enqueue (map intc/interceptor
-                                           raw-interceptors))]
-      ;; The actual point.
-      ;; It's easy to miss this in the middle of setting up the
-      ;; chain handler.
-      ;; Which is one reason this is worth keeping separate from the
-      ;; dispatching code and that needs to move elsewhere.
-      ;; Current theory:
-      ;; Follow the front-end idea of "data down, events up."
-      ;; Any side-effects that should happen get triggered by
-      ;; posting messages to the event bus
-      (let [{:keys [:response]
-             :as context} (intc-chain/execute context)]
-        (if response
-          (println (str "Response for:\n" message-string
-                        "\nWhat would make sense to happen with:\n"
-                        (with-out-str (pprint response))))
-          (println "No 'response' for:\n" message-string))))
+          context (intc-chain/enqueue context
+                                      (map intc/interceptor
+                                           raw-interceptors))
+          _ (swap! log-state-atom
+                   #(log/flush-logs! logger
+                                     (log/info %
+                                               ::on-message!
+                                            "Ready to trigger interceptor-chain")))
+          ;; The actual point.
+          ;; It's easy to miss this in the middle of setting up the
+          ;; chain handler.
+          ;; Which is one reason this is worth keeping separate from the
+          ;; dispatching code and that needs to move elsewhere.
+          ;; Current theory:
+          ;; Follow the front-end idea of "data down, events up."
+          ;; Any side-effects that should happen get triggered by
+          ;; posting messages to the event bus
+          {:keys [:response]
+           :as context} (intc-chain/execute context)]
+      (let [result-message
+            (if response
+               (str "Response for:\n" message-string
+                      "\nWhat would make sense to happen?\n"
+                      (with-out-str (pprint response)))
+               (str "No 'response' for:\n" message-string))]
+        (swap! log-state-atom
+               #(log/flush-logs! logger
+                                 (log/debug %
+                                            ::on-message!
+                                            result-message)))))
     (catch Exception ex
       (swap! log-state-atom
              #(log/flush-logs! logger
