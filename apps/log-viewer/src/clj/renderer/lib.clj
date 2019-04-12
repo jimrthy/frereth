@@ -36,7 +36,7 @@
 (s/def ::pre-session (s/keys :req [::lamport/clock
                                    ::bus/event-bus
                                    ::weald/logger
-                                   ::weald/log-state
+                                   ::weald/state-atom
                                    ::sessions/session-atom
                                    ::connection/web-socket]))
 
@@ -80,41 +80,65 @@
   "Client might have authenticated over websocket"
   [{lamport ::lamport/clock
     :keys [::bus/event-bus
+           ::weald/logger
            ::sessions/session-atom
            ::connection/web-socket]
+    log-state-atom ::weald/state-atom
     :as session}
-   ;; FIXME: refactor-rename this to message wrapper
+   ;; FIXME: refactor-rename this to message-wrapper
    ;; or something along those lines
    wrapper]
-  (println ::login-finalized! "Received initial websocket message:" wrapper)
+  (swap! log-state-atom #(log/flush-logs! logger
+                                          (log/info %
+                                                    ::login-finalized!
+                                                    "Initial websocket message"
+                                                    {::message wrapper})))
   (if (and (not= ::drained wrapper)
            (not= ::timed-out wrapper))
     (let [envelope (serial/deserialize wrapper)
           _ (println ::login-finalized! "Key pulled:" envelope)
           session-id (:frereth/body envelope)]
+      (swap! log-state-atom #(log/flush-logs! logger
+                                              (log/info %
+                                                        ::login-finalized!
+                                                        "Key pulled"
+                                                        {::deserialized envelope})))
       (try
-        (println ::login-finalized! "Trying to activate\n" session-id
-                 "a" (class session-id)
-                 "\nfrom\n"
-                 (sessions/get-by-state @session-atom ::connection/pending))
+        (let [session-state (sessions/get-by-state @session-atom
+                                                   ::connection/pending)]
+          (swap! log-state-atom #(log/flush-logs! logger
+                                                  (log/debug %
+                                                             ::login-finalized!
+                                                             "Trying to activate session"
+                                                             {::connection/session-id session-id
+                                                              ::session-id-type (type session-id)
+                                                              ::sessions/session session-state}))))
         (catch Exception ex
-          (println "Failed trying to log activation details:" ex)
-          (pprint {::details (log/exception-details ex)
-                   ::sessions/session-id session-id
-                   ::session-atom session-atom})))
+          (swap! log-state-atom #(log/flush-logs! logger
+                                                  (log/exception %
+                                                                 ex
+                                                                 ::login-finalized!
+                                                                 "Failed trying to log activation details"
+                                                             {::connection/session-id session-id
+                                                              ::sessions/session-atom session-atom})))))
       (if (get @session-atom session-id)
-        (do
-          (println ::login-finalized!
-                   "Activating session"
-                   session-id)
+        (try
+          (swap! log-state-atom #(log/flush-logs! logger
+                                                  (log/debug %
+                                                             ::login-finalized!
+                                                             "Activating session"
+                                                             {::connection/session-id session-id})))
           ;; FIXME: Don't particularly want the session-atom in here.
           (swap! session-atom
                  (fn [sessions]
                    (update sessions session-id
                            connection/activate
                            web-socket)))
-          (println ::login-finalized! "Swapped:")
-          (pprint web-socket)
+          (swap! log-state-atom #(log/flush-logs! logger
+                                                  (log/debug %
+                                                             ::login-finalized!
+                                                             "Swapped:"
+                                                             {::connection/web-socket web-socket})))
           ;; Set up the message handler
           (let [connection-closed
                 (strm/consume (partial handlers/on-message!
@@ -132,14 +156,18 @@
                                        ;; with the current session,
                                        ;; handlers wouldn't be able to
                                        ;; pick up state changes
-                                       (select-keys session
-                                                    [::bus/event-bus
-                                                     ::lamport/clock
-                                                     ::weald/logger
-                                                     ::weald/state-atom
-                                                     ::sessions/session-atom
-                                                     ::connection/session-id]))
+                                       (assoc (select-keys session
+                                                           [::bus/event-bus
+                                                            ::lamport/clock
+                                                            ::weald/logger
+                                                            ::weald/state-atom
+                                                            ::sessions/session-atom])
+                                              ::connection/session-id session-id))
                               web-socket)]
+            (swap! log-state-atom #(log/flush-logs! logger
+                                                    (log/trace %
+                                                               ::login-finalized!
+                                                               "Set up websocket consumer")))
             ;; Cope with it closing
             (dfrd/on-realized connection-closed
                               (fn [succeeded]
@@ -160,20 +188,27 @@
                                          failure)
                                 (swap! session-atom
                                        sessions/disconnect
-                                       session-id)))))
+                                       session-id))))
+          (catch Exception ex
+            (swap! log-state-atom #(log/flush-logs! logger
+                                                    (log/exception %
+                                                                   ex
+                                                                   ::login-finalized!)))))
         (do
-          (println ::login-finalized! "No match for"
-                   session-id
-                   "\namong\n"
-                   (keys @session-atom)
-                   "\nin\n"
-                   @session-atom)
+          (swap! log-state-atom #(log/flush-logs! logger
+                                                  (log/warn %
+                                                            ::login-finalized!
+                                                            "No matching session"
+                                                            {::sessions/session-state-keys (keys @session-atom)
+                                                             ::sessions/session-state @session-atom})))
           (throw (ex-info "Browser trying to complete non-pending connection"
                           {::attempt session-id
                            ::sessions/sessions @session-atom})))))
-    (println ::login-finalized!
-             "Waiting for login completion failed:"
-             wrapper)))
+    (swap! log-state-atom #(log/flush-logs! logger
+                                            (log/warn %
+                                                      ::login-finalized!
+                                                      "Waiting for login completion failed:"
+                                                      wrapper)))))
 
 (s/fdef verify-cookie
   :args (s/cat :session-id :frereth/session-id

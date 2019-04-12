@@ -5,6 +5,7 @@
    [clojure.pprint :refer [pprint]]
    [clojure.spec.alpha :as s]
    [frereth.apps.shared.lamport :as lamport]
+   [frereth.weald.logging :as log]
    [frereth.weald.specs :as weald]
    [integrant.core :as ig]
    [io.pedestal.http.content-negotiation :as conneg]
@@ -136,10 +137,17 @@
 ;;; Public
 
 (defmethod ig/init-key ::handler-map
-  [_ {:keys [::debug?]
+  [_ {:keys [::debug?
+             ::weald/logger]
+      log-state-atom ::weald/state-atom
       :as opts}]
-  (println "Setting up router. Debug mode:" debug? "\nbased on")
-  (comment (pprint opts))
+  (swap! log-state-atom #(log/flush-logs! logger
+                                          (log/info %
+                                                    ::handler-map-init-key
+                                                    "Setting up router"
+                                                    (dissoc opts
+                                                            ::weald/state-atom
+                                                            ::weald/logger))))
   ;; It seems like there's an interesting implementation issue here:
   ;; This doesn't really play nicely with route/url-for-routes.
   ;; In order to use that, the individual handlers really should

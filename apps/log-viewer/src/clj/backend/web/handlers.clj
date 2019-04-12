@@ -79,65 +79,65 @@
   :ret dfrd/deferred?)
 (defn build-renderer-connection
   [{:keys [::sessions/session-atom
-           ::weald/logger
-           ::weald/state-atom]
+           ::weald/logger]
     lamport-clock ::lamport/clock
+    log-state-atom ::weald/state-atom
     :as component}]
   {:name ::connect-renderer!
    :enter (fn [{:keys [:request]
                 :as ctx}]
-            (when-not state-atom
+            (when-not log-state-atom
               (println "WARNING: Missing state-atom among"
                        (keys component)
                        "\nin\n"
                        (cp-util/pretty component)))
             (try
-              (swap! state-atom
+              (swap! log-state-atom
                      #(log/flush-logs! logger
                                        (log/info % ::connect-renderer!
                                                  "Incoming renderer connection request"
                                                  request)))
+              (let [dfrd-sock (http/websocket-connection request)]
+                (assoc ctx
+                       :response {:body (async/go
+                                          ;; The person who's probably taking over as
+                                          ;; the maintainer for aleph strongly dislikes
+                                          ;; let-flow.
+                                          ;; That seems like a sign that it's probably
+                                          ;; worth avoiding it.
+                                          (dfrd/let-flow [websocket (dfrd/catch
+                                                                        dfrd-sock
+                                                                        (fn [_] nil))]
+                                                         (swap! log-state-atom
+                                                                #(log/flush-logs! logger
+                                                                                  (log/info % ::connect-renderer!
+                                                                                            "websocket upgrade"
+                                                                                            {::result websocket})))
+                                                         (if websocket
+                                                           (do
+                                                             (swap! log-state-atom
+                                                                    #(log/flush-logs! logger
+                                                                                      (log/info % ::connect-renderer!
+                                                                                                "Have a websocket")))
+                                                             (try
+                                                               (lib/activate-session! (assoc component
+                                                                                             ::connection/web-socket websocket))
+                                                               websocket
+                                                               (catch Exception ex
+                                                                 (swap! log-state-atom
+                                                                        #(log/flush-logs! logger
+                                                                                          (log/exception % ex ::connect-renderer!)))
+                                                                 )))
+                                                           (do
+                                                             (swap! log-state-atom
+                                                                    #(log/flush-logs! logger
+                                                                                      (log/warn % ::connect-renderer!
+                                                                                                "No websock")))
+                                                             non-websocket-request))))}))
               (catch Exception ex
-                (swap! state-atom
+                (swap! log-state-atom
                        #(log/flush-logs! logger
-                                         (log/exception % ex ::connect-renderer)))))
-            (let [dfrd-sock (http/websocket-connection request)]
-              (assoc ctx
-                     :response {:body (async/go
-                                        ;; The person who's probably taking over as
-                                        ;; the maintainer for aleph strongly dislikes
-                                        ;; let-flow.
-                                        ;; That seems like a sign that it's probably
-                                        ;; worth avoiding it.
-                                        (dfrd/let-flow [websocket (dfrd/catch
-                                                                      dfrd-sock
-                                                                      (fn [_] nil))]
-                                                       (swap! state-atom
-                                                              #(log/flush-logs! logger
-                                                                                (log/info % ::connect-renderer!
-                                                                                          "websocket upgrade"
-                                                                                          {::result websocket})))
-                                          (if websocket
-                                            (do
-                                              (swap! state-atom
-                                                     #(log/flush-logs! logger
-                                                                       (log/info % ::connect-renderer!
-                                                                                 "Have a websocket")))
-                                              (try
-                                                (lib/activate-session! (assoc component
-                                                                              ::connection/web-socket websocket))
-                                                websocket
-                                                (catch Exception ex
-                                                  (swap! state-atom
-                                                         #(log/flush-logs! logger
-                                                                           (log/exception % ex ::connect-renderer!)))
-)))
-                                            (do
-                                              (swap! state-atom
-                                                     #(log/flush-logs! logger
-                                                                       (log/warn % ::connect-renderer!
-                                                                                 "No websock")))
-                                              non-websocket-request))))})))})
+                                         (log/exception % ex ::connect-renderer))))))})
 
 (s/fdef create-world-interceptor
   :args (s/cat :session-atom ::sessions/session-atom)

@@ -49,6 +49,8 @@
 (s/def ::session-connection (s/merge ::common-connection
                                      (s/keys :req [::sessions/session-atom])))
 
+;; TODO: Need a spec for ::context
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Internal Helpers
 
@@ -326,21 +328,61 @@
                "\nabout"
                world-key))))
 
+(s/fdef log-edges
+  :args (s/cat :phase #{:enter :leave})
+  ;; Needs to return the context
+  :ret any?)
+(defn log-edges
+  [phase
+   {:keys [::weald/logger]
+    log-state-atom ::weald/state-atom
+    :as context}]
+  (swap! log-state-atom #(log/flush-logs! logger
+                                          (log/trace %
+                                                     ::log-edges
+                                                     (str phase)
+                                                     (dissoc context
+                                                             ::weald/logger
+                                                             ::weald/state-atom))))
+  context)
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Outer Handlers and their Interceptors
+
+(def outer-logger
+  {:name ::outer-logger
+   :enter (partial log-edges :enter)
+   :leave (partial log-edges :leave )
+   :error (fn [{:keys [::weald/logger]
+                log-state-atom ::weald/state-atom
+                :as context}
+               ex]
+            (swap! log-state-atom #(log/flush-logs! logger
+                                                    (log/exception %
+                                                                   ex
+                                                                   ::outer-logger
+                                                                   ""
+                                                                   (dissoc context
+                                                                           ::weald/logger
+                                                                           ::weald/state-atom))))
+            context)})
 
 (def request-deserializer
   "Convert raw message string into a clojure map"
   {:name ::request-deserializer
-   :enter (fn [context]
+   :enter (fn [{:keys [::weald/logger]
+                log-state-atom ::weald/state-atom
+                :as context}]
             (update context :request
                     (fn [request]
                       (let [{:keys [:frereth/body]
                              :as result} (serial/deserialize request)]
-                        (println (str ::request-deserializer
-                                      " handling\n"
-                                      body
-                                      ", a " (type body)))
+                        (swap! log-state-atom #(log/flush-logs! logger
+                                                                (log/debug %
+                                                                           ::request-deserializer
+                                                                           "Handling"
+                                                                           {:frereth/body body
+                                                                            ::body-type (type body)})))
                         result))))})
 
 (s/fdef build-ticker
@@ -364,8 +406,10 @@
   "Pull the session out of the session atom"
   {:name ::session-active?
    :enter (fn [{:keys [::lamport/clock
+                       ::weald/logger
                        ::sessions/session-atom
                        ::connection/session-id]
+                log-state-atom ::weald/state-atom
                 :as context}]
             ;; It shouldn't be possible to get here if the session isn't
             ;; active.
@@ -377,6 +421,8 @@
                   (dissoc ::sessions/session-atom ::sessions/session-id)
                   (assoc :frereth/session session))
               (do
+                (println "Broken in session-extractor:")
+                (pprint context)
                 ;; Getting down to here now before throwing NPE due
                 ;; to missing clock
                 (lamport/do-tick clock)
@@ -590,7 +636,7 @@
   ;; this really belong in a shared frereth.app.renderer.lib ns.
   ;; This part's specific to the web-socket interface.
   ;; I don't think anything else is.
-  [{:keys [:lamport/clock
+  [{:keys [::lamport/clock
            ::bus/event-bus
            ::weald/logger
            ::sessions/session-atom
@@ -598,6 +644,7 @@
     log-state-atom ::weald/state-atom
     :as session-connection}
    message-string]
+  (println "Top of on-message!")
   (swap! log-state-atom
          #(log/flush-logs! logger (log/info %
                                             ::on-message!
@@ -625,7 +672,8 @@
                                                                           ex
                                                                           ::on-message!
                                                                           "Expanding Routes failed")))))
-          raw-interceptors [session-extractor
+          raw-interceptors [#_outer-logger
+                            session-extractor
                             request-deserializer
                             (build-ticker clock)
                             ;; This brings up an interesting point.
@@ -664,28 +712,32 @@
           ;; This isn't an HTTP request handler, so the details are
           ;; a little different.
           ;; Especially: use the :action as the request's :verb
-          context {::lamport/clock clock
-                   :request message-string
-                   ;; Putting the session atom into here
-                   ;; seems like a bad idea.
-                   ;; dispatch currently pulls out the actual
-                   ;; session, if needed.
-                   ;; It seems wiser to extract it first and
-                   ;; pass the specific session value to the
-                   ;; handler.
-                   ;; That way there's no risk of cross-
-                   ;; pollination.
-                   ;; At the same time...realistically, this
-                   ;; should really start by restricting the
-                   ;; message to a specific world.
-                   ;; TODO: Think about locking this down
-                   ;; thoroughly.
-                   ;; But I need to get it working before I
-                   ;; worry about the next round of cleanup.
-                   ::sessions/session-atom session-atom
-                   ::sessions/session-id session-id
-                   ::intc-chain/terminators terminators}
-          context (intc-chain/enqueue context
+          context-map (assoc (select-keys session-connection
+                                          [::lamport/clock
+                                           ::weald/logger
+                                           ;; Putting the session atom into here
+                                           ;; seems like a bad idea.
+                                           ;; dispatch currently pulls out the actual
+                                           ;; session, if needed.
+                                           ;; It seems wiser to extract it first and
+                                           ;; pass the specific session value to the
+                                           ;; handler.
+                                           ;; That way there's no risk of cross-
+                                           ;; pollination.
+                                           ;; At the same time...realistically, this
+                                           ;; should really start by restricting the
+                                           ;; message to a specific world.
+                                           ;; TODO: Think about locking this down
+                                           ;; thoroughly.
+                                           ;; But I need to get it working before I
+                                           ;; worry about the next round of cleanup.
+                                           ::sessions/session-atom
+                                           ::connection/session-id
+                                           ::weald/state-atom])
+
+                             :request message-string
+                             ::intc-chain/terminators terminators)
+          context (intc-chain/enqueue context-map
                                       (map intc/interceptor
                                            raw-interceptors))
           _ (swap! log-state-atom
@@ -703,18 +755,19 @@
           ;; Any side-effects that should happen get triggered by
           ;; posting messages to the event bus
           {:keys [:response]
-           :as context} (intc-chain/execute context)]
-      (let [result-message
-            (if response
-               (str "Response for:\n" message-string
-                      "\nWhat would make sense to happen?\n"
-                      (with-out-str (pprint response)))
-               (str "No 'response' for:\n" message-string))]
-        (swap! log-state-atom
-               #(log/flush-logs! logger
-                                 (log/debug %
-                                            ::on-message!
-                                            result-message)))))
+           :as context} (intc-chain/execute context)
+          result-message
+          (if response
+            (str "Response for:\n" message-string
+                 "\nWhat would make sense to happen?\n"
+                 (with-out-str (pprint response)))
+            (str "No 'response' for:\n" message-string))]
+      (swap! log-state-atom
+             #(log/flush-logs! logger
+                               (log/debug %
+                                          ::on-message!
+                                          result-message
+                                          context))))
     (catch Exception ex
       (swap! log-state-atom
              #(log/flush-logs! logger
