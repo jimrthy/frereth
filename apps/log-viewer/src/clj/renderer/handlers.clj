@@ -370,19 +370,17 @@
 (def request-deserializer
   "Convert raw message string into a clojure map"
   {:name ::request-deserializer
-   :enter (fn [{:keys [::weald/logger]
-                log-state-atom ::weald/state-atom
+   :enter (fn [{log-state-atom ::weald/state-atom
                 :as context}]
             (update context :request
                     (fn [request]
                       (let [{:keys [:frereth/body]
                              :as result} (serial/deserialize request)]
-                        (swap! log-state-atom #(log/flush-logs! logger
-                                                                (log/debug %
-                                                                           ::request-deserializer
-                                                                           "Handling"
-                                                                           {:frereth/body body
-                                                                            ::body-type (type body)})))
+                        (swap! log-state-atom #(log/debug %
+                                                          ::request-deserializer
+                                                          "Handling"
+                                                          {:frereth/body body
+                                                           ::body-type (type body)}))
                         result))))})
 
 (s/fdef build-ticker
@@ -395,10 +393,16 @@
   [clock]
   {:name ::lamport-ticker
    :enter (fn [{{remote-clock :frereth/lamport} :request
+                log-state-atom ::weald/state-atom
                 :as context}]
             ;; Q: Do I want to handle it this way?
             ;; (it associates the current clock-tick, rather
             ;; than an actual clock)
+            (swap! log-state-atom #(log/trace %
+                                              ::build-ticker
+                                              "Synchronizing"))
+            ;; TODO: Would be really nice to also coordinate
+            ;; with the logger's Lamport clock
             (update-in context [:request :frereth/lamport]
                        (partial lamport/do-tick clock)))})
 
@@ -580,9 +584,13 @@
    :enter (fn [{:keys [::bus/event-bus
                        :request]
                 lamport ::lamport/clock
+                log-state-atom ::weald/state-atom
                 {:keys [::sessions/session-id]
                  :as session} :frereth/session
                 :as context}]
+            (swap! log-state-atom #(log/trace %
+                                              ::world-forking
+                                              "Top"))
             (let [{:keys [:frereth/command
                           ;; It seems like it would be better to make this explicitly a
                           ;; :frereth/world-key instead.
@@ -646,10 +654,10 @@
    message-string]
   (println "Top of on-message!")
   (swap! log-state-atom
-         #(log/flush-logs! logger (log/info %
-                                            ::on-message!
-                                            "Incoming"
-                                            {::body message-string})))
+         #(log/info %
+                    ::on-message!
+                    "Incoming"
+                    {::body message-string}))
   ;; STARTED: Break this up into a Pedestal interceptor chain
   ;; Things fail silently and the websocket closes without
   ;; explanation somewhere after this.
@@ -659,8 +667,15 @@
     ;; session.
     (let [terminators #{}  ; Q: Is there anything useful to put in here?
           verbs #{:frereth/forked :frereth/forking}
-          ;; TODO: need an option, especially in debug mode, for this
-          ;; to be function that gets called each time.
+          ;; TODO: need an option, at least in debug mode, for this
+          ;; to be a function that gets called each time.
+
+          ;; Hypothesis:
+          ;; Interceptor-chain works correctly.
+          ;; Routing fails because the path...isn't even nil (though
+          ;; I think it arrives that way).
+          ;; After I deserialize it, that key doesn't exist at all.
+          ;; So *of course* it isn't going to match a route.
           routes #{["/" :frereth/forked world-forked :route-name ::forked]
                    ["/" :frereth/forking world-forking :route-name ::forking]}
           processed-routes (try (table-route/table-routes {:verbs verbs}
@@ -671,8 +686,18 @@
                                                            (log/exception %
                                                                           ex
                                                                           ::on-message!
-                                                                          "Expanding Routes failed")))))
-          raw-interceptors [#_outer-logger
+                                                                          "Expanding Routes failed")))
+                                  ;; We were getting here because I
+                                  ;; wasn't providing the :verbs option,
+                                  ;; so it was throwing an assert.
+                                  ;; That (and, by extension, this) was/will
+                                  ;; be swallowed by the caller.
+                                  ;; Without routes, there's no point to
+                                  ;; proceeding.
+                                  ;; At least now the failure won't be
+                                  ;; totally silent.
+                                  (throw ex)))
+          raw-interceptors [outer-logger
                             session-extractor
                             request-deserializer
                             (build-ticker clock)
@@ -741,10 +766,9 @@
                                       (map intc/interceptor
                                            raw-interceptors))
           _ (swap! log-state-atom
-                   #(log/flush-logs! logger
-                                     (log/info %
-                                               ::on-message!
-                                            "Ready to trigger interceptor-chain")))
+                   #(log/info %
+                              ::on-message!
+                              "Ready to trigger interceptor-chain"))
           ;; The actual point.
           ;; It's easy to miss this in the middle of setting up the
           ;; chain handler.
