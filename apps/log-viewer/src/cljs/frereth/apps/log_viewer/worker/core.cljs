@@ -109,7 +109,8 @@
 ;; It should not. We don't have any reason to know about that sort of
 ;; implementation detail here.
 ;; It would be nice to not even need to know this much.
-(let [message {:frereth/action :frereth/forked}]
+(let [message {:path-info "/api/v1/forked"
+               :request-method :put}]
   (.postMessage js/self (transit/write (transit/writer :json) message)))
 
 (console.log "Worker bottom")

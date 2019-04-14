@@ -1,9 +1,5 @@
 (ns renderer.lib
   "Library functions specific for the web renderer"
-;; FIXME: A lot of this (esp. the on-message! chain) seems like it might
-;; be more generally useful for other renderers.
-;; Then again, any such hypothetical renderers will be built around a
-;; totally different architecture, so probably not.
   (:require
    [backend.event-bus :as bus]
    [clojure.core.async :as async]
@@ -97,7 +93,8 @@
            (not= ::timed-out wrapper))
     (let [envelope (serial/deserialize wrapper)
           _ (println ::login-finalized! "Key pulled:" envelope)
-          session-id (:frereth/body envelope)]
+          {{:keys [:frereth/session-id]} :params
+           :as body} (:frereth/body envelope)]
       (swap! log-state-atom #(log/flush-logs! logger
                                               (log/info %
                                                         ::login-finalized!

@@ -1,4 +1,8 @@
 (ns renderer.handlers
+  ;; FIXME: A lot of this (esp. the on-message! chain) seems like it might
+  ;; be more generally useful for other renderers.
+  ;; Then again, any such hypothetical renderers will be built around a
+  ;; totally different architecture, so probably not.
   "Handlers for renderer messages"
   (:require
    [backend.event-bus :as bus]
@@ -19,7 +23,8 @@
    [io.pedestal.http.route.definition.table :as table-route]
    [manifold.deferred :as dfrd]
    [manifold.stream :as strm]
-   [renderer.sessions :as sessions])
+   [renderer.sessions :as sessions]
+   [clojure.set :as set])
   (:import java.util.Base64))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -399,7 +404,7 @@
             ;; (it associates the current clock-tick, rather
             ;; than an actual clock)
             (swap! log-state-atom #(log/trace %
-                                              ::build-ticker
+                                              ::ticker
                                               "Synchronizing"))
             ;; TODO: Would be really nice to also coordinate
             ;; with the logger's Lamport clock
@@ -631,6 +636,26 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Public
 
+;; Log message (for :context) at the end:
+(comment
+  {:frereth.weald.specs/current-thread "manifold-pool-14-61",
+   :frereth.weald.specs/label :renderer.handlers/log-edges,
+   :frereth.weald.specs/lamport 786,
+   :frereth.weald.specs/level :frereth.weald.specs/trace,
+   :frereth.weald.specs/time 1555215790151,
+   :frereth.weald.specs/message ":leave",
+   :frereth.weald.specs/details {:io.pedestal.interceptor.chain/stack (),
+                                 ;; Here's my problem: need to pull it up one level
+                                 :request {:frereth/body {:path-info "/api/v1/forking",
+                                                          :reqest-method :post,
+                                                          :params {:frereth/command shell,
+                                                                   :frereth/pid {"crv" "P-384",
+                                                                                 "ext" true,
+                                                                                 "key_ops" ["verify"],
+                                                                                 "kty" "EC",
+                                                                                 "x" "KyhmaAWmWGIkndxHW2CxPrjKT_kGj3dQnoxNyIOIl9mLO0iUJVkuZUSWvlvGU8_6",
+                                                                                 "y" "F1nn2PgTijTj4Y3hxM7dR2zSOhGbqB8seVNbRenJeF70Y-ZSSDEcIvM68lS6t8D3"}}}}}}),
+
 (s/fdef on-message!
   :args (s/cat :session-connection ::session-connection
                :message-string string?)
@@ -666,7 +691,7 @@
     ;; It's very tempting to make the routes part of the specific
     ;; session.
     (let [terminators #{}  ; Q: Is there anything useful to put in here?
-          verbs #{:frereth/forked :frereth/forking}
+          custom-verbs #{:frereth/forward}  ; Q: How should this work?
           ;; TODO: need an option, at least in debug mode, for this
           ;; to be a function that gets called each time.
 
@@ -676,9 +701,13 @@
           ;; I think it arrives that way).
           ;; After I deserialize it, that key doesn't exist at all.
           ;; So *of course* it isn't going to match a route.
-          routes #{["/" :frereth/forked world-forked :route-name ::forked]
-                   ["/" :frereth/forking world-forking :route-name ::forking]}
-          processed-routes (try (table-route/table-routes {:verbs verbs}
+          routes #{["/api/v1/forked" :post world-forked :route-name ::forked]
+                   ["/api/v1/forking" :post world-forking :route-name ::forking]}
+          ;; With this approach, need to combine custom-verbs with the standard
+          ;; HTTP ones.
+          ;; TODO: Make that so.
+          processed-routes (try (table-route/table-routes {:verbs (set/union @#'table-route/default-verbs
+                                                                             custom-verbs)}
                                                           routes)
                                 (catch Throwable ex
                                   (swap! log-state-atom
@@ -726,13 +755,23 @@
                             ;; However...dragging this out for the sake
                             ;; of hypothetical future benefit seems like
                             ;; a really bad idea.
-                            ;; For now, just skip the idea of url-params.
                             route/query-params
+                            route/path-params-decoder
                             ;; It might make sense to parameterize this,
                             ;; but it doesn't seem likely.
                             ;; If I do add the concept of a URI path
                             ;; here, I don't see adding in path params.
                             ;; This dispatch needs to happen fast.
+                            ;; TODO: Inject another logger here.
+                            ;; :enter should log the :request (esp: what's
+                            ;; needed for query-params) while :leave
+                            ;; needs a way to verify that it was routed
+                            ;; somewhere. (Easiest approach: add a
+                            ;; response that's really just a signal that
+                            ;; it got handled. Possibly better: have the
+                            ;; response be a seq of functions to call
+                            ;; to trigger side-effects, like posting
+                            ;; messages to the event bus)
                             (route/router processed-routes :map-tree)]
           ;; This isn't an HTTP request handler, so the details are
           ;; a little different.

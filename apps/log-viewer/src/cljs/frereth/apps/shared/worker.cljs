@@ -416,10 +416,11 @@
    spawner raw-key-pair full-pk]
   (console.log "Set up pending World. Notify about pending fork.")
   ;; Want this part to happen asap to minimize the length of time
-  ;; we have to spend waiting on it
-  (send-message! this full-pk {:frereth/action :frereth/forking
-                               :frereth/command 'shell
-                               :frereth/pid full-pk})
+  ;; we have to spend waiting on network hops
+  (send-message! this full-pk {:path-info "/api/v1/forking"
+                               :reqest-method :post
+                               :params {:frereth/command 'shell
+                                        :frereth/pid full-pk}})
   (console.log "Setting up worker 'fork' in worlds inside the manager in"
                this "\namong" (keys this))
   ;; Q: Should this next section wait on the forking-ACK?
@@ -465,6 +466,7 @@
 (defn fork-shell!
   [this
    session-id]
+  (.log js/console "Setting up shell fork request")
   ;; TODO: Look into using something like
   ;; https://tweetnacl.js.org/#/
   ;; instead.
@@ -486,6 +488,7 @@
         key-pair-atom (atom nil)
         export-pk-promise (.then signing-key-promise
                                  (fn [key-pair]
+                                   (.log js/console "Exporting the signing key we just generated")
                                    (reset! key-pair-atom key-pair)
                                    (export-public-key!
                                     this
@@ -493,6 +496,7 @@
                                     crypto
                                     key-pair)))]
     (.then export-pk-promise (fn [exported]
+                               (.log js/console "Building the worker to spawn")
                                (let [key-pair @key-pair-atom
                                      raw-public (.-publicKey key-pair)
                                      raw-secret (.-privateKey key-pair)

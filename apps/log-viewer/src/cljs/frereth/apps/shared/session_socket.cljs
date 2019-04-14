@@ -23,8 +23,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Implementation
 
-;;; These duplicate pieces in core
-;;; And most of them should probably move into socket.
+;;; Most of these should probably move into socket.
 ;;; Since this ns is about coordinating those.
 
 (s/fdef recv-message!
@@ -192,17 +191,15 @@
       (catch :default ex
         (console.error "Sending message failed:" ex)))))
 
-;;; aka fork-login! in core
 (s/fdef notify-logged-in!
   :args (s/cat :this ::connection
                :session-id ::session-id)
   :ret any?)
 (defn notify-logged-in!
-  ;; TODO: Auth before this. Probably using some kind of PAKE.
+  ;; TODO: Auth before this. Some kind of PAKE is tempting.
   "Tell the web socket handler that a session just connected"
   [this session-id]
-  ;; Probably reasonable to base this on something like the
-  ;; CurveCP handshake.
+  ;; This is loosely based on the CurveCP handshake.
 
   ;; Remember the login protocol that never actually exchanges
   ;; passwords. (SRP: Secure Remote Password protocol)
@@ -214,11 +211,11 @@
   ;; However:
   ;; There really needs to be an intermediate login step that
   ;; handles this for real.
-  ;; In terms of a linux ssh connection, loading the
-  ;; web page is similar to connecting to a pty.
+  ;; In the frame of a linux ssh connection, loading the
+  ;; web page was similar to connecting to a pty.
   ;; It's constantly tempting to allow anonymous connections
   ;; there.
-  ;; That temptation is wrong: this is like logging into
+  ;; That frame is wrong: this is like logging into
   ;; your local computer (and, no matter what Macs might
   ;; allow, doing that without authentication is wrong).
   ;; This is like the login "process" that authenticates the user.
@@ -231,7 +228,11 @@
   ;; Which makes this approach even more incorrect: that should
   ;; really be an http-only cookie to which we don't have any
   ;; access.
-  (send-message! this ::login session-id))
+  ;; OTOH, this really needs to switch to the HTTP-ish style
+  ;; for the sake of consistency
+  (send-message! this ::login {:path-info "/api/v1/logged-in"
+                               :request-method :put
+                               :params {:frereth/session-id session-id}}))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Public
@@ -254,6 +255,8 @@
       (set! (.-onopen socket)
             (fn [event]
               (console.log "Websocket opened:" event socket)
+              ;; This is really just a
+              ;; placeholder until I add real auth.
               (notify-logged-in! this session-id)
               ;; TODO: This needs to wait for something like a
               ;; ::login-complete-ack message.
