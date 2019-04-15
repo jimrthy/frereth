@@ -84,32 +84,33 @@
    ;; FIXME: refactor-rename this to message-wrapper
    ;; or something along those lines
    wrapper]
-  (swap! log-state-atom #(log/flush-logs! logger
-                                          (log/info %
-                                                    ::login-finalized!
-                                                    "Initial websocket message"
-                                                    {::message wrapper})))
+  (swap! log-state-atom
+         #(log/info %
+                    ::login-finalized!
+                    "Initial websocket message"
+                    {::message wrapper}))
   (if (and (not= ::drained wrapper)
            (not= ::timed-out wrapper))
     (let [envelope (serial/deserialize wrapper)
-          _ (println ::login-finalized! "Key pulled:" envelope)
-          {{:keys [:frereth/session-id]} :params
-           :as body} (:frereth/body envelope)]
-      (swap! log-state-atom #(log/flush-logs! logger
-                                              (log/info %
-                                                        ::login-finalized!
-                                                        "Key pulled"
-                                                        {::deserialized envelope})))
+          {{:keys [:frereth/session-id]
+            :as params} :params
+           :as request} (:request envelope)]
+      (swap! log-state-atom
+             #(log/debug %
+                         ::login-finalized!
+                         "Key pulled"
+                         {::deserialized envelope
+                          ::params params}))
       (try
         (let [session-state (sessions/get-by-state @session-atom
                                                    ::connection/pending)]
-          (swap! log-state-atom #(log/flush-logs! logger
-                                                  (log/debug %
-                                                             ::login-finalized!
-                                                             "Trying to activate session"
-                                                             {::connection/session-id session-id
-                                                              ::session-id-type (type session-id)
-                                                              ::sessions/session session-state}))))
+          (swap! log-state-atom
+                 #(log/debug %
+                             ::login-finalized!
+                             "Trying to activate session"
+                             {::connection/session-id session-id
+                              ::session-id-type (type session-id)
+                              ::sessions/session session-state})))
         (catch Exception ex
           (swap! log-state-atom #(log/flush-logs! logger
                                                   (log/exception %

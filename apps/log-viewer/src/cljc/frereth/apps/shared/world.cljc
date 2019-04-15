@@ -287,14 +287,6 @@
   [world-map world-key]
   (update-world-connection-state world-map world-key ::disconnected))
 
-(s/fdef get-pending
-  :args (s/cat :world-map :frereth/worlds
-               :world-key :frereth/world-key)
-  :ret (s/nilable ::world))
-(defn get-pending
-  [world-map world-key]
-  (get-world-in-state world-map world-key ::pending))
-
 ;; TODO: Add a macro to define these mark-state functions
 ;; and their specs
 (defn mark-disconnect-timeout

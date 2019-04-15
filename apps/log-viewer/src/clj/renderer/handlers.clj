@@ -378,14 +378,14 @@
    :enter (fn [{log-state-atom ::weald/state-atom
                 :as context}]
             (update context :request
-                    (fn [request]
-                      (let [{:keys [:frereth/body]
-                             :as result} (serial/deserialize request)]
+                    (fn [initial]
+                      (let [{:keys [:request]
+                             :as result} (serial/deserialize initial)]
                         (swap! log-state-atom #(log/debug %
                                                           ::request-deserializer
                                                           "Handling"
-                                                          {:frereth/body body
-                                                           ::body-type (type body)}))
+                                                          {:request initial
+                                                           ::body-type (type initial)}))
                         result))))})
 
 (s/fdef build-ticker
@@ -690,6 +690,7 @@
     ;; TODO: Build the terminators/interceptors/routers elsewhere.
     ;; It's very tempting to make the routes part of the specific
     ;; session.
+    ;; Definitely need to pull this all apart so I can unit test what I have.
     (let [terminators #{}  ; Q: Is there anything useful to put in here?
           custom-verbs #{:frereth/forward}  ; Q: How should this work?
           ;; TODO: need an option, at least in debug mode, for this

@@ -18,6 +18,14 @@
 (s/def ::connection (s/keys :required [::lamport/clock
                                        ::session/manager
                                        ::web-socket/wrapper
+                                       ;; This is a bit redundant.
+                                       ;; The ::worker/manager consists
+                                       ;; of those 3 keys plus
+                                       ;; ::worker/workers.
+                                       ;; Then again, we should probably
+                                       ;; treat it as a black box here.
+                                       ;; The duplication is really just
+                                       ;; an implementation detail.
                                        ::worker/manager]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -161,36 +169,6 @@
         ;; This should be impossible: it will throw an exception
         (console.error "Missing world" world-key "inside" worlds)))))
 
-(s/fdef send-message!
-  :args (s/cat :this ::connection
-               ;; should be bytes? but cljs doesn't have the concept
-               ;; Q: Is it a string?
-               ;; A: Actually, it should be a map of a JWK
-               :world-id any?
-               ;; Anything that transit can serialize natively, anyway
-               :body any?))
-(defn send-message!
-  "Send `body` over `socket` for `world-id`"
-  [{:keys [::lamport/clock
-           ::web-socket/wrapper]
-    :as this}
-   world-id
-   body]
-  (lamport/do-tick clock)
-  (let [envelope {:frereth/body body
-                  :frereth/lamport @clock
-                  :frereth/wall-clock (.now js/Date)
-                  :frereth/world world-id}
-        {:keys [::web-socket/socket]} wrapper]
-    ;; TODO: Check that bufferedAmount is low enough
-    ;; to send more
-    (try
-      (console.log "Trying to send-message!" envelope "to" socket)
-      (.send socket (serial/serialize envelope))
-      (console.log body "sent successfully")
-      (catch :default ex
-        (console.error "Sending message failed:" ex)))))
-
 (s/fdef notify-logged-in!
   :args (s/cat :this ::connection
                :session-id ::session-id)
@@ -228,11 +206,16 @@
   ;; Which makes this approach even more incorrect: that should
   ;; really be an http-only cookie to which we don't have any
   ;; access.
-  ;; OTOH, this really needs to switch to the HTTP-ish style
-  ;; for the sake of consistency
-  (send-message! this ::login {:path-info "/api/v1/logged-in"
-                               :request-method :put
-                               :params {:frereth/session-id session-id}}))
+  (.log js/console "Trying to send logged-in notification for" this)
+  (worker/send-message! (::worker/manager this)
+                        ::login
+                        {:path-info "/api/v1/logged-in"
+                         :request-method :put
+                         :params {:frereth/session-id session-id}}))
+
+(defn check
+  []
+  (js/alert "defined"))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Public
@@ -248,6 +231,7 @@
                "\nin:" this)
   (when-let [{:keys [::web-socket/socket]} wrapper]
     (let [worker-manager (worker/manager clock session-manager wrapper)
+          this (assoc this ::worker/manager worker-manager)
           {:keys [::session/session-id]} session-manager]
       ;; Q: Worth using a library like sente or haslett to wrap the
       ;; details?
@@ -276,4 +260,4 @@
       (set! (.-onerror socket)
             (fn [event]
               (console.error "Frereth Connection error:" event)))
-      (assoc this ::worker/manager worker-manager))))
+      this)))

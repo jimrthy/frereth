@@ -133,26 +133,31 @@
                        content))
                    body))))))
 
+;; This doesn't belong in here.
+;; But the session-socket ns depends on this ns,
+;; and we need to call this function here.
+;; So it doesn't make any sense to define it there.
 (s/fdef send-message!
   :args (s/cat :this ::manager
-               ;; should be bytes? but cljs doesn't have the concept
-               ;; Q: Is it a string?
-               ;; A: Actually, it should be a map of a JWK
-               :world-id any?
-               ;; Anything that transit can serialize natively, anyway
-               :body any?))
+               :world-id :frereth/pid
+               ;; This really turns into a subset of the Pedestal
+               ;; Request map.
+               ;; TODO: Need to define exactly which subset.
+               ;; And think this through a bit more.
+               ;; Would it be worth splitting
+               :request any?))
 (defn send-message!
   "Send `body` over `socket` for `world-id`"
   [{{:keys [::web-socket/socket]} ::web-socket/wrapper
     :keys [::lamport/clock]
     :as this}
    world-id
-   body]
+   request]
   (when-not clock
     (throw (ex-info "Missing clock"
                     {::problem this})))
   (lamport/do-tick clock)
-  (let [envelope {:frereth/body body
+  (let [envelope {:request request
                   :frereth/lamport @clock
                   :frereth/wall-clock (.now js/Date)
                   :frereth/world world-id}]
