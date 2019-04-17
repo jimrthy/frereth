@@ -342,13 +342,17 @@
    {:keys [::weald/logger]
     log-state-atom ::weald/state-atom
     :as context}]
-  (swap! log-state-atom #(log/flush-logs! logger
-                                          (log/trace %
-                                                     ::log-edges
-                                                     (str phase)
-                                                     (dissoc context
-                                                             ::weald/logger
-                                                             ::weald/state-atom))))
+  (let [log-state (log/trace @log-state-atom
+                             ::log-edges
+                             phase
+                             (dissoc context
+                                     ::weald/logger
+                                     ::weald/state-atom))]
+    (reset! log-state-atom
+            (if (= :leave phase)
+              (log/flush-logs! logger
+                               log-state)
+              log-state)))
   context)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -376,17 +380,18 @@
   "Convert raw message string into a clojure map"
   {:name ::request-deserializer
    :enter (fn [{log-state-atom ::weald/state-atom
+                :keys [:request]
                 :as context}]
-            (update context :request
-                    (fn [initial]
-                      (let [{:keys [:request]
-                             :as result} (serial/deserialize initial)]
-                        (swap! log-state-atom #(log/debug %
-                                                          ::request-deserializer
-                                                          "Handling"
-                                                          {:request initial
-                                                           ::body-type (type initial)}))
-                        result))))})
+            (let [{deserialized-request :request
+                   :as result} (serial/deserialize request)]
+              (swap! log-state-atom #(log/trace %
+                                                ::request-deserializer
+                                                "Handling"
+                                                {::initial-request request
+                                                 ::body-type (type request)
+                                                 ::result-request deserialized-request
+                                                 ::deserialized result}))
+              (into context result)))})
 
 (s/fdef build-ticker
   :args (s/cat :clock ::lamport/clock)
@@ -397,7 +402,8 @@
   "Update the Lamport clock"
   [clock]
   {:name ::lamport-ticker
-   :enter (fn [{{remote-clock :frereth/lamport} :request
+   :enter (fn [{:keys [request]
+                remote-clock :frereth/lamport
                 log-state-atom ::weald/state-atom
                 :as context}]
             ;; Q: Do I want to handle it this way?
@@ -408,8 +414,13 @@
                                               "Synchronizing"))
             ;; TODO: Would be really nice to also coordinate
             ;; with the logger's Lamport clock
-            (update-in context [:request :frereth/lamport]
-                       (partial lamport/do-tick clock)))})
+            (lamport/do-tick (::lamport/clock context)
+                             remote-clock)
+            ;; There are 2 pieces of mutable state used here:
+            ;; the local Lamport clock and the log-state-atom.
+            ;; They're convenient, but seem like a terrible
+            ;; idea.
+            context)})
 
 (def session-extractor
   "Pull the session out of the session atom"
