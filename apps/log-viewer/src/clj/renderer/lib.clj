@@ -138,7 +138,8 @@
                                                              "Swapped:"
                                                              {::connection/web-socket web-socket})))
           ;; Set up the message handler
-          (let [connection-closed
+          (let [routes (handlers/build-routes)  ; FIXME: move this up the chain
+                connection-closed
                 (strm/consume (partial handlers/on-message!
                                        ;; This is another opportunity to
                                        ;; learn from om-next.
@@ -160,6 +161,7 @@
                                                             ::weald/logger
                                                             ::weald/state-atom
                                                             ::sessions/session-atom])
+                                              ::handlers/routes routes
                                               ::connection/session-id session-id))
                               web-socket)]
             (swap! log-state-atom #(log/flush-logs! logger

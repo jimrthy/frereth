@@ -30,6 +30,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Specs
 
+;;; Low-level building blocks
 (s/def ::cookie (s/keys :req [:frereth/pid
                               :frereth/state
                               :frereth/world-ctor]))
@@ -40,6 +41,12 @@
                                         :frereth/body
                                         :frereth/lamport
                                         :frereth/world-key]))
+
+;; TODO: Write this, assuming no one else already has.
+;; It's a Pedestal route table
+(s/def ::routes any?)
+
+;;; Higher-level concepts
 
 (s/def ::common-connection (s/keys :req [::bus/event-bus
                                          ::lamport/clock
@@ -52,7 +59,8 @@
                                                  ::world-stop-signal])))
 
 (s/def ::session-connection (s/merge ::common-connection
-                                     (s/keys :req [::sessions/session-atom])))
+                                     (s/keys :req [::routes
+                                                   ::sessions/session-atom])))
 
 ;; TODO: Need a spec for ::context
 
@@ -596,6 +604,13 @@
                   context))))})
 
 (def world-forking
+  ;; The browser has established an authenticated session (TBD) and a
+  ;; websocket.
+  ;; Now it's used the websocket to send us a notification that it wants
+  ;; to spawn/fork a new connection to some world.
+  ;; We need set up that connection and the event loop that passes
+  ;; messages between the world and the browser.
+  "Now the nesting is getting deep"
   {:name ::world-forking
    :enter (fn [{:keys [::bus/event-bus
                        :request]
@@ -647,6 +662,14 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Public
 
+(s/fdef build-routes
+  :args nil
+  :ret ::routes)
+(defn build-routes
+  []
+  #{["/api/v1/forked" :post world-forked :route-name ::forked]
+    ["/api/v1/forking" :post world-forking :route-name ::forking]})
+
 ;; Log message (for :context) at the end:
 (comment
   {:frereth.weald.specs/current-thread "manifold-pool-14-61",
@@ -683,12 +706,12 @@
   [{:keys [::lamport/clock
            ::bus/event-bus
            ::weald/logger
+           ::routes
            ::sessions/session-atom
            ::connection/session-id]
     log-state-atom ::weald/state-atom
     :as session-connection}
    message-string]
-  (println "Top of on-message!")
   (swap! log-state-atom
          #(log/info %
                     ::on-message!
@@ -706,18 +729,21 @@
           custom-verbs #{:frereth/forward}  ; Q: How should this work?
           ;; TODO: need an option, at least in debug mode, for this
           ;; to be a function that gets called each time.
-
-          ;; Hypothesis:
-          ;; Interceptor-chain works correctly.
-          ;; Routing fails because the path...isn't even nil (though
-          ;; I think it arrives that way).
-          ;; After I deserialize it, that key doesn't exist at all.
-          ;; So *of course* it isn't going to match a route.
-          routes #{["/api/v1/forked" :post world-forked :route-name ::forked]
-                   ["/api/v1/forking" :post world-forking :route-name ::forking]}
-          ;; With this approach, need to combine custom-verbs with the standard
-          ;; HTTP ones.
-          ;; TODO: Make that so.
+          routes (if (set? routes)
+                   routes
+                   (routes))
+          ;; With this approach, need to combine custom-verbs with the
+          ;; standard HTTP ones.
+          ;; It's very tempting to make this the responsibility of the
+          ;; route-uilding function.
+          ;; That temptation is wrong.
+          ;; Want the code that builds the routes to be as simple,
+          ;; clean, and declarative as possible.
+          ;; OTOH, this misses a clean separation: where do the
+          ;; custom-verbs come from?
+          ;; It's tempting to just process the routes and assume that
+          ;; anything listed there is legal.
+          ;; I'm curious why Pedestal didn't just take that approach.
           processed-routes (try (table-route/table-routes {:verbs (set/union @#'table-route/default-verbs
                                                                              custom-verbs)}
                                                           routes)
