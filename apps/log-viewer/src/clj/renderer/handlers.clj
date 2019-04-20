@@ -342,47 +342,64 @@
                world-key))))
 
 (s/fdef log-edges
-  :args (s/cat :phase #{:enter :leave})
-  ;; Needs to return the context
+  :args (s/cat :location keyword?  ; :frereth/atom better?
+               :phase #{:enter :leave})
+  ;; Return the context.
+  ;; FIXME: Need to spec that
   :ret any?)
 (defn log-edges
-  [phase
+  [location
+   phase
    {:keys [::weald/logger]
     log-state-atom ::weald/state-atom
     :as context}]
   (let [log-state (log/trace @log-state-atom
-                             ::log-edges
+                             location
                              phase
-                             (dissoc context
-                                     ::weald/logger
-                                     ::weald/state-atom))]
+                             (-> context
+                                 (dissoc ::weald/logger
+                                         ::weald/state-atom)
+                                 (assoc ::queue-length (-> context
+                                                           :intc-chain/queue
+                                                           count))))]
     (reset! log-state-atom
             (if (= :leave phase)
+              ;; FIXME: Parameterize this
               (log/flush-logs! logger
                                log-state)
               log-state)))
   context)
 
+(defn log-error
+  [where
+   {:keys [::weald/logger]
+    log-state-atom ::weald/state-atom
+    :as context}
+   ex]
+  (swap! log-state-atom #(log/flush-logs! logger
+                                          (log/exception %
+                                                         ex
+                                                         where
+                                                         ""
+                                                         (dissoc context
+                                                                 ::weald/logger
+                                                                 ::weald/state-atom))))
+  context)
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Outer Handlers and their Interceptors
 
+(def inner-logger
+  {:name ::inner-logger
+   :enter (partial log-edges ::inner :enter)
+   :leave (partial log-edges ::inner :leave)
+   :error (partial log-error ::inner)})
+
 (def outer-logger
   {:name ::outer-logger
-   :enter (partial log-edges :enter)
-   :leave (partial log-edges :leave )
-   :error (fn [{:keys [::weald/logger]
-                log-state-atom ::weald/state-atom
-                :as context}
-               ex]
-            (swap! log-state-atom #(log/flush-logs! logger
-                                                    (log/exception %
-                                                                   ex
-                                                                   ::outer-logger
-                                                                   ""
-                                                                   (dissoc context
-                                                                           ::weald/logger
-                                                                           ::weald/state-atom))))
-            context)})
+   :enter (partial log-edges ::outer :enter)
+   :leave (partial log-edges ::outer :leave)
+   :error (partial log-error ::outer)})
 
 (def request-deserializer
   "Convert raw message string into a clojure map"
@@ -725,6 +742,9 @@
     ;; It's very tempting to make the routes part of the specific
     ;; session.
     ;; Definitely need to pull this all apart so I can unit test what I have.
+    (println "routes is"
+             (if-not (set? routes) "not" "")
+             "a set")  ; FIXME: debug only_|Z
     (let [terminators #{}  ; Q: Is there anything useful to put in here?
           custom-verbs #{:frereth/forward}  ; Q: How should this work?
           ;; TODO: need an option, at least in debug mode, for this
@@ -795,6 +815,7 @@
                             ;; a really bad idea.
                             route/query-params
                             route/path-params-decoder
+                            inner-logger
                             ;; It might make sense to parameterize this,
                             ;; but it doesn't seem likely.
                             ;; If I do add the concept of a URI path
