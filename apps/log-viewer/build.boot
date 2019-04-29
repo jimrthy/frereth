@@ -45,7 +45,7 @@
 (set-env! :dependencies   '[[adzerk/boot-cljs "2.1.5" :scope "test"]
                             [adzerk/boot-cljs-repl "0.4.0" :scope "test"]
                             [adzerk/boot-reload "0.6.0" :scope "test"]
-                            [boot/core "2.8.2" :scope "provided"]
+                            [boot/core "2.8.3" :scope "provided"]
                             [buddy/buddy-auth "2.1.0"]
                             [cider/piggieback "0.4.0" :scope "test" :exclusions [com.google.guava/guava
                                                                                  com.google.javascript/closure-compiler-externs
@@ -69,7 +69,7 @@
                                                                               ;; relies on newer versions of this
                                                                               com.fasterxml.jackson.core/jackson-core]]
                             [com.cognitect/transit-cljs "0.8.256"]
-                            [com.nimbusds/nimbus-jose-jwt "7.0.1"]
+                            [com.nimbusds/nimbus-jose-jwt "7.1"]
                             [com.nimbusds/srp6a "2.0.2"]
                             [crisptrutski/boot-cljs-test "0.3.4" :scope "test"]
                             [deraen/boot-sass "0.3.1" :scope "test"]
@@ -97,7 +97,7 @@
                             [metosin/boot-alt-test "0.3.2" :scope "test"]
                             [metosin/boot-deps-size "0.1.0" :scope "test"]
                             [nrepl "0.6.0" :exclusions [org.clojure/clojure]]
-                            [org.clojure/clojure "1.10.1-beta1"]
+                            [org.clojure/clojure "1.10.1-beta2"]
                             [org.clojure/clojurescript "1.10.520" :scope "test" :exclusions [commons-codec
                                                                                              com.cognitect/transit-clj
                                                                                              com.cognitect/transit-java
