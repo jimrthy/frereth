@@ -144,7 +144,9 @@
                ;; Request map.
                ;; TODO: Need to define exactly which subset.
                ;; And think this through a bit more.
-               ;; Would it be worth splitting
+               ;; Would it be worth splitting into something
+               ;; more traditional, like post/get/delete
+               ;; methods?
                :request any?))
 (defn send-message!
   "Send `body` over `socket` for `world-id`"
@@ -166,7 +168,7 @@
     (try
       (console.log "Trying to send-message!" envelope)
       (.send socket (serial/serialize envelope))
-      (console.log body "sent successfully")
+      (console.log request "sent successfully")
       (catch :default ex
         (console.error "Sending message failed:" ex)))))
 
@@ -423,7 +425,7 @@
   ;; Want this part to happen asap to minimize the length of time
   ;; we have to spend waiting on network hops
   (send-message! this full-pk {:path-info "/api/v1/forking"
-                               :reqest-method :post
+                               :request-method :post
                                :params {:frereth/command 'shell
                                         :frereth/pid full-pk}})
   (console.log "Setting up worker 'fork' in worlds inside the manager in"

@@ -51,4 +51,4 @@
                  :request-method :post}
         initial-context {:request request}
         routed (router initial-context)]
-    (is not routed)))
+    (is routed)))

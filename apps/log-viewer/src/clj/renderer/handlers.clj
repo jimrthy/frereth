@@ -639,12 +639,12 @@
             (swap! log-state-atom #(log/trace %
                                               ::world-forking
                                               "Top"))
-            (let [{:keys [:frereth/command
-                          ;; It seems like it would be better to make this explicitly a
-                          ;; :frereth/world-key instead.
-                          ;; TODO: Refactor it
-                          :frereth/pid]
-                   :as body} request]
+            (let [{{:keys [:frereth/command
+                            ;; It seems like it would be better to make this explicitly a
+                            ;; :frereth/world-key instead.
+                            ;; TODO: Refactor it
+                            :frereth/pid]
+                     :as body} :params} request]
               ;; TODO: Look into clojure core functionality.
               ;; Surely there's a better approach than these nested ifs
               (if (and command pid)
@@ -654,26 +654,36 @@
                     ;; to verify that command is legal for the current
                     ;; session (at the very least, this means authorization)
                     (let [cookie (build-cookie session-id pid command)]
+                      (swap! log-state-atom #(log/trace %
+                                                        ::world-forking
+                                                        "Publishing cookie to event bus to trigger :frereth/ack-forking"
+                                                        {::cookie cookie}))
                       (bus/publish! event-bus
                                     :frereth/ack-forking
                                     {::cookie cookie
                                      :frereth/world-key pid})
                       (assoc context :response ::done))
                     (do
-                      (println "Error: trying to re-fork pid" pid
-                               "\namong\n"
-                               session)
+                      (swap! log-state-atom #(log/warn %
+                                                        ::world-forking
+                                                        "Error: trying to re-fork world"
+                                                        {:frereth/world-key pid
+                                                         :frereth/session session}))
                       context))
                   (do
-                    (println (str "Missing session inside\n"
-                                  (util/pretty context)))
+                    (swap! log-state-atom #(log/warn %
+                                                     ::world-forking
+                                                     "Missing session"
+                                                     context))
                     context))
                 (do
-                  (println (str "Missing either/both of '"
-                                command
-                                "' or/and '"
-                                pid
-                                "'"))
+                  (swap! log-state-atom #(log/warn %
+                                                   ::world-forking
+                                                   "Missing either/both"
+                                                   {:frereth/world-key pid
+                                                    :frereth/command command
+                                                    :request request
+                                                    ::request-keys (keys request)}))
                   context))))})
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -686,26 +696,6 @@
   []
   #{["/api/v1/forked" :post world-forked :route-name ::forked]
     ["/api/v1/forking" :post world-forking :route-name ::forking]})
-
-;; Log message (for :context) at the end:
-(comment
-  {:frereth.weald.specs/current-thread "manifold-pool-14-61",
-   :frereth.weald.specs/label :renderer.handlers/log-edges,
-   :frereth.weald.specs/lamport 786,
-   :frereth.weald.specs/level :frereth.weald.specs/trace,
-   :frereth.weald.specs/time 1555215790151,
-   :frereth.weald.specs/message ":leave",
-   :frereth.weald.specs/details {:io.pedestal.interceptor.chain/stack (),
-                                 ;; Here's my problem: need to pull it up one level
-                                 :request {:frereth/body {:path-info "/api/v1/forking",
-                                                          :reqest-method :post,
-                                                          :params {:frereth/command shell,
-                                                                   :frereth/pid {"crv" "P-384",
-                                                                                 "ext" true,
-                                                                                 "key_ops" ["verify"],
-                                                                                 "kty" "EC",
-                                                                                 "x" "KyhmaAWmWGIkndxHW2CxPrjKT_kGj3dQnoxNyIOIl9mLO0iUJVkuZUSWvlvGU8_6",
-                                                                                 "y" "F1nn2PgTijTj4Y3hxM7dR2zSOhGbqB8seVNbRenJeF70Y-ZSSDEcIvM68lS6t8D3"}}}}}}),
 
 (s/fdef on-message!
   :args (s/cat :session-connection ::session-connection

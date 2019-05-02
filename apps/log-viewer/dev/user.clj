@@ -13,9 +13,10 @@
              [data :as data]
              [edn :as edn]
              [pprint :refer (pprint)]
-             [reflect :as reflect]
-             [repl :refer (apropos dir doc pst root-cause source)]]
+             [reflect :as reflect]]
             [clojure.java.io :as io]
+            [clojure.repl :refer (apropos dir doc pst root-cause source)]
+            [clojure.set :as set]
             [clojure.spec.alpha :as s]
             [clojure.spec.gen.alpha :as gen]
             [clojure.spec.test.alpha :as test]
@@ -42,9 +43,12 @@
             [integrant.core :as ig]
             [integrant.repl :refer [clear go halt prep init reset reset-all] :as ig-repl]
             [integrant.repl.state :as ig-state]
+            [io.pedestal.http.route :as route]
+            [io.pedestal.http.route.definition.table :as table-route]
             [manifold
              [deferred :as dfrd]
              [stream :as strm]]
+            [renderer.handlers :as renderer-handlers]
             [renderer.lib :as renderer]
             [renderer.sessions :as sessions]))
 
@@ -339,4 +343,19 @@
   )
 
 (comment
-  (source renderer.handlers/handle-forked))
+  (source renderer.handlers/handle-forked)
+
+  (let [raw-routes (renderer-handlers/build-routes)
+        custom-verbs #{:frereth/forward}
+        verbs (set/union @#'table-route/default-verbs
+                         custom-verbs)
+        processed-routes (table-route/table-routes {:verbs verbs}
+                                                   raw-routes)
+        router-intc (route/router processed-routes :map-tree)
+        router (:enter router-intc)
+        request {:path-info "/api/v1/forking"
+                 :request-method :post}
+        initial-context {:request request}
+        routed (router initial-context)]
+    routed)
+  )

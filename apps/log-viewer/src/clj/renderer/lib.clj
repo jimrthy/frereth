@@ -167,7 +167,7 @@
             (swap! log-state-atom #(log/flush-logs! logger
                                                     (log/trace %
                                                                ::login-finalized!
-                                                               "Set up websocket consumer")))
+                                                               "Websocket consumer configured")))
             ;; Cope with it closing
             (dfrd/on-realized connection-closed
                               (fn [succeeded]
