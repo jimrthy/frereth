@@ -62,7 +62,7 @@
                                      (s/keys :req [::routes
                                                    ::sessions/session-atom])))
 
-;; TODO: Need a spec for ::context
+;; TODO: Need a spec for ::context and ::internal
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Internal Helpers
@@ -249,20 +249,7 @@
   (let [real-handler-name handler-name]
     `(do
        (s/fdef ~real-handler-name
-         :args (s/cat :this ::internal
-                      ;; I think I've managed to jumble this
-                      ;; argument up hopelessly.
-                      ;; When I set these handlers up during
-                      ;; System startup, there is no good way
-                      ;; to assign it.
-                      ;; At the same time, adding its details
-                      ;; into every handler that needs it
-                      ;; seems unduly burdensome.
-                      ;; For now, that "every" means 3.
-                      ;; So worry about it later.
-                      ;; FIXME: This parameter doesn't exist
-                      ;; and must go away.
-                      :connection ::world-connection
+         :args (s/cat :this ::session-connection
                       :message ~message-spec)
          :ret any?)
        (defn ~real-handler-name
@@ -272,7 +259,8 @@
                     :frereth/world-key
                     ::world-stop-signal]
              {:keys [::sessions/session-id]
-              :as session} ::connection/session}
+              :as session} ::connection/session
+             log-state-atom ::weald/state-atom}
           ~(first message-arg)]
          ~@handler-body))))
 
@@ -310,11 +298,18 @@
                                    world-key
                                    client))
 
+(comment
+  (macroexpand-1 'nil))
 (defhandler handle-forking
   any?
   [{:keys [::cookie
            :frereth/world-key]}]
+  ;; Getting here now
+  (println "=================================================\nhandle-forking\n===========================")
   (try
+    (swap! log-state-atom #(log/debug %
+                                      ::handle-forking
+                                      "Top"))
     ;; It's tempting to add the world to the session here.
     ;; Actually, there doesn't seem like any good reason
     ;; not to (if not earlier)
@@ -340,6 +335,8 @@
                session-id
                "\nabout"
                world-key))))
+
+
 
 (s/fdef log-edges
   :args (s/cat :location keyword?  ; :frereth/atom better?
@@ -657,12 +654,13 @@
                       (swap! log-state-atom #(log/trace %
                                                         ::world-forking
                                                         "Publishing cookie to event bus to trigger :frereth/ack-forking"
-                                                        {::cookie cookie}))
+                                                        {::cookie cookie
+                                                         ::bus/event-bus event-bus}))
                       (bus/publish! event-bus
                                     :frereth/ack-forking
                                     {::cookie cookie
                                      :frereth/world-key pid})
-                      (assoc context :response ::done))
+                      (assoc context :response ::notified))
                     (do
                       (swap! log-state-atom #(log/warn %
                                                         ::world-forking
@@ -710,6 +708,11 @@
   ;; this really belong in a shared frereth.app.renderer.lib ns.
   ;; This part's specific to the web-socket interface.
   ;; I don't think anything else is.
+  ;; In retrospect, this seems like a lot of hoops to jump through
+  ;; just to send a message to an event bus.
+  ;; If there are really just a small, well-defined subset of
+  ;; control messages going back and forth, using interceptor chains
+  ;; like this is complete overkill.
   [{:keys [::lamport/clock
            ::bus/event-bus
            ::weald/logger
@@ -827,6 +830,7 @@
           ;; Especially: use the :action as the request's :verb
           context-map (assoc (select-keys session-connection
                                           [::lamport/clock
+                                           ::bus/event-bus
                                            ::weald/logger
                                            ;; Putting the session atom into here
                                            ;; seems like a bad idea.
@@ -896,11 +900,26 @@
 (let [handlers {::disconnected [:frereth/disconnect-world
                                 handle-disconnected]
                 ::forked [:frereth/ack-forked handle-forked]
-                ::forking [:frereth/forking handle-forking]}]
+                ::forking [:frereth/ack-forking handle-forking]}]
   (defmethod ig/init-key ::internal
     [_ {:keys [::bus/event-bus]
         :as component}]
     (reduce (fn [acc [tag [event-id handler]]]
+              (println "Connecting handler" handler "to signal" event-id "on" event-bus)
+              ;; This approach doesn't work.
+              ;; The handler needs both the session-atom and the current session-id.
+              ;; We should have acces to the session-atom here, but not the
+              ;; session-id.
+              ;; We could add details about the session-id to the message that gets
+              ;; published to the event-bus.
+              ;; That muddles up the API and obscures the points behind using the
+              ;; event-bus in the first place (which are 1. decoupling and 2. hiding
+              ;; the session atom from the basic message handler).
+              ;; This rolls me back to my original thought about the way Om (original)
+              ;; has cursors associated with the various handlers to control which part
+              ;; of the state atom gets updated by any given handler.
+              ;; Which seems worrisome, since David Nolen dismissed that approach as
+              ;; a failure.
               (assoc acc tag (connect-handler event-bus event-id (partial handler component))))
             component
             handlers))

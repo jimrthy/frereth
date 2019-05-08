@@ -33,7 +33,10 @@
   ;; FIXME: Honestly, need a way to flag events that get published
   ;; with no handlers.
   ;; I don't think manifold offers that possibility.
-  (bus/publish! bus topic message))
+  (println "Publishing a message about" topic "to" bus)
+  (let [success (bus/publish! bus topic message)]
+    (println "publish! result:" success)
+    success))
 
 (s/fdef subscribe
   :args (s/cat :event-bus ::event-bus
