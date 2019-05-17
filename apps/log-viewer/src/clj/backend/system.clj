@@ -230,9 +230,13 @@
    :backend.web.service/web-service (into {::routes/handler-map (ig/ref ::routes/handler-map)}
                                           (::web-server opts))
    ::bus/event-bus event-bus
+   ;; This Component doesn't make any sense.
+   ;; FIXME: it needs to go away.
+   ;; Q: How will the route handlers send messages to the event bus?
    ::handlers/internal (into {::bus/event-bus (ig/ref ::bus/event-bus)
                               ::lamport/clock (ig/ref ::lamport/clock)
-                              ::sessions/session-atom (ig/ref ::sessions/session-atom)}
+                              ::sessions/session-atom (ig/ref ::sessions/session-atom)
+                              ::weald/state-atom (ig/ref ::weald/state-atom)}
                              internal-handlers)
    ;; Surely both server and client need access to this.
    ;; The renderer/session manager definitely does.

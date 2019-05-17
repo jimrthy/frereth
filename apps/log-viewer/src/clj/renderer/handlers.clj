@@ -3,7 +3,7 @@
   ;; be more generally useful for other renderers.
   ;; Then again, any such hypothetical renderers will be built around a
   ;; totally different architecture, so probably not.
-  "Handlers for renderer messages"
+  "Handlers for the messages involving individual apps"
   (:require
    [backend.event-bus :as bus]
    [client.registrar :as registrar]
@@ -250,6 +250,7 @@
     `(do
        (s/fdef ~real-handler-name
          :args (s/cat :this ::session-connection
+                      :session-id ::connection/session-id
                       :message ~message-spec)
          :ret any?)
        (defn ~real-handler-name
@@ -258,12 +259,17 @@
                     ::connection/session-atom
                     :frereth/world-key
                     ::world-stop-signal]
-             {:keys [::sessions/session-id]
-              :as session} ::connection/session
-             log-state-atom ::weald/state-atom}
+             log-state-atom ::weald/state-atom
+             :as this}
+          ~'session-id
           ~(first message-arg)]
-         ~@handler-body))))
+         (let [~'session (-> ~'session-atom
+                             deref
+                             (get ~'session-id))]
+           ~@handler-body)))))
 
+(comment
+  (macroexpand-1 'nil))
 (defhandler handle-disconnected
   (s/keys :req [::connection/session-id :frereth/world-key])
   [{supplied-session-id ::connection/session-id
@@ -280,7 +286,6 @@
                   (util/pretty session-id)
                   "\ninstead of\n"
                   (util/pretty supplied-session-id)))))
-
 
 (defhandler handle-forked
   (s/keys :req [::client
@@ -305,7 +310,9 @@
   [{:keys [::cookie
            :frereth/world-key]}]
   ;; Getting here now
-  (println "=================================================\nhandle-forking\n===========================")
+  (println "=================================================\nhandle-forking\n==========================="
+           "\nlog-state-atom:" log-state-atom)
+  (pprint this)
   (try
     (swap! log-state-atom #(log/debug %
                                       ::handle-forking
@@ -335,6 +342,8 @@
                session-id
                "\nabout"
                world-key))))
+
+
 
 
 
@@ -893,14 +902,51 @@
                                               "trying to deserialize/dispatch"
                                               {::body message-string}))))))
 
-;; It's really tempting to try to define everything in one place.
-;; There might be a use-case for a macro that lets me do that.
-;; I'm skeptical about whether it would be an improvement.
-;; Much less enough of an improvement to justify its existence.
 (let [handlers {::disconnected [:frereth/disconnect-world
                                 handle-disconnected]
                 ::forked [:frereth/ack-forked handle-forked]
                 ::forking [:frereth/ack-forking handle-forking]}]
+  (defn connect
+    ;; This has almost the same problem as my original Component approach.
+    ;; It isn't quite as bad. At least I can call this from somewhere that
+    ;; has a session-id.
+    ;; Like when a Session connects.
+    ;; That would allow each Session to have its own event-bus.
+    ;; So there's a little isolation there.
+    ;; But we don't have any isolation between the Worlds.
+    ;; Then again...that part wouldn't make any sense at this level.
+    ;; This really is managing the lifecycle of a world in a
+    ;; session-connection.
+    ;; Which means this module needs to be moved/renamed.
+    ;; Bigger picture, though, this has to update the session-atom.
+    ;; Logically, this is handling side-effects that are triggered by
+    ;; messages that arrived at a system boundary.
+    ;; I want to be paranoid about what's allowed to happen here
+    ;; because it just seems dangerous.
+    ;; These messages should be safe enough. They come from code
+    ;; that I supplied (right?) that couldn't possibly have been
+    ;; compromised (also right?)
+    ;; There should never be a malicious actor on the other side
+    ;; that manages to get the signing key to send disconnect
+    ;; messages.
+    ;; Or messages to trigger calls that are equivalent to
+    ;; "format c:".
+    ;; This still needs more thought.
+    [{:keys [::bus/event-bus]
+      :as component}
+     session-id]
+    (reduce (fn [acc [tag [event-id handler]]]
+              (println "Connecting handler" handler "to signal" event-id "on" event-bus)
+              (assoc acc tag (connect-handler event-bus event-id (partial handler
+                                                                          session-id
+                                                                          component))))
+          component
+          handlers))
+  (defn disconnect
+    [component]
+    (doseq [tag (keys handlers)]
+      (strm/close! (tag component))))
+
   (defmethod ig/init-key ::internal
     [_ {:keys [::bus/event-bus]
         :as component}]
@@ -920,7 +966,12 @@
               ;; of the state atom gets updated by any given handler.
               ;; Which seems worrisome, since David Nolen dismissed that approach as
               ;; a failure.
-              (assoc acc tag (connect-handler event-bus event-id (partial handler component))))
+              (assoc acc tag (connect-handler event-bus event-id (partial handler
+                                                                          ;; This is why we
+                                                                          ;; can't build this
+                                                                          ;; here and now.
+                                                                          'need-session-id
+                                                                          component))))
             component
             handlers))
 
