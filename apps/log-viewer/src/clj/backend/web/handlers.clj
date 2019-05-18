@@ -105,6 +105,7 @@
                                           ;; let-flow.
                                           ;; That seems like a sign that it's probably
                                           ;; worth avoiding it.
+                                          ;; So...what's the proper way to do that?
                                           (dfrd/let-flow [websocket (dfrd/catch
                                                                         dfrd-sock
                                                                         (fn [_] nil))]

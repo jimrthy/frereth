@@ -17,9 +17,9 @@
    [frereth.weald.logging :as log]
    [frereth.weald.specs :as weald]
    [integrant.core :as ig]
+   [io.pedestal.http.route :as route]
    [io.pedestal.interceptor :as intc]
    [io.pedestal.interceptor.chain :as intc-chain]
-   [io.pedestal.http.route :as route]
    [io.pedestal.http.route.definition.table :as table-route]
    [manifold.deferred :as dfrd]
    [manifold.stream :as strm]
@@ -427,7 +427,9 @@
 (s/fdef build-ticker
   :args (s/cat :clock ::lamport/clock)
   ;; This returns an interceptor.
-  ;; FIXME: track down that definition
+  ;; FIXME: track down a spec for that
+  ;; Actually, it returns a dict that's suitable for converting into an
+  ;; interceptor.
   :ret any?)
 (defn build-ticker
   "Update the Lamport clock"
@@ -722,14 +724,14 @@
   ;; If there are really just a small, well-defined subset of
   ;; control messages going back and forth, using interceptor chains
   ;; like this is complete overkill.
-  [{:keys [::lamport/clock
-           ::bus/event-bus
+  [{:keys [::bus/event-bus
            ::weald/logger
            ::routes
            ::sessions/session-atom
            ::connection/session-id]
     log-state-atom ::weald/state-atom
     :as session-connection}
+   raw-interceptors
    message-string]
   (swap! log-state-atom
          #(log/info %
@@ -737,22 +739,19 @@
                     "Incoming"
                     {::body message-string}))
   ;; STARTED: Break this up into a Pedestal interceptor chain
-  ;; Things fail silently and the websocket closes without
-  ;; explanation somewhere after this.
   (try
     ;; TODO: Build the terminators/interceptors/routers elsewhere.
     ;; It's very tempting to make the routes part of the specific
     ;; session.
     ;; Definitely need to pull this all apart so I can unit test what I have.
-    (println "routes is"
-             (if-not (set? routes) "not" "")
-             "a set")  ; FIXME: debug only_|Z
     (let [terminators #{}  ; Q: Is there anything useful to put in here?
-          custom-verbs #{:frereth/forward}  ; Q: How should this work?
+          custom-verbs #{:frereth/forward}  ; Q: Is this work it?
           ;; TODO: need an option, at least in debug mode, for this
           ;; to be a function that gets called each time.
           routes (if (set? routes)
                    routes
+                   ;; Q: Doesn't Pedestal handle the "build new set of routes
+                   ;; each time" for us?
                    (routes))
           ;; With this approach, need to combine custom-verbs with the
           ;; standard HTTP ones.
@@ -786,54 +785,23 @@
                                   ;; At least now the failure won't be
                                   ;; totally silent.
                                   (throw ex)))
-          raw-interceptors [outer-logger
-                            session-extractor
-                            request-deserializer
-                            (build-ticker clock)
-                            ;; This brings up an interesting point.
-                            ;; Right now, I'm strictly basing dispatch
-                            ;; on the :action, which is basically the
-                            ;; HTTP verb.
-                            ;; At least, that's the way I've been
-                            ;; thinking about it.
-                            ;; Q: Would it make sense to get more
-                            ;; extensive about the options here?
-                            ;; Right now, the "verbs" amount to
-                            ;; :frereth/forked
-                            ;; :frereth/forking
-                            ;; And an error reporter for :default
-                            ;; The fact that there are so few options
-                            ;; for this makes me question this design
-                            ;; decision to feed those messages through
-                            ;; an interceptor chain.
-                            ;; This *is* a deliberately stupid app with
-                            ;; no real reason to provide feedback to the
-                            ;; server.
-                            ;; So...maybe there will be more options
-                            ;; along these lines in some future
-                            ;; iteration.
-                            ;; However...dragging this out for the sake
-                            ;; of hypothetical future benefit seems like
-                            ;; a really bad idea.
-                            route/query-params
-                            route/path-params-decoder
-                            inner-logger
-                            ;; It might make sense to parameterize this,
-                            ;; but it doesn't seem likely.
-                            ;; If I do add the concept of a URI path
-                            ;; here, I don't see adding in path params.
-                            ;; This dispatch needs to happen fast.
-                            ;; TODO: Inject another logger here.
-                            ;; :enter should log the :request (esp: what's
-                            ;; needed for query-params) while :leave
-                            ;; needs a way to verify that it was routed
-                            ;; somewhere. (Easiest approach: add a
-                            ;; response that's really just a signal that
-                            ;; it got handled. Possibly better: have the
-                            ;; response be a seq of functions to call
-                            ;; to trigger side-effects, like posting
-                            ;; messages to the event bus)
-                            (route/router processed-routes :map-tree)]
+          raw-interceptors (conj raw-interceptors
+                                 ;; It might make sense to parameterize this,
+                                 ;; but it doesn't seem likely.
+                                 ;; If I do add the concept of a URI path
+                                 ;; here, I don't see adding in path params.
+                                 ;; This dispatch needs to happen fast.
+                                 ;; TODO: Inject another logger here.
+                                 ;; :enter should log the :request (esp: what's
+                                 ;; needed for query-params) while :leave
+                                 ;; needs a way to verify that it was routed
+                                 ;; somewhere. (Easiest approach: add a
+                                 ;; response that's really just a signal that
+                                 ;; it got handled. Possibly better: have the
+                                 ;; response be a seq of functions to call
+                                 ;; to trigger side-effects, like posting
+                                 ;; messages to the event bus)
+                                 (route/router processed-routes :map-tree))
           ;; This isn't an HTTP request handler, so the details are
           ;; a little different.
           ;; Especially: use the :action as the request's :verb
@@ -874,7 +842,7 @@
           ;; It's easy to miss this in the middle of setting up the
           ;; chain handler.
           ;; Which is one reason this is worth keeping separate from the
-          ;; dispatching code and that needs to move elsewhere.
+          ;; dispatching code, which needs to move elsewhere.
           ;; Current theory:
           ;; Follow the front-end idea of "data down, events up."
           ;; Any side-effects that should happen get triggered by
@@ -966,6 +934,20 @@
               ;; of the state atom gets updated by any given handler.
               ;; Which seems worrisome, since David Nolen dismissed that approach as
               ;; a failure.
+
+              ;; There's at least one other angle on this:
+              ;; I'm worried about security and separation of concerns and sessions
+              ;; here.
+              ;; Part of that is valid. Security absolutely needs to be built into
+              ;; every layer to provide some depth.
+              ;; It's important to remember that this is just a proof-of-concept
+              ;; and, really, an outer layer.
+              ;; If a request arrives to do something like `sudo format c:`, it's
+              ;; up to this layer to request that the sudo World fork.
+              ;; The sudo World is responsible for interacting with the server
+              ;; to handle the authorization to actually do anything drastic.
+              ;; At this level, we do want to be certain that events get routed
+              ;; properly, but it's important to keep that part out of the weeds
               (assoc acc tag (connect-handler event-bus event-id (partial handler
                                                                           ;; This is why we
                                                                           ;; can't build this

@@ -15,6 +15,7 @@
    [frereth.cp.shared.util :as cp-util]
    [frereth.weald.logging :as log]
    [frereth.weald.specs :as weald]
+   [io.pedestal.http.route :as route]
    [manifold
     [deferred :as dfrd]
     [stream :as strm]]
@@ -81,17 +82,15 @@
            ::connection/web-socket]
     log-state-atom ::weald/state-atom
     :as session}
-   ;; FIXME: refactor-rename this to message-wrapper
-   ;; or something along those lines
-   wrapper]
+   message-wrapper]
   (swap! log-state-atom
          #(log/info %
                     ::login-finalized!
                     "Initial websocket message"
-                    {::message wrapper}))
-  (if (and (not= ::drained wrapper)
-           (not= ::timed-out wrapper))
-    (let [envelope (serial/deserialize wrapper)
+                    {::message message-wrapper}))
+  (if (and (not= ::drained message-wrapper)
+           (not= ::timed-out message-wrapper))
+    (let [envelope (serial/deserialize message-wrapper)
           {{:keys [:frereth/session-id]
             :as params} :params
            :as request} (:request envelope)]
@@ -127,6 +126,7 @@
                                                              "Activating session"
                                                              {::connection/session-id session-id})))
           ;; FIXME: Don't particularly want the session-atom in here.
+          ;; Q: How can I avoid that?
           (swap! session-atom
                  (fn [sessions]
                    (update sessions session-id
@@ -138,7 +138,40 @@
                                                              "Swapped:"
                                                              {::connection/web-socket web-socket})))
           ;; Set up the message handler
-          (let [routes (handlers/build-routes)  ; FIXME: move this up the chain
+          ;; FIXME: move both routes and raw-interceptors up the creation chain
+          (let [routes (handlers/build-routes)
+                raw-interceptors [handlers/outer-logger
+                                  handlers/session-extractor
+                                  handlers/request-deserializer
+                                  (handlers/build-ticker lamport)
+                                  ;; This brings up an interesting point.
+                                  ;; Right now, I'm strictly basing dispatch
+                                  ;; on the :action, which is basically the
+                                  ;; HTTP verb.
+                                  ;; At least, that's the way I've been
+                                  ;; thinking about it.
+                                  ;; Q: Would it make sense to get more
+                                  ;; extensive about the options here?
+                                  ;; Right now, the "verbs" amount to
+                                  ;; :frereth/forked
+                                  ;; :frereth/forking
+                                  ;; And an error reporter for :default
+                                  ;; The fact that there are so few options
+                                  ;; for this makes me question this design
+                                  ;; decision to feed those messages through
+                                  ;; an interceptor chain.
+                                  ;; This *is* a deliberately stupid app with
+                                  ;; no real reason to provide feedback to the
+                                  ;; server.
+                                  ;; So...maybe there will be more options
+                                  ;; along these lines in some future
+                                  ;; iteration.
+                                  ;; However...dragging this out for the sake
+                                  ;; of hypothetical future benefit seems like
+                                  ;; a really bad idea.
+                                  route/query-params
+                                  route/path-params-decoder
+                                  handlers/inner-logger]
                 connection-closed
                 (strm/consume (partial handlers/on-message!
                                        ;; This is another opportunity to
@@ -162,7 +195,8 @@
                                                             ::weald/state-atom
                                                             ::sessions/session-atom])
                                               ::handlers/routes routes
-                                              ::connection/session-id session-id))
+                                              ::connection/session-id session-id)
+                                       raw-interceptors)
                               web-socket)]
             (swap! log-state-atom #(log/flush-logs! logger
                                                     (log/trace %
@@ -208,7 +242,7 @@
                                             (log/warn %
                                                       ::login-finalized!
                                                       "Waiting for login completion failed:"
-                                                      wrapper)))))
+                                                      message-wrapper)))))
 
 (s/fdef verify-cookie
   :args (s/cat :session-id :frereth/session-id
@@ -228,6 +262,7 @@
 ;;;; Public
 
 (s/fdef activate-session!
+  ;; Q: Should this be a pre-session?
   :args (s/cat :pre-session ::session)
   ;; Called for side-effects
   :ret any?)
@@ -235,20 +270,23 @@
   "Browser is trying to initiate a new Session"
   [{lamport-clock ::lamport/clock
     :keys [::bus/event-bus
+           ::weald/logger
            ::sessions/session-atom
            ::connection/web-socket]
-    :as session}]
-  (println ::activate-session! "session-atom:"
-           session-atom "\namong\n"
-           (cp-util/pretty session))
+    log-state-atom ::weald/state-atom
+    :as session-wrapper}]
+  (swap! log-state-atom #(log/trace %
+                                    ::activate-session!
+                                    "Top"
+                                    {::session session-wrapper}))
 
   (if session-atom
     (try
       ;; FIXME: Better handshake (need an authentication phase)
-      (println ::activate-session!
-               "Trying to pull the Renderer's key from new websocket"
-               "\namong"
-               @session-atom)
+      (swap! log-state-atom #(log/debug %
+                                        ::activate-session!
+                                        "Trying to pull the Renderer's key from new websocket"
+                                        @session-atom))
       (let [first-message (strm/try-take! web-socket ::drained 500 ::timed-out)]
         ;; TODO: Need the login exchange before this.
         ;; Do that before opening the websocket, using something like SRP.
@@ -257,6 +295,8 @@
         ;; The consensus seems to be that mutual TLS is really the way
         ;; to go.
         ;; Q: Is there a way to do this for web site auth?
+        ;; Q: What about FIDO2?
+
         ;; That should add the Session's short-term key to the ::pending
         ;; session map.
         ;; In order to authenticate, it had to already contact its Server.
@@ -268,21 +308,23 @@
         ;; TODO: Check this FSM handshake with stack overflow's security
         ;; board.
         (dfrd/on-realized first-message
-                          (partial login-finalized! session)
+                          (partial login-finalized! session-wrapper)
                           (fn [error]
-                            (println ::activate-session!
-                                     "Failed pulling initial key:" error))))
+                            (swap! log-state-atom
+                                   #(log/exception %
+                                                   error
+                                                   ::activate-session!)))))
       (catch ExceptionInfo ex
-        ;; FIXME: Better error handling via tap>
-        ;; As ironic as that seems
-        (println ::activate-session!
-                 "Renderer connection completion failed")
-        (pprint ex)
+        (swap! log-state-atom
+               #(log/exception %
+                               ex
+                               ::activate-session!
+                               "Renderer connection completion failed"))
         (.close web-socket)))
     (do
 
       (throw (ex-info (str "Missing session-atom")
-                      session)))))
+                      session-wrapper)))))
 
 (s/fdef get-code-for-world
   :args (s/cat :sessions ::sessions/sessions
