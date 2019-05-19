@@ -16,9 +16,9 @@
    [frereth.weald.logging :as log]
    [frereth.weald.specs :as weald]
    [io.pedestal.http.route :as route]
-   [manifold
-    [deferred :as dfrd]
-    [stream :as strm]]
+   [manifold.bus :as event-bus]
+   [manifold.deferred :as dfrd]
+   [manifold.stream :as strm]
    [renderer.handlers :as handlers]
    [renderer.sessions :as sessions])
   (:import clojure.lang.ExceptionInfo))
@@ -126,7 +126,7 @@
                                                              "Activating session"
                                                              {::connection/session-id session-id})))
           ;; FIXME: Don't particularly want the session-atom in here.
-          ;; Q: How can I avoid that?
+          ;; Q: Is there any way to avoid that?
           (swap! session-atom
                  (fn [sessions]
                    (update sessions session-id
@@ -172,30 +172,54 @@
                                   route/query-params
                                   route/path-params-decoder
                                   handlers/inner-logger]
+                ;; For now, go with 1 event-bus per session.
+                ;; More realistically, want 1 event-bus associated with each world's
+                ;; renderer connection per session.
+                ;; 2 different browsers connected to the same world are 2 very distinct
+                ;; things and need to be isolated.
+                ;; TODO: divide this further.
+                event-bus (event-bus/event-bus strm/stream)
+                ;; This is another opportunity to
+                ;; learn from om-next.
+                ;; Possibly.
+                ;; TODO: Review how it's replaced
+                ;; Om's cursors.
+                ;; That's really more relevant
+                ;; for the world-state.
+                ;; Don't want to
+                ;; forward the session-atom,
+                ;; but don't have a choice.
+                ;; If we constructed the partial
+                ;; with the current session,
+                ;; handlers wouldn't be able to
+                ;; pick up state changes.
+                ;; There's a flip side to this: it seems like it would be nicer
+                ;; to have the session-atom actually be a plain value dict
+                ;; where each of its values happen to be an atom that tracks
+                ;; an individual session.
+                ;; That would reduce the risk of data bleeding between the
+                ;; sessions. And make it cleaner for multiple threads to
+                ;; modify various sessions at the same time.
+                ;; TODO: Experiment with that approach.
+                component (assoc (select-keys session
+                                              [::lamport/clock
+                                               ::weald/logger
+                                               ::weald/state-atom
+                                               ::sessions/session-atom])
+                                 ;; The extra nesting is an unfortunate leftover
+                                 ;; from the original implementation where this
+                                 ;; was a Component.
+                                 ;; TODO: Unwrap this and eliminate the
+                                 ;; backend.event-bus ns.
+                                 ;; OTOH...I'm not exactly in love with
+                                 ;; manifold's event-bus implementation.
+                                 ::bus/event-bus {::bus/bus event-bus}
+                                 ::handlers/routes routes
+                                 ::connection/session-id session-id)
+                _ (handlers/connect! component session-id)
                 connection-closed
                 (strm/consume (partial handlers/on-message!
-                                       ;; This is another opportunity to
-                                       ;; learn from om-next.
-                                       ;; Possibly.
-                                       ;; TODO: Review how it's replaced
-                                       ;; Om's cursors.
-                                       ;; That's really more relevant
-                                       ;; for the world-state.
-                                       ;; Don't want to
-                                       ;; forward the session-atom,
-                                       ;; but don't have a choice.
-                                       ;; If we constructed the partial
-                                       ;; with the current session,
-                                       ;; handlers wouldn't be able to
-                                       ;; pick up state changes
-                                       (assoc (select-keys session
-                                                           [::bus/event-bus
-                                                            ::lamport/clock
-                                                            ::weald/logger
-                                                            ::weald/state-atom
-                                                            ::sessions/session-atom])
-                                              ::handlers/routes routes
-                                              ::connection/session-id session-id)
+                                       component
                                        raw-interceptors)
                               web-socket)]
             (swap! log-state-atom #(log/flush-logs! logger
@@ -205,21 +229,24 @@
             ;; Cope with it closing
             (dfrd/on-realized connection-closed
                               (fn [succeeded]
-                                (println (str ::login-finalized!
-                                              " Socket closed cleanly"
-                                              " for session "
-                                              session-id
-                                              ": "
-                                              succeeded))
+                                (swap! log-state-atom #(log/flush-logs! logger
+                                                                        (log/info %
+                                                                                  ::login-finalized!
+                                                                                  "Websocket closed cleanly"
+                                                                                  {::connection/session-id session-id
+                                                                                   ::success succeeded})))
+                                (handlers/disconnect! component)
                                 (swap! session-atom
                                        sessions/disconnect
                                        session-id))
                               (fn [failure]
-                                (println ::login-finalized!
-                                         "Web socket failed for session"
-                                         session-id
-                                         ":"
-                                         failure)
+                                (swap! log-state-atom #(log/flush-logs! logger
+                                                                        (log/info %
+                                                                                  ::login-finalized!
+                                                                                  "Websocket failed"
+                                                                                  {::connection/session-id session-id
+                                                                                   ::success failure})))
+                                (handlers/disconnect! component)
                                 (swap! session-atom
                                        sessions/disconnect
                                        session-id))))

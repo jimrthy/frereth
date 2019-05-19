@@ -232,8 +232,8 @@
    ::bus/event-bus event-bus
    ;; This Component doesn't make any sense.
    ;; FIXME: it needs to go away.
-   ;; Q: How will the route handlers send messages to the event bus?
-   ::handlers/internal (into {::bus/event-bus (ig/ref ::bus/event-bus)
+   ;; Q: How will the websocket handlers send messages to the event bus?
+   #_#_::handlers/internal (into {::bus/event-bus (ig/ref ::bus/event-bus)
                               ::lamport/clock (ig/ref ::lamport/clock)
                               ::sessions/session-atom (ig/ref ::sessions/session-atom)
                               ::weald/state-atom (ig/ref ::weald/state-atom)}

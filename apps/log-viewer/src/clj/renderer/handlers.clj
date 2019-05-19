@@ -263,6 +263,9 @@
              :as this}
           ~'session-id
           ~(first message-arg)]
+         (swap! ~'log-state-atom #(log/trace %
+                                             (keyword (str *ns*) (str ~real-handler-name))
+                                             "Incoming"))
          (let [~'session (-> ~'session-atom
                              deref
                              (get ~'session-id))]
@@ -309,7 +312,7 @@
   any?
   [{:keys [::cookie
            :frereth/world-key]}]
-  ;; Getting here now
+  ;; No longer getting here
   (println "=================================================\nhandle-forking\n==========================="
            "\nlog-state-atom:" log-state-atom)
   (pprint this)
@@ -874,7 +877,7 @@
                                 handle-disconnected]
                 ::forked [:frereth/ack-forked handle-forked]
                 ::forking [:frereth/ack-forking handle-forking]}]
-  (defn connect
+  (defn connect!
     ;; This has almost the same problem as my original Component approach.
     ;; It isn't quite as bad. At least I can call this from somewhere that
     ;; has a session-id.
@@ -901,16 +904,22 @@
     ;; "format c:".
     ;; This still needs more thought.
     [{:keys [::bus/event-bus]
+      log-state-atom ::weald/state-atom
       :as component}
      session-id]
     (reduce (fn [acc [tag [event-id handler]]]
-              (println "Connecting handler" handler "to signal" event-id "on" event-bus)
+              (swap! log-state-atom #(log/trace %
+                                                ::connect!
+                                                "Connecting handler"
+                                                {::handler handler
+                                                 ::signal event-id
+                                                 ::bus/event-bus event-bus}))
               (assoc acc tag (connect-handler event-bus event-id (partial handler
                                                                           session-id
                                                                           component))))
           component
           handlers))
-  (defn disconnect
+  (defn disconnect!
     [component]
     (doseq [tag (keys handlers)]
       (strm/close! (tag component))))
@@ -947,7 +956,7 @@
               ;; The sudo World is responsible for interacting with the server
               ;; to handle the authorization to actually do anything drastic.
               ;; At this level, we do want to be certain that events get routed
-              ;; properly, but it's important to keep that part out of the weeds
+              ;; properly, but it's also important to avoid muddling the concerns
               (assoc acc tag (connect-handler event-bus event-id (partial handler
                                                                           ;; This is why we
                                                                           ;; can't build this
