@@ -88,188 +88,185 @@
                     ::login-finalized!
                     "Initial websocket message"
                     {::message message-wrapper}))
-  (if (and (not= ::drained message-wrapper)
-           (not= ::timed-out message-wrapper))
-    (let [envelope (serial/deserialize message-wrapper)
-          {{:keys [:frereth/session-id]
-            :as params} :params
-           :as request} (:request envelope)]
-      (swap! log-state-atom
-             #(log/debug %
-                         ::login-finalized!
-                         "Key pulled"
-                         {::deserialized envelope
-                          ::params params}))
-      (try
-        (let [session-state (sessions/get-by-state @session-atom
-                                                   ::connection/pending)]
-          (swap! log-state-atom
-                 #(log/debug %
-                             ::login-finalized!
-                             "Trying to activate session"
-                             {::connection/session-id session-id
-                              ::session-id-type (type session-id)
-                              ::sessions/session session-state})))
-        (catch Exception ex
-          (swap! log-state-atom #(log/flush-logs! logger
-                                                  (log/exception %
-                                                                 ex
-                                                                 ::login-finalized!
-                                                                 "Failed trying to log activation details"
-                                                             {::connection/session-id session-id
-                                                              ::sessions/session-atom session-atom})))))
-      (if (get @session-atom session-id)
+  (try
+    (if (and (not= ::drained message-wrapper)
+             (not= ::timed-out message-wrapper))
+      (let [envelope (serial/deserialize message-wrapper)
+            {{:keys [:frereth/session-id]
+              :as params} :params
+             :as request} (:request envelope)]
+        (swap! log-state-atom
+               #(log/debug %
+                           ::login-finalized!
+                           "Key pulled"
+                           {::deserialized envelope
+                            ::params params}))
         (try
-          (swap! log-state-atom #(log/flush-logs! logger
-                                                  (log/debug %
-                                                             ::login-finalized!
-                                                             "Activating session"
-                                                             {::connection/session-id session-id})))
-          ;; FIXME: Don't particularly want the session-atom in here.
-          ;; Q: Is there any way to avoid that?
-          (swap! session-atom
-                 (fn [sessions]
-                   (update sessions session-id
-                           connection/activate
-                           web-socket)))
-          (swap! log-state-atom #(log/flush-logs! logger
-                                                  (log/debug %
-                                                             ::login-finalized!
-                                                             "Swapped:"
-                                                             {::connection/web-socket web-socket})))
-          ;; Set up the message handler
-          ;; FIXME: move both routes and raw-interceptors up the creation chain
-          (let [routes (handlers/build-routes)
-                raw-interceptors [handlers/outer-logger
-                                  handlers/session-extractor
-                                  handlers/request-deserializer
-                                  (handlers/build-ticker lamport)
-                                  ;; This brings up an interesting point.
-                                  ;; Right now, I'm strictly basing dispatch
-                                  ;; on the :action, which is basically the
-                                  ;; HTTP verb.
-                                  ;; At least, that's the way I've been
-                                  ;; thinking about it.
-                                  ;; Q: Would it make sense to get more
-                                  ;; extensive about the options here?
-                                  ;; Right now, the "verbs" amount to
-                                  ;; :frereth/forked
-                                  ;; :frereth/forking
-                                  ;; And an error reporter for :default
-                                  ;; The fact that there are so few options
-                                  ;; for this makes me question this design
-                                  ;; decision to feed those messages through
-                                  ;; an interceptor chain.
-                                  ;; This *is* a deliberately stupid app with
-                                  ;; no real reason to provide feedback to the
-                                  ;; server.
-                                  ;; So...maybe there will be more options
-                                  ;; along these lines in some future
-                                  ;; iteration.
-                                  ;; However...dragging this out for the sake
-                                  ;; of hypothetical future benefit seems like
-                                  ;; a really bad idea.
-                                  route/query-params
-                                  route/path-params-decoder
-                                  handlers/inner-logger]
-                ;; For now, go with 1 event-bus per session.
-                ;; More realistically, want 1 event-bus associated with each world's
-                ;; renderer connection per session.
-                ;; 2 different browsers connected to the same world are 2 very distinct
-                ;; things and need to be isolated.
-                ;; TODO: divide this further.
-                event-bus (event-bus/event-bus strm/stream)
-                ;; This is another opportunity to
-                ;; learn from om-next.
-                ;; Possibly.
-                ;; TODO: Review how it's replaced
-                ;; Om's cursors.
-                ;; That's really more relevant
-                ;; for the world-state.
-                ;; Don't want to
-                ;; forward the session-atom,
-                ;; but don't have a choice.
-                ;; If we constructed the partial
-                ;; with the current session,
-                ;; handlers wouldn't be able to
-                ;; pick up state changes.
-                ;; There's a flip side to this: it seems like it would be nicer
-                ;; to have the session-atom actually be a plain value dict
-                ;; where each of its values happen to be an atom that tracks
-                ;; an individual session.
-                ;; That would reduce the risk of data bleeding between the
-                ;; sessions. And make it cleaner for multiple threads to
-                ;; modify various sessions at the same time.
-                ;; TODO: Experiment with that approach.
-                component (assoc (select-keys session
-                                              [::lamport/clock
-                                               ::weald/logger
-                                               ::weald/state-atom
-                                               ::sessions/session-atom])
-                                 ;; The extra nesting is an unfortunate leftover
-                                 ;; from the original implementation where this
-                                 ;; was a Component.
-                                 ;; TODO: Unwrap this and eliminate the
-                                 ;; backend.event-bus ns.
-                                 ;; OTOH...I'm not exactly in love with
-                                 ;; manifold's event-bus implementation.
-                                 ::bus/event-bus {::bus/bus event-bus}
-                                 ::handlers/routes routes
-                                 ::connection/session-id session-id)
-                _ (handlers/connect! component session-id)
-                connection-closed
-                (strm/consume (partial handlers/on-message!
-                                       component
-                                       raw-interceptors)
-                              web-socket)]
-            (swap! log-state-atom #(log/flush-logs! logger
-                                                    (log/trace %
-                                                               ::login-finalized!
-                                                               "Websocket consumer configured")))
-            ;; Cope with it closing
-            (dfrd/on-realized connection-closed
-                              (fn [succeeded]
-                                (swap! log-state-atom #(log/flush-logs! logger
-                                                                        (log/info %
-                                                                                  ::login-finalized!
-                                                                                  "Websocket closed cleanly"
-                                                                                  {::connection/session-id session-id
-                                                                                   ::success succeeded})))
-                                (handlers/disconnect! component)
-                                (swap! session-atom
-                                       sessions/disconnect
-                                       session-id))
-                              (fn [failure]
-                                (swap! log-state-atom #(log/flush-logs! logger
-                                                                        (log/info %
-                                                                                  ::login-finalized!
-                                                                                  "Websocket failed"
-                                                                                  {::connection/session-id session-id
-                                                                                   ::success failure})))
-                                (handlers/disconnect! component)
-                                (swap! session-atom
-                                       sessions/disconnect
-                                       session-id))))
+          (let [session-state (sessions/get-by-state @session-atom
+                                                     ::connection/pending)]
+            (swap! log-state-atom
+                   #(log/debug %
+                               ::login-finalized!
+                               "Trying to activate session"
+                               {::connection/session-id session-id
+                                ::session-id-type (type session-id)
+                                ::sessions/session session-state})))
           (catch Exception ex
-            (swap! log-state-atom #(log/flush-logs! logger
-                                                    (log/exception %
-                                                                   ex
-                                                                   ::login-finalized!)))))
-        (do
-          (swap! log-state-atom #(log/flush-logs! logger
-                                                  (log/warn %
-                                                            ::login-finalized!
-                                                            "No matching session"
-                                                            {::sessions/session-state-keys (keys @session-atom)
-                                                             ::sessions/session-state @session-atom})))
-          (throw (ex-info "Browser trying to complete non-pending connection"
-                          {::attempt session-id
-                           ::sessions/sessions @session-atom})))))
-    (swap! log-state-atom #(log/flush-logs! logger
-                                            (log/warn %
-                                                      ::login-finalized!
-                                                      "Waiting for login completion failed:"
-                                                      message-wrapper)))))
+            (swap! log-state-atom #(log/exception %
+                                                  ex
+                                                  ::login-finalized!
+                                                  "Failed trying to log activation details"
+                                                  {::connection/session-id session-id
+                                                   ::sessions/session-atom session-atom}))))
+        (if (get @session-atom session-id)
+          (try
+            (swap! log-state-atom #(log/debug %
+                                              ::login-finalized!
+                                              "Activating session"
+                                              {::connection/session-id session-id}))
+            ;; FIXME: Don't particularly want the session-atom in here.
+            ;; Q: Is there any way to avoid that?
+            (swap! session-atom
+                   (fn [sessions]
+                     (update sessions session-id
+                             connection/activate
+                             web-socket)))
+            (swap! log-state-atom #(log/debug %
+                                              ::login-finalized!
+                                              "Swapped:"
+                                              {::connection/web-socket web-socket}))
+            ;; Set up the message handler
+            ;; FIXME: move both routes and raw-interceptors up the creation chain
+            (let [routes (handlers/build-routes)
+                  raw-interceptors [handlers/outer-logger
+                                    handlers/session-extractor
+                                    handlers/request-deserializer
+                                    (handlers/build-ticker lamport)
+                                    ;; This brings up an interesting point.
+                                    ;; Right now, I'm strictly basing dispatch
+                                    ;; on the :action, which is basically the
+                                    ;; HTTP verb.
+                                    ;; At least, that's the way I've been
+                                    ;; thinking about it.
+                                    ;; Q: Would it make sense to get more
+                                    ;; extensive about the options here?
+                                    ;; Right now, the "verbs" amount to
+                                    ;; :frereth/forked
+                                    ;; :frereth/forking
+                                    ;; And an error reporter for :default
+                                    ;; The fact that there are so few options
+                                    ;; for this makes me question this design
+                                    ;; decision to feed those messages through
+                                    ;; an interceptor chain.
+                                    ;; This *is* a deliberately stupid app with
+                                    ;; no real reason to provide feedback to the
+                                    ;; server.
+                                    ;; So...maybe there will be more options
+                                    ;; along these lines in some future
+                                    ;; iteration.
+                                    ;; However...dragging this out for the sake
+                                    ;; of hypothetical future benefit seems like
+                                    ;; a really bad idea.
+                                    route/query-params
+                                    route/path-params-decoder
+                                    handlers/inner-logger]
+                  ;; For now, go with 1 event-bus per session.
+                  ;; More realistically, want 1 event-bus associated with each world's
+                  ;; renderer connection per session.
+                  ;; Minimize the risk of bleeding messages among different worlds
+                  ;; associated with the same session.
+                  ;; Really, this means another hop in the event-bus chain:
+                  ;; web-socket -> session -> world.
+                  event-bus (event-bus/event-bus strm/stream)
+                  ;; This is another opportunity to
+                  ;; learn from om-next.
+                  ;; Possibly.
+                  ;; TODO: Review how it's replaced
+                  ;; Om's cursors.
+                  ;; That's really more relevant
+                  ;; for the world-state.
+                  ;; Don't want to
+                  ;; forward the session-atom,
+                  ;; but don't have a choice.
+                  ;; If we constructed the partial
+                  ;; with the current session,
+                  ;; handlers wouldn't be able to
+                  ;; pick up state changes.
+                  ;; There's a flip side to this: it seems like it would be nicer
+                  ;; to have the session-atom actually be a plain value dict
+                  ;; where each of its values happen to be an atom that tracks
+                  ;; an individual session.
+                  ;; That would reduce the risk of data bleeding between the
+                  ;; sessions. And make it cleaner for multiple threads to
+                  ;; modify various sessions at the same time.
+                  ;; TODO: Experiment with that approach.
+                  component (assoc (select-keys session
+                                                [::lamport/clock
+                                                 ::weald/logger
+                                                 ::weald/state-atom
+                                                 ::sessions/session-atom])
+                                   ;; The extra nesting is an unfortunate leftover
+                                   ;; from the original implementation where this
+                                   ;; was a Component.
+                                   ;; TODO: Unwrap this and eliminate the
+                                   ;; backend.event-bus ns.
+                                   ;; OTOH...I'm not exactly in love with
+                                   ;; manifold's event-bus implementation.
+                                   ::bus/event-bus {::bus/bus event-bus}
+                                   ::handlers/routes routes
+                                   ::connection/session-id session-id)
+                  component (handlers/do-connect component session-id)
+                  handler (partial handlers/on-message!
+                                   component
+                                   raw-interceptors)
+                  connection-closed (strm/consume handler
+                                                  web-socket)]
+              (swap! log-state-atom #(log/trace %
+                                                ::login-finalized!
+                                                "Websocket consumer configured"))
+              ;; Cope with it closing
+              (dfrd/on-realized connection-closed
+                                (fn [succeeded]
+                                  (swap! log-state-atom #(log/flush-logs! logger
+                                                                          (log/info %
+                                                                                    ::login-finalized!
+                                                                                    "Websocket closed cleanly"
+                                                                                    {::connection/session-id session-id
+                                                                                     ::success succeeded})))
+                                  (handlers/disconnect! component session-id)
+                                  (swap! session-atom
+                                         sessions/disconnect
+                                         session-id))
+                                (fn [failure]
+                                  (swap! log-state-atom #(log/flush-logs! logger
+                                                                          (log/info %
+                                                                                    ::login-finalized!
+                                                                                    "Websocket failed"
+                                                                                    {::connection/session-id session-id
+                                                                                     ::success failure})))
+                                  (handlers/disconnect! component)
+                                  (swap! session-atom
+                                         sessions/disconnect
+                                         session-id))))
+            (catch Exception ex
+              (swap! log-state-atom #(log/exception %
+                                                    ex
+                                                    ::login-finalized!))))
+          (do
+            (swap! log-state-atom #(log/warn %
+                                             ::login-finalized!
+                                             "No matching session"
+                                             {::sessions/session-state-keys (keys @session-atom)
+                                              ::sessions/session-state @session-atom}))
+            (throw (ex-info "Browser trying to complete non-pending connection"
+                            {::attempt session-id
+                             ::sessions/sessions @session-atom})))))
+      (swap! log-state-atom #(log/warn %
+                                       ::login-finalized!
+                                       "Waiting for login completion failed:"
+                                       message-wrapper)))
+    (finally
+      (swap! log-state-atom #(log/flush-logs! logger %)))))
 
 (s/fdef verify-cookie
   :args (s/cat :session-id :frereth/session-id
@@ -313,6 +310,7 @@
       (swap! log-state-atom #(log/debug %
                                         ::activate-session!
                                         "Trying to pull the Renderer's key from new websocket"
+                                        ;; FIXME: Need a cleaner way to log this
                                         @session-atom))
       (let [first-message (strm/try-take! web-socket ::drained 500 ::timed-out)]
         ;; TODO: Need the login exchange before this.

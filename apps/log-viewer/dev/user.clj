@@ -221,8 +221,11 @@
   (go)
   (halt)
 
-  (-> ig-state/system
-      keys)
+  (-> ig-state/system keys)
+  (-> ig-state/system :renderer.sessions/session-atom)
+  (-> ig-state/system :renderer.sessions/session-atom deref vals first keys)
+  (-> ig-state/system :renderer.sessions/session-atom deref vals first :renderer.handlers/forking)
+  (-> ig-state/system :backend.event-bus/event-bus)
   (-> ig-state/system :backend.web.service/web-service keys)
   (-> ig-state/system :backend.web.service/web-service :io.pedestal.http/interceptors)
   (->> ig-state/system :backend.web.service/web-service :io.pedestal.http/interceptors (map :name))

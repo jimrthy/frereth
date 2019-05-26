@@ -116,7 +116,7 @@
   :ret strm/stream?)
 (defn connect-handler
   [event-bus signal handler]
-  (let [stream (bus/subscribe event-bus signal)]
+  (let [stream (bus/do-subscribe event-bus signal)]
     (strm/consume handler stream)
     stream))
 
@@ -311,15 +311,15 @@
 (defhandler handle-forking
   any?
   [{:keys [::cookie
-           :frereth/world-key]}]
+           :frereth/world-key]
+    :as message}]
   ;; No longer getting here
-  (println "=================================================\nhandle-forking\n==========================="
-           "\nlog-state-atom:" log-state-atom)
-  (pprint this)
   (try
     (swap! log-state-atom #(log/debug %
                                       ::handle-forking
-                                      "Top"))
+                                      "top"
+                                      {::message message
+                                       ::session-connection this}))
     ;; It's tempting to add the world to the session here.
     ;; Actually, there doesn't seem like any good reason
     ;; not to (if not earlier)
@@ -340,15 +340,12 @@
                    :frereth/ack-forking
                    {:frereth/cookie cookie})
     (catch Exception ex
-      (println "Error:" ex
-               "\nTrying to post :frereth/ack-forking to"
-               session-id
-               "\nabout"
-               world-key))))
-
-
-
-
+      (swap! log-state-atom #(log/exception %
+                                            ex
+                                            ::handle-forking
+                                            "Trying to post :frereth/ack-forking"
+                                            {::connection/session-id session-id
+                                             :frereth/world-key world-key})))))
 
 (s/fdef log-edges
   :args (s/cat :location keyword?  ; :frereth/atom better?
@@ -515,17 +512,15 @@
   [{:keys [::bus/event-bus
            ::lamport/clock
            ::world-stop-signal]
+    log-state-atom ::weald/state-atom
     :as world-connection}
-   ;; This is really just for the sake of the stop
-   ;; notification
-   global-bus
    raw-message]
   (lamport/do-tick clock)
   (if (not= raw-message world-stop-signal)
     ;; Just forward this along
-    (bus/publish! event-bus raw-message)
+    (bus/publish! log-state-atom event-bus ::topic? raw-message)
     (do
-      ;; Tell the world that a browser connection has disconnected from.
+      ;; Tell the world that a browser connection has disconnected from
       ;; it.
       ;; FIXME: Need to specify which connection.
       ;; It's tempting to use the session-id.
@@ -536,13 +531,19 @@
       ;; sees.
       ;; This way, one world doesn't have any way to identify its
       ;; sessions in other worlds.
-      (bus/publish! event-bus :frereth/disconnect)
+      ;; TODO: At the very least, each WorldConnection should have
+      ;; its own EventBus to minimize the possibilities of collisions.
+      ;; That leads to its own set of problems with busy Worlds that
+      ;; need to cope with millions of these.
+      (bus/publish! log-state-atom event-bus :frereth/disconnect ::what-goes-here?)
       ;; FIXME: This needs its own handler that can
       ;; update the session atom to mark the world
       ;; deactivated.
       ;; Which means that we need both the session-id
       ;; and world-key.
-      (bus/publish! global-bus :frereth/disconnect-world
+      (bus/publish! log-state-atom
+                    event-bus
+                    :frereth/disconnect-world
                     (select-keys world-connection
                                  [::connection/session-id
                                   :frereth/world-key])))))
@@ -555,6 +556,7 @@
                 lamport ::lamport/clock
                 :keys [::bus/event-bus
                        :request]
+                log-state-atom ::weald/state-atom
                 :as context}]
             (let [{:keys [:params]} request
                   {world-key :frereth/pid
@@ -584,7 +586,8 @@
                                                        {::bus/event-bus world-bus
                                                         ::world-stop-signal world-stop-signal}
                                                        event-bus))]
-                        (bus/publish! event-bus
+                        (bus/publish! log-state-atom
+                                      event-bus
                                       :frereth/ack-forked
                                       ;; Q: How many of these parameters are redundant?
                                       ;; We have the ones that are associated with the
@@ -593,12 +596,14 @@
                                                            ::lamport/clock])
                                              :frereth/world-key world-key
                                              ::client client)))
-                      (let [error-message (str "Cookie for unregistered World"
-                                               "\nSession ID: " session-id
-                                               "\nConstructor Key: " constructor-key
-                                               ;; FIXME: This should be a Component in the System instead
-                                               "\nRegistry: " (with-out-str (pprint registrar/registry)))]
-                        (println error-message)
+                      (do
+                        (swap! log-state-atom
+                               #(log/error %
+                                           ::world-forked
+                                           "Cookie for unregistered World"
+                                           {:frereth/session-id session-id
+                                            ::constructor-key constructor-key
+                                            ::registrar/registry registrar/registry}))
                         context))
                     ;; This could be a misbehaving World.
                     ;; Or it could be a nasty bug in the rendering code.
@@ -609,7 +614,7 @@
                     ;; Notifying the user and closing the websocket to end the session
                     ;; might be a reasonable start.
                     (let [error-message
-                          (str "session/world mismatch\n"
+                          (str "session/world mismatch:\n* "
                                (cond
                                  (not= session-id actual-session) (str session-id
                                                                        ", a "
@@ -622,13 +627,18 @@
                                             " != "
                                             actual-pid ", a " (class actual-pid)))
                                "\nQ: notify browser?")]
-                      (println error-message)
+                      (swap! log-state-atom #(log/error %
+                                                        ::world-forked
+                                                        error-message))
                       context)))
                 (do
-                  (println "Need to make world lookup simpler. Could not find world")
-                  (pprint {::among params
-                           ::world-key world-key
-                           ::world-key-class (class world-key)})
+                  (swap! log-state-atom
+                         #(log/error %
+                                     ::world-forked
+                                     "Could not find world. Should probably make world lookup simpler."
+                                     {::among params
+                                      ::world-key world-key
+                                      ::world-key-class (class world-key)}))
                   context))))})
 
 (def world-forking
@@ -670,7 +680,8 @@
                                                         "Publishing cookie to event bus to trigger :frereth/ack-forking"
                                                         {::cookie cookie
                                                          ::bus/event-bus event-bus}))
-                      (bus/publish! event-bus
+                      (bus/publish! log-state-atom
+                                    event-bus
                                     :frereth/ack-forking
                                     {::cookie cookie
                                      :frereth/world-key pid})
@@ -759,7 +770,7 @@
           ;; With this approach, need to combine custom-verbs with the
           ;; standard HTTP ones.
           ;; It's very tempting to make this the responsibility of the
-          ;; route-uilding function.
+          ;; route-building function.
           ;; That temptation is wrong.
           ;; Want the code that builds the routes to be as simple,
           ;; clean, and declarative as possible.
@@ -768,26 +779,20 @@
           ;; It's tempting to just process the routes and assume that
           ;; anything listed there is legal.
           ;; I'm curious why Pedestal didn't just take that approach.
-          processed-routes (try (table-route/table-routes {:verbs (set/union @#'table-route/default-verbs
-                                                                             custom-verbs)}
+          verbs (set/union @#'table-route/default-verbs
+                           custom-verbs)
+          processed-routes (try (table-route/table-routes {:verbs verbs}
                                                           routes)
                                 (catch Throwable ex
-                                  (swap! log-state-atom
-                                         #(log/flush-logs! logger
-                                                           (log/exception %
-                                                                          ex
-                                                                          ::on-message!
-                                                                          "Expanding Routes failed")))
-                                  ;; We were getting here because I
-                                  ;; wasn't providing the :verbs option,
-                                  ;; so it was throwing an assert.
-                                  ;; That (and, by extension, this) was/will
-                                  ;; be swallowed by the caller.
-                                  ;; Without routes, there's no point to
-                                  ;; proceeding.
-                                  ;; At least now the failure won't be
-                                  ;; totally silent.
-                                  (throw ex)))
+                                  ;; table-routes may very well throw an
+                                  ;; assert if something goes wrong.
+                                  ;; That will escape into the bowels
+                                  ;; of manifold without something like
+                                  ;; this.
+                                  (throw (ex-info "Expanding Routes failed"
+                                                  {::verbs verbs
+                                                   ::route-table routes}
+                                                  ex))))
           raw-interceptors (conj raw-interceptors
                                  ;; It might make sense to parameterize this,
                                  ;; but it doesn't seem likely.
@@ -859,25 +864,30 @@
                  (with-out-str (pprint response)))
             (str "No 'response' for:\n" message-string))]
       (swap! log-state-atom
-             #(log/flush-logs! logger
-                               (log/debug %
-                                          ::on-message!
-                                          result-message
-                                          context))))
+             #(log/debug %
+                         ::on-message!
+                         result-message
+                         context)))
     (catch Exception ex
       (swap! log-state-atom
-             #(log/flush-logs! logger
-                               (log/exception %
-                                              ex
-                                              ::on-mesage!
-                                              "trying to deserialize/dispatch"
-                                              {::body message-string}))))))
+             #(log/exception %
+                             ex
+                             ::on-mesage!
+                             "trying to deserialize/dispatch"
+                             {::body message-string})))
+    (finally
+      (swap! log-state-atom
+             #(log/flush-logs! logger %)))))
 
 (let [handlers {::disconnected [:frereth/disconnect-world
                                 handle-disconnected]
                 ::forked [:frereth/ack-forked handle-forked]
                 ::forking [:frereth/ack-forking handle-forking]}]
-  (defn connect!
+  (s/fdef do-connect
+    :args (s/cat :component ::session-connection
+                 :session-id ::connection/session-id)
+    :ret ::session-connection)
+  (defn do-connect
     ;; This has almost the same problem as my original Component approach.
     ;; It isn't quite as bad. At least I can call this from somewhere that
     ;; has a session-id.
@@ -907,66 +917,32 @@
       log-state-atom ::weald/state-atom
       :as component}
      session-id]
-    (reduce (fn [acc [tag [event-id handler]]]
-              (swap! log-state-atom #(log/trace %
-                                                ::connect!
-                                                "Connecting handler"
-                                                {::handler handler
-                                                 ::signal event-id
-                                                 ::bus/event-bus event-bus}))
-              (assoc acc tag (connect-handler event-bus event-id (partial handler
-                                                                          session-id
-                                                                          component))))
-          component
-          handlers))
+    (swap! (::sessions/session-atom component)
+            (fn [sessions]
+              (update sessions session-id
+                      (fn [session]
+                        (reduce (fn [acc [tag [event-id handler]]]
+                                  (swap! log-state-atom #(log/trace %
+                                                                    ::do-connect
+                                                                    "Connecting handler"
+                                                                    {::handler handler
+                                                                     ::signal event-id
+                                                                     ::bus/event-bus event-bus}))
+                                  (assoc acc tag (connect-handler event-bus
+                                                                  event-id
+                                                                  (partial handler
+                                                                           component
+                                                                           session-id))))
+                                sessions
+                                handlers))))))
   (defn disconnect!
-    [component]
-    (doseq [tag (keys handlers)]
-      (strm/close! (tag component))))
-
-  (defmethod ig/init-key ::internal
-    [_ {:keys [::bus/event-bus]
-        :as component}]
-    (reduce (fn [acc [tag [event-id handler]]]
-              (println "Connecting handler" handler "to signal" event-id "on" event-bus)
-              ;; This approach doesn't work.
-              ;; The handler needs both the session-atom and the current session-id.
-              ;; We should have acces to the session-atom here, but not the
-              ;; session-id.
-              ;; We could add details about the session-id to the message that gets
-              ;; published to the event-bus.
-              ;; That muddles up the API and obscures the points behind using the
-              ;; event-bus in the first place (which are 1. decoupling and 2. hiding
-              ;; the session atom from the basic message handler).
-              ;; This rolls me back to my original thought about the way Om (original)
-              ;; has cursors associated with the various handlers to control which part
-              ;; of the state atom gets updated by any given handler.
-              ;; Which seems worrisome, since David Nolen dismissed that approach as
-              ;; a failure.
-
-              ;; There's at least one other angle on this:
-              ;; I'm worried about security and separation of concerns and sessions
-              ;; here.
-              ;; Part of that is valid. Security absolutely needs to be built into
-              ;; every layer to provide some depth.
-              ;; It's important to remember that this is just a proof-of-concept
-              ;; and, really, an outer layer.
-              ;; If a request arrives to do something like `sudo format c:`, it's
-              ;; up to this layer to request that the sudo World fork.
-              ;; The sudo World is responsible for interacting with the server
-              ;; to handle the authorization to actually do anything drastic.
-              ;; At this level, we do want to be certain that events get routed
-              ;; properly, but it's also important to avoid muddling the concerns
-              (assoc acc tag (connect-handler event-bus event-id (partial handler
-                                                                          ;; This is why we
-                                                                          ;; can't build this
-                                                                          ;; here and now.
-                                                                          'need-session-id
-                                                                          component))))
-            component
-            handlers))
-
-  (defmethod ig/halt-key! ::internal
-    [_ component]
-    (doseq [tag (keys handlers)]
-      (strm/close! (tag component)))))
+    [component session-id]
+    (swap! (::sessions/session-atom component)
+           (fn [sessions]
+             (update sessions session-id
+                     (fn [session]
+                       (reduce (fn [acc tag]
+                                 (strm/close! (tag session))
+                                 (dissoc session tag))
+                               session
+                               (keys handlers))))))))
