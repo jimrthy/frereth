@@ -934,7 +934,8 @@
                                                                            component
                                                                            session-id))))
                                 sessions
-                                handlers))))))
+                                handlers)))))
+    component)
   (defn disconnect!
     [component session-id]
     (swap! (::sessions/session-atom component)
