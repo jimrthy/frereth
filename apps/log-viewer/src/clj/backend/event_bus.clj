@@ -48,16 +48,16 @@
   ;; FIXME: Honestly, need a way to flag events that get published
   ;; with no handlers.
   ;; I don't think manifold offers that possibility.
-  (swap! #(log/debug %
-                     ::do-publish
-                     "Top"
-                     {::topic topic
-                      ::bus bus}))
+  (swap! log-state-atom #(log/debug %
+                                    ::publish!
+                                    "Top"
+                                    {::topic topic
+                                     ::bus bus}))
   (let [success (bus/publish! bus topic message)]
-    (swap! #(log/debug %
-                       ::do-publish
-                       "Published"
-                       {::success success}))
+    (swap! log-state-atom #(log/debug %
+                                      ::publish!
+                                      "Published"
+                                      {::success success}))
     success))
 
 (s/fdef do-subscribe

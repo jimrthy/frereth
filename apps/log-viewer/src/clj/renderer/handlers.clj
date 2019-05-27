@@ -474,11 +474,14 @@
                   (dissoc ::sessions/session-atom ::sessions/session-id)
                   (assoc :frereth/session session))
               (do
-                (println "Broken in session-extractor:")
-                (pprint context)
-                ;; Getting down to here now before throwing NPE due
-                ;; to missing clock
+                (swap! log-state-atom
+                       #(log/error %
+                                   ::session-extractor
+                                   "No matching active session to extract"
+                                   context))
                 (lamport/do-tick clock)
+                ;; We're getting here. It looks as though trying to log this exception
+                ;; is what triggers the stack overflow (eventually)
                 (throw (ex-info "Websocket message for inactive session. This should be impossible"
                                 (assoc context
                                        ::sessions/active (keys (sessions/get-by-state @session-atom
@@ -913,14 +916,16 @@
     ;; Or messages to trigger calls that are equivalent to
     ;; "format c:".
     ;; This still needs more thought.
-    [{:keys [::bus/event-bus]
+    [{:keys [::bus/event-bus
+             ::sessions/session-atom]
       log-state-atom ::weald/state-atom
       :as component}
      session-id]
-    (swap! (::sessions/session-atom component)
-            (fn [sessions]
-              (update sessions session-id
-                      (fn [session]
+    (swap! session-atom
+           (fn [sessions]
+             (update sessions session-id
+                     (fn [session]
+                       (assoc
                         (reduce (fn [acc [tag [event-id handler]]]
                                   (swap! log-state-atom #(log/trace %
                                                                     ::do-connect
@@ -933,9 +938,11 @@
                                                                   (partial handler
                                                                            component
                                                                            session-id))))
-                                sessions
-                                handlers)))))
+                                session
+                                handlers)
+                        ::bus/event-bus event-bus)))))
     component)
+
   (defn disconnect!
     [component session-id]
     (swap! (::sessions/session-atom component)
