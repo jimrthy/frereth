@@ -130,6 +130,7 @@
             session-id
             connection/activate-forked-world world-key client)
     (do
+      ;; FIXME: Convert to weald
       (println "No active session"
                session-id
                "\namong"

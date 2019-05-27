@@ -28,6 +28,7 @@
              [generators :as lo-gen]]
             ;; These are moderately useless under boot.
             [clojure.tools.namespace.repl :refer (refresh refresh-all)]
+            [frereth.apps.shared.connection :as connection]
             [frereth.cp
              [message :as msg]
              [shared :as cp-shared]]
@@ -223,8 +224,13 @@
 
   (-> ig-state/system keys)
   (-> ig-state/system :renderer.sessions/session-atom)
+  (-> ig-state/system :renderer.sessions/session-atom deref keys)
+  (-> ig-state/system :renderer.sessions/session-atom deref pprint)
+  (-> ig-state/system :renderer.sessions/session-atom deref vals first)
   (-> ig-state/system :renderer.sessions/session-atom deref vals first keys)
-  (-> ig-state/system :renderer.sessions/session-atom deref vals first :renderer.handlers/forking)
+  (-> ig-state/system :renderer.sessions/session-atom deref vals first ::connection/state)
+  (-> ig-state/system :renderer.sessions/session-atom deref vals first :frereth/worlds)
+  (-> ig-state/system :renderer.sessions/session-atom deref vals first :renderer-handlers/forking)
   (-> ig-state/system :backend.event-bus/event-bus)
   (-> ig-state/system :backend.web.service/web-service keys)
   (-> ig-state/system :backend.web.service/web-service :io.pedestal.http/interceptors)

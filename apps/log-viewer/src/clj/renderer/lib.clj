@@ -69,11 +69,11 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Internal Implementation
 
-(s/fdef login-finalized!
+(s/fdef finalize-login!
   :args (s/cat :session ::session
                :wrapper string?)
   :ret any?)
-(defn login-finalized!
+(defn finalize-login!
   "Client might have authenticated over websocket"
   [{lamport ::lamport/clock
     :keys [::bus/event-bus
@@ -85,7 +85,7 @@
    message-wrapper]
   (swap! log-state-atom
          #(log/info %
-                    ::login-finalized!
+                    ::finalize-login!
                     "Initial websocket message"
                     {::message message-wrapper}))
   (try
@@ -97,7 +97,7 @@
              :as request} (:request envelope)]
         (swap! log-state-atom
                #(log/debug %
-                           ::login-finalized!
+                           ::finalize-login!
                            "Key pulled"
                            {::deserialized envelope
                             ::params params}))
@@ -106,22 +106,26 @@
                                                      ::connection/pending)]
             (swap! log-state-atom
                    #(log/debug %
-                               ::login-finalized!
+                               ::finalize-login!
                                "Trying to activate session"
                                {::connection/session-id session-id
                                 ::session-id-type (type session-id)
                                 ::sessions/session session-state})))
           (catch Exception ex
+            ;; This was a nasty error that was very difficult to debug.
+            ;; Q: Is it worth trying to log this if the message about
+            ;; logging the session-id/session-state failed?
+            ;; Well, the get-by-state could have also failed.
             (swap! log-state-atom #(log/exception %
                                                   ex
-                                                  ::login-finalized!
+                                                  ::finalize-login!
                                                   "Failed trying to log activation details"
                                                   {::connection/session-id session-id
                                                    ::sessions/session-atom session-atom}))))
         (if (get @session-atom session-id)
           (try
             (swap! log-state-atom #(log/debug %
-                                              ::login-finalized!
+                                              ::finalize-login!
                                               "Activating session"
                                               {::connection/session-id session-id}))
             ;; FIXME: Don't particularly want the session-atom in here.
@@ -132,11 +136,13 @@
                              connection/activate
                              web-socket)))
             (swap! log-state-atom #(log/debug %
-                                              ::login-finalized!
+                                              ::finalize-login!
                                               "Swapped:"
-                                              {::connection/web-socket web-socket}))
+                                              {::connection/web-socket web-socket
+                                               ::sessions/sessions @session-atom}))
             ;; Set up the message handler
-            ;; FIXME: move both routes and raw-interceptors up the creation chain
+            ;; Q: Does it make sense to move both routes and raw-
+            ;; interceptors up the creation chain?
             (let [routes (handlers/build-routes)
                   raw-interceptors [handlers/outer-logger
                                     handlers/session-extractor
@@ -211,7 +217,9 @@
                                    ;; TODO: Unwrap this and eliminate the
                                    ;; backend.event-bus ns.
                                    ;; OTOH...I'm not exactly in love with
-                                   ;; manifold's event-bus implementation.
+                                   ;; manifold's event-bus implementation,
+                                   ;; and using that directly would be more
+                                   ;; difficult to refactor away.
                                    ::bus/event-bus {::bus/bus event-bus}
                                    ::handlers/routes routes
                                    ::connection/session-id session-id)
@@ -222,14 +230,14 @@
                   connection-closed (strm/consume handler
                                                   web-socket)]
               (swap! log-state-atom #(log/trace %
-                                                ::login-finalized!
+                                                ::finalize-login!
                                                 "Websocket consumer configured"))
               ;; Cope with it closing
               (dfrd/on-realized connection-closed
                                 (fn [succeeded]
                                   (swap! log-state-atom #(log/flush-logs! logger
                                                                           (log/info %
-                                                                                    ::login-finalized!
+                                                                                    ::finalize-login!
                                                                                     "Websocket closed cleanly"
                                                                                     {::connection/session-id session-id
                                                                                      ::success succeeded})))
@@ -240,7 +248,7 @@
                                 (fn [failure]
                                   (swap! log-state-atom #(log/flush-logs! logger
                                                                           (log/info %
-                                                                                    ::login-finalized!
+                                                                                    ::finalize-login!
                                                                                     "Websocket failed"
                                                                                     {::connection/session-id session-id
                                                                                      ::success failure})))
@@ -251,10 +259,10 @@
             (catch Exception ex
               (swap! log-state-atom #(log/exception %
                                                     ex
-                                                    ::login-finalized!))))
+                                                    ::finalize-login!))))
           (do
             (swap! log-state-atom #(log/warn %
-                                             ::login-finalized!
+                                             ::finalize-login!
                                              "No matching session"
                                              {::sessions/session-state-keys (keys @session-atom)
                                               ::sessions/session-state @session-atom}))
@@ -262,7 +270,7 @@
                             {::attempt session-id
                              ::sessions/sessions @session-atom})))))
       (swap! log-state-atom #(log/warn %
-                                       ::login-finalized!
+                                       ::finalize-login!
                                        "Waiting for login completion failed:"
                                        message-wrapper)))
     (finally
@@ -310,8 +318,10 @@
       (swap! log-state-atom #(log/debug %
                                         ::activate-session!
                                         "Trying to pull the Renderer's key from new websocket"
-                                        ;; FIXME: Need a cleaner way to log this
+                                        ;; FIXME: Need a cleaner way to format this for logging
                                         @session-atom))
+      ;; Obviously don't want to hard-code this half-second timeout.
+      ;; This all ties into that FIXME above about adding a real handshake
       (let [first-message (strm/try-take! web-socket ::drained 500 ::timed-out)]
         ;; TODO: Need the login exchange before this.
         ;; Do that before opening the websocket, using something like SRP.
@@ -333,7 +343,7 @@
         ;; TODO: Check this FSM handshake with stack overflow's security
         ;; board.
         (dfrd/on-realized first-message
-                          (partial login-finalized! session-wrapper)
+                          (partial finalize-login! session-wrapper)
                           (fn [error]
                             (swap! log-state-atom
                                    #(log/exception %

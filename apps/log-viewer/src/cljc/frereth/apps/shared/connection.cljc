@@ -127,8 +127,9 @@
    (update-fn
     (update-state current new-state)))
   ([current new-state]
-   (assoc (if-not new-state current
-                  (assoc current ::state new-state))
+   (assoc (if-not new-state
+            current
+            (assoc current ::state new-state))
           ::state-id #?(:clj (cp-util/random-uuid)
                         :cljs (random-uuid))
           ;; So we can time out the oldest connection if/when we get

@@ -3,13 +3,15 @@
    [aleph.http :as http]
    [cemerick.url :as url]
    [clojure.core.async :as async]
-   [clojure.core.async.impl.protocols :as async-protocols]
+
    [clojure.edn :as edn]
    [clojure.pprint :refer [pprint]]
    [clojure.spec.alpha :as s]
    [frereth.apps.shared.connection :as connection]
    [frereth.apps.shared.lamport :as lamport]
    [frereth.apps.shared.serialization :as serial]
+   ;; Initially, at least, this is for ::async/chan
+   [frereth.apps.shared.specs :as specs]
    [frereth.cp.shared.util :as cp-util]
    [frereth.weald.logging :as log]
    [frereth.weald.specs :as weald]
@@ -32,7 +34,6 @@
 (s/def ::request map?)
 (s/def ::response map?)
 (s/def ::interceptor-chain/error #(instance? ExceptionInfo %))
-(s/def ::async/chan #(satisfies? async-protocols/Channel %))
 
 (s/def ::context (s/keys :req-un [::request]
                          :opt-un [::interceptor-chain/error
@@ -60,6 +61,11 @@
 ;;; FIXME: Track that down so I don't need to duplicate it.
 (s/def ::ring-request map?)
 
+(s/def ::connection-specs (s/keys :req [::lamport/clock
+                                        ::sessions/session-atom
+                                        ::weald/logger
+                                        ::weald/state-atom]))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Internal Helpers
 
@@ -67,16 +73,57 @@
   "For requests at the /ws endpoint missing the upgrade header"
   (rsp/bad-request "Expected a websocket request"))
 
+(s/fdef connect-web-socket-to-session!
+  :args (s/cat :component ::connection-specs
+               :deferred-socket dfrd/deferred?)
+  :ret ::async/chan)
+(defn connect-web-socket-to-session!
+  [{:keys [::weald/logger]
+    log-state-atom ::weald/state-atom
+    :as component}
+   dfrd-sock]
+  (async/go
+    ;; The person who's probably taking over as
+    ;; the maintainer for aleph strongly dislikes
+    ;; let-flow.
+    ;; That seems like a sign that it's probably
+    ;; worth avoiding it.
+    ;; So...what's the proper way to do that?
+    (dfrd/let-flow [websocket (dfrd/catch
+                                  dfrd-sock
+                                  (fn [_] nil))]
+                   (swap! log-state-atom
+                          #(log/flush-logs! logger
+                                            (log/info % ::connect-web-socket-to-session!
+                                                      "websocket upgrade"
+                                                      {::result websocket})))
+                   (if websocket
+                     (do
+                       (swap! log-state-atom
+                              #(log/flush-logs! logger
+                                                (log/info % ::connect-web-socket-to-session!
+                                                          "Built a websocket")))
+                       (try
+                         (lib/activate-session! (assoc component
+                                                       ::connection/web-socket websocket))
+                         websocket
+                         (catch Exception ex
+                           (swap! log-state-atom
+                                  #(log/flush-logs! logger
+                                                    (log/exception % ex ::connect-web-socket-to-session!))))))
+                     (do
+                       (swap! log-state-atom
+                              #(log/flush-logs! logger
+                                                (log/warn % ::connect-web-socket-to-session!
+                                                          "No websocket")))
+                       non-websocket-request)))))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Handlers
 
 (s/fdef build-renderer-connection
-  :args (s/keys :req [::lamport/clock
-                      ::sessions/session-atom
-                      ::weald/logger
-                      ::weald/state-atom])
-  :ret ::interceptor
-  :ret dfrd/deferred?)
+  :args (s/cat :connection-specs ::connection-specs)
+  :ret ::interceptor)
 (defn build-renderer-connection
   [{:keys [::sessions/session-atom
            ::weald/logger]
@@ -87,7 +134,7 @@
    :enter (fn [{:keys [:request]
                 :as ctx}]
             (when-not log-state-atom
-              (println "WARNING: Missing state-atom among"
+              (println "WARNING: Missing ::weald/state-atom among"
                        (keys component)
                        "\nin\n"
                        (cp-util/pretty component)))
@@ -99,46 +146,15 @@
                                                  request)))
               (let [dfrd-sock (http/websocket-connection request)]
                 (assoc ctx
-                       :response {:body (async/go
-                                          ;; The person who's probably taking over as
-                                          ;; the maintainer for aleph strongly dislikes
-                                          ;; let-flow.
-                                          ;; That seems like a sign that it's probably
-                                          ;; worth avoiding it.
-                                          ;; So...what's the proper way to do that?
-                                          (dfrd/let-flow [websocket (dfrd/catch
-                                                                        dfrd-sock
-                                                                        (fn [_] nil))]
-                                                         (swap! log-state-atom
-                                                                #(log/flush-logs! logger
-                                                                                  (log/info % ::connect-renderer!
-                                                                                            "websocket upgrade"
-                                                                                            {::result websocket})))
-                                                         (if websocket
-                                                           (do
-                                                             (swap! log-state-atom
-                                                                    #(log/flush-logs! logger
-                                                                                      (log/info % ::connect-renderer!
-                                                                                                "Have a websocket")))
-                                                             (try
-                                                               (lib/activate-session! (assoc component
-                                                                                             ::connection/web-socket websocket))
-                                                               websocket
-                                                               (catch Exception ex
-                                                                 (swap! log-state-atom
-                                                                        #(log/flush-logs! logger
-                                                                                          (log/exception % ex ::connect-renderer!)))
-                                                                 )))
-                                                           (do
-                                                             (swap! log-state-atom
-                                                                    #(log/flush-logs! logger
-                                                                                      (log/warn % ::connect-renderer!
-                                                                                                "No websock")))
-                                                             non-websocket-request))))}))
+                       ;; Having the response body return a go block that, in turn,
+                       ;; derefs as a manifold.Deferred seems weird, at best.
+                       ;; But it seems to work.
+                       :response {:body (connect-web-socket-to-session! component dfrd-sock)}))
               (catch Exception ex
+                (swap! log-state-atom #(log/exception % ex ::connect-renderer)))
+              (finally
                 (swap! log-state-atom
-                       #(log/flush-logs! logger
-                                         (log/exception % ex ::connect-renderer))))))})
+                       #(log/flush-logs! logger %)))))})
 
 (s/fdef create-world-interceptor
   :args (s/cat :session-atom ::sessions/session-atom)
