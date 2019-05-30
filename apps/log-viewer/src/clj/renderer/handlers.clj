@@ -263,13 +263,21 @@
              :as this}
           ~'session-id
           ~(first message-arg)]
-         (swap! ~'log-state-atom #(log/trace %
-                                             (keyword (str *ns*) (str ~real-handler-name))
-                                             "Incoming"))
-         (let [~'session (-> ~'session-atom
-                             deref
-                             (get ~'session-id))]
-           ~@handler-body)))))
+         (println "Top of some handler")
+         (let [log-label# (keyword (str *ns*) (str ~real-handler-name))]
+           (try
+             (swap! ~'log-state-atom #(log/trace %
+                                                 log-label#
+                                                 "Incoming"))
+             (let [~'session (-> ~'session-atom
+                                 deref
+                                 (get ~'session-id))]
+               ~@handler-body)
+             (catch Exception ex#
+               (println "Oops in def'd handler:" ex#)
+               (swap! ~'log-state-atom #(log/exception %
+                                                       ex#
+                                                       log-label#)))))))))
 
 (comment
   (macroexpand-1 'nil))
@@ -315,6 +323,7 @@
     :as message}]
   ;; No longer getting here
   (try
+    (println "Top of handle-forking w/" log-state-atom)
     (swap! log-state-atom #(log/debug %
                                       ::handle-forking
                                       "top"
@@ -339,13 +348,17 @@
                    world-key
                    :frereth/ack-forking
                    {:frereth/cookie cookie})
+    (println "Forking")
     (catch Exception ex
+      (println "Oops")
       (swap! log-state-atom #(log/exception %
                                             ex
                                             ::handle-forking
                                             "Trying to post :frereth/ack-forking"
                                             {::connection/session-id session-id
                                              :frereth/world-key world-key})))))
+
+
 
 (s/fdef log-edges
   :args (s/cat :location keyword?  ; :frereth/atom better?
@@ -671,6 +684,8 @@
                      :as body} :params} request]
               ;; TODO: Look into clojure core functionality.
               ;; Surely there's a better approach than these nested ifs
+              ;; some-> would be obvious, if we didn't need error handling.
+              ;; Since we do, there might not be a good alternative.
               (if (and command pid)
                 (if session
                   (if-not (connection/get-world session pid)
@@ -683,6 +698,8 @@
                                                         "Publishing cookie to event bus to trigger :frereth/ack-forking"
                                                         {::cookie cookie
                                                          ::bus/event-bus event-bus}))
+                      ;; TODO: Return this topic/message pair instead.
+                      ;; Let the caller handle side-effects like the publish! separately.
                       (bus/publish! log-state-atom
                                     event-bus
                                     :frereth/ack-forking

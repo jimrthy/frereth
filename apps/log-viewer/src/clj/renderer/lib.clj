@@ -310,7 +310,8 @@
   (swap! log-state-atom #(log/trace %
                                     ::activate-session!
                                     "Top"
-                                    {::session session-wrapper}))
+                                    {::session (dissoc session-wrapper
+                                                       ::weald/state-atom)}))
 
   (if session-atom
     (try

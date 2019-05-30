@@ -230,7 +230,21 @@
   (-> ig-state/system :renderer.sessions/session-atom deref vals first keys)
   (-> ig-state/system :renderer.sessions/session-atom deref vals first ::connection/state)
   (-> ig-state/system :renderer.sessions/session-atom deref vals first :frereth/worlds)
-  (-> ig-state/system :renderer.sessions/session-atom deref vals first :renderer-handlers/forking)
+
+  (-> ig-state/system :renderer.sessions/session-atom deref vals first :renderer.handlers/disconnected)
+  (-> ig-state/system :renderer.sessions/session-atom deref vals first :renderer.handlers/forked)
+  (-> ig-state/system :renderer.sessions/session-atom deref vals first :renderer.handlers/forked (strm/put!))
+  (def posted
+    (-> ig-state/system
+        :renderer.sessions/session-atom
+        deref
+        vals
+        first
+        :renderer.handlers/forked
+        (strm/try-take! 500)))
+  posted
+  (-> ig-state/system :renderer.sessions/session-atom deref vals first :renderer.handlers/forking)
+
   (-> ig-state/system :backend.event-bus/event-bus)
   (-> ig-state/system :backend.web.service/web-service keys)
   (-> ig-state/system :backend.web.service/web-service :io.pedestal.http/interceptors)
