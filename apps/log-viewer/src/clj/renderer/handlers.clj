@@ -237,6 +237,33 @@
 ;;; really worth the extra convolution of keeping them isolated on an
 ;;; event bus?
 
+;;; This approach (with macros that add arbitrary values into the
+;;; lexical scope) doesn't make sense here, but it probably does for
+;;; higher-level bits that the actual games/worlds use.
+;;; The automatic logging and exception handling around the handler
+;;; really is nice.
+;;; But, at this level, the handler should return a combination of
+;;; a) functions to apply to update the state of this session
+;;; b) messages to publish back to the browser side
+;;; Even that much abstraction may be overkill.
+;;; Q: Will this layer of the messaging protocol ever need more than
+;;; a req/rep interchange?
+;;; Keeping in mind that the Client can always send whichever messages
+;;; it wants.
+;;; Well...it can't, until the Renderer has Joined.
+;;; Which adds another step to this interchange.
+;;; Need to Fork the world, yes.
+;;; Also need to Join it to exchange messages.
+;;; Or come up with some concept of running daemons.
+;;; A database server like mysql is the first, most obvious example
+;;; that comes to mind.
+;;; It doesn't have to run in a privileged mode, even though it usually
+;;; does.
+;;; Daemons associated with system accounts are one thing.
+;;; tmux is a different matter.
+;;; Q: How does that work?
+;;; (Yes, this is for off-topic, but still important)
+
 (defmacro defhandler
   [handler-name
    ;; It's really tempting to try to combine message-spec
@@ -256,7 +283,7 @@
        (defn ~real-handler-name
          [~'{:keys [::bus/event-bus
                     ::lamport/clock
-                    ::connection/session-atom
+                    ::sessions/session-atom
                     :frereth/world-key
                     ::world-stop-signal]
              log-state-atom ::weald/state-atom
@@ -277,7 +304,10 @@
                (println "Oops in def'd handler:" ex#)
                (swap! ~'log-state-atom #(log/exception %
                                                        ex#
-                                                       log-label#)))))))))
+                                                       log-label#)))
+             (finally
+               (let [logger# (::weald/logger ~'this)]
+                 (swap! ~'log-state-atom #(log/flush-logs! logger# %))))))))))
 
 (comment
   (macroexpand-1 'nil))
@@ -357,6 +387,38 @@
                                             "Trying to post :frereth/ack-forking"
                                             {::connection/session-id session-id
                                              :frereth/world-key world-key})))))
+(comment
+  (do
+    (clojure.spec.alpha/fdef handle-forking :args (clojure.spec.alpha/cat :this :renderer.handlers/session-connection :session-id :frereth.apps.shared.connection/session-id :message any?) :ret clojure.core/any?)
+    (clojure.core/defn handle-forking
+      [{:keys [:backend.event-bus/event-bus
+               :frereth.apps.shared.lamport/clock
+               ::sessions/session-atom
+               :frereth/world-key
+               :renderer.handlers/world-stop-signal],
+        log-state-atom :frereth.weald.specs/state-atom, :as this} session-id {:keys [:renderer.handlers/cookie :frereth/world-key], :as message}]
+      (clojure.core/println "Top of some handler. log-state-atom:" log-state-atom)
+      (clojure.core/let [log-label__95102__auto__ (clojure.core/keyword (clojure.core/str clojure.core/*ns*) (clojure.core/str handle-forking))]
+        (try
+          (clojure.core/swap! log-state-atom
+                              (fn* [p1__95100__95103__auto__]
+                                   (frereth.weald.logging/trace p1__95100__95103__auto__
+                                                                log-label__95102__auto__
+                                                                "Incoming")))
+          (println "Looking for session inside" session-atom "\n====================")
+          (clojure.core/let [session (clojure.core/-> session-atom clojure.core/deref (clojure.core/get session-id))]
+            (try
+              (println "Top of handle-forking w/" log-state-atom)
+              (swap! log-state-atom (fn* [p1__95315#] (log/debug p1__95315# :renderer.handlers/handle-forking "top" #:renderer.handlers{:message message, :session-connection this})))
+              (post-message! session clock session-id world-key :frereth/ack-forking #:frereth{:cookie cookie})
+              (println "Forking")
+              (catch Exception ex (println "Oops") (swap! log-state-atom (fn* [p1__95316#] (log/exception p1__95316# ex :renderer.handlers/handle-forking "Trying to post :frereth/ack-forking" {:frereth.apps.shared.connection/session-id session-id, :frereth/world-key world-key}))))))
+          (catch java.lang.Exception ex__95104__auto__
+            (clojure.core/println "Oops in def'd handler:" ex__95104__auto__)
+            (clojure.core/swap! log-state-atom
+                                (fn* [p1__95101__95105__auto__]
+                                     (frereth.weald.logging/exception p1__95101__95105__auto__ ex__95104__auto__ log-label__95102__auto__)))))))))
+
 
 
 
@@ -938,6 +1000,10 @@
       log-state-atom ::weald/state-atom
       :as component}
      session-id]
+    (swap! log-state-atom #(log/debug %
+                                      ::do-connect
+                                      "Setting up world handlers for session"
+                                      {::sessions/session-atom session-atom}))
     (swap! session-atom
            (fn [sessions]
              (update sessions session-id
