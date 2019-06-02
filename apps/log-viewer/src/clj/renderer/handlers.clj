@@ -358,7 +358,8 @@
                                       ::handle-forking
                                       "top"
                                       {::message message
-                                       ::session-connection this}))
+                                       ::session-connection this
+                                       ::cookie cookie}))
     ;; It's tempting to add the world to the session here.
     ;; Actually, there doesn't seem like any good reason
     ;; not to (if not earlier)
@@ -374,7 +375,6 @@
     ;; this case, the appropriate Session).
     (post-message! session
                    clock
-                   session-id
                    world-key
                    :frereth/ack-forking
                    {:frereth/cookie cookie})

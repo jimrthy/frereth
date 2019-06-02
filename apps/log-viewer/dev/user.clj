@@ -363,6 +363,8 @@
       ::sessions/session-atom
       deref
       (sessions/get-by-state ::sessions/active))
+  (-> ig-state/system keys)
+  (-> ig-state/system ::weald/state-atom)
   )
 
 (comment

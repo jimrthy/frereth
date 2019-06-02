@@ -363,7 +363,8 @@
                       session-wrapper)))))
 
 (s/fdef get-code-for-world
-  :args (s/cat :sessions ::sessions/sessions
+  :args (s/cat :log-state-atom ::weald/state-atom
+               :sessions ::sessions/sessions
                :actual-session-id :frereth/session-id
                :world-key :frereth/world-key
                :cookie-bytes bytes?)
@@ -374,7 +375,7 @@
   ;; That's another reason to move them.
   :ret (s/nilable #(instance? java.io.File %)))
 (defn get-code-for-world
-  [sessions actual-session-id world-key cookie-bytes]
+  [log-state-atom sessions actual-session-id world-key cookie-bytes]
   (if actual-session-id
     (if-let [session (sessions/get-active-session sessions
                                                   actual-session-id)]
@@ -386,11 +387,17 @@
                     :frereth/world-ctor]
              expected-session-id :frereth/session-id
              :as cookie} (handlers/decode-cookie cookie-bytes)]
-        (println ::get-code-for-world "Have a session. Decoded cookie")
+        (swap! log-state-atom
+               #(log/trace %
+                           ::get-code-for-world
+                           "Have a session. Decoded cookie"))
         (if (and pid expected-session-id world-ctor)
           (if (verify-cookie actual-session-id world-key cookie)
             (do
-              (println ::get-code-for-world "Cookie verified")
+              (swap! log-state-atom
+                     #(log/info %
+                                ::get-code-for-world
+                                "Cookie verified"))
               (let [opener (if (.exists (io/file "dev-output/js"))
                              io/file
                              (fn [file-name]
@@ -407,34 +414,48 @@
                 ;; Though, honestly, this needs to adjust all the calls to
                 ;; require to place them under an API route that involves
                 ;; both the session and world IDs.
-                (println ::get-code-for-world "Returning" raw "a" (class raw))
+                (swap! log-state-atom
+                       #(log/trace %
+                                   ::get-code-for-world
+                                   "Returning"
+                                   {::code-file raw
+                                    ::code-file-type (type raw)}))
                 raw))
             (do
-              (println "Bad Initiate packet.\n"
-                       cookie "!=" world-key
-                       "\nor"
-                       actual-session-id "!=" expected-session-id)
+              (swap! log-state-atom
+                     #(log/error %
+                                 ::get-code-for-world
+                                 "Bad Initiate packet"
+                                 {:frereth/cookie cookie
+                                  :frereth/pid world-key
+                                  :actual/session-id actual-session-id
+                                  :expected/session-id expected-session-id}))
               (throw (ex-info "Invalid Cookie: probable hacking attempt"
                               {:frereth/session-id expected-session-id
                                ::real-session-id actual-session-id
                                :frereth/world-key world-key
                                :frereth/cookie cookie}))))
           (do
-            (println (str "Incoming cookie has issue with either '"
-                          pid
-                          "', '"
-                          expected-session-id
-                          "', or '"
-                          world-ctor
-                          "'"))
+            (swap! log-state-atom
+                   #(log/error %
+                               ::get-code-for-world
+                               "Incoming cookie has issue with one of:"
+                               {:frereth/pid pid
+                                :frereth/session-id expected-session-id
+                                :frereth/world-ctor world-ctor
+                                ::cookie cookie}))
             (throw (ex-info "Bad cookie"
                             cookie)))))
       (do
-        (println "Missing session key\n"
-                 actual-session-id "a" (class actual-session-id)
-                 "\namong")
-        (doseq [session-key (sessions/get-by-state sessions ::sessions/active)]
-          (println session-key "a" (class session-key)))
+        (swap! log-state-atom
+               #(log/error %
+                           ::get-code-for-world
+                           "Missing session key"
+                           {:frereth/session-id actual-session-id
+                            ::session-id-type (type actual-session-id)
+                            ::sessions/active (reduce (fn [acc session-key]
+                                                        (assoc acc session-key (type session-key)))
+                                                      (sessions/get-by-state sessions ::sessions/active))}))
         (throw (ex-info "Trying to fork World for missing session"
                         {::sessions/sessions sessions
                          :frereth/session-id actual-session-id

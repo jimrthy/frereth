@@ -109,12 +109,14 @@
 (s/fdef build-pedestal-routes
   :args (s/keys :req [::lamport/clock
                       ::sessions/session-atom
+                      ::weald/logger
                       ::weald/state-atom])
   :ret ::route-set)
 (defn build-pedestal-routes
   [{:keys [::lamport/clock
            ::sessions/session-atom
-           ::weald/state-atom]
+           ::weald/logger]
+    log-state-atom ::weald/state-atom
     :as component}]
   (let [content-neg-intc (conneg/negotiate-content ["text/html" "application/edn" "text/plain"])
         default-intc [coerce-content-type content-neg-intc]
@@ -125,7 +127,7 @@
           ["/index.php" :get (conj default-intc handlers/index-page) :route-name ::default-php]
           ["/api/fork" :get
            (conj default-intc
-                 (handlers/create-world-interceptor session-atom))
+                 (handlers/create-world-interceptor logger log-state-atom session-atom))
            :route-name ::connect-world]
           ["/echo" :any (conj default-intc handlers/echo-page) :route-name ::echo]
           ["/test" :any (conj default-intc handlers/test-page) :route-name ::test]

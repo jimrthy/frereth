@@ -157,7 +157,8 @@
                        #(log/flush-logs! logger %)))))})
 
 (s/fdef create-world-interceptor
-  :args (s/cat :session-atom ::sessions/session-atom)
+  :args (s/cat :log-state-atom ::weald/state-atom
+               :session-atom ::sessions/session-atom)
   :ret ::interceptor)
 ;; FIXME: This name seems misleading.
 ;; It seems like connect-to-possibly-new-world might be more
@@ -185,14 +186,16 @@
 
   For the 'real thing,' this should contact the Client and get the
   appropriate code from the Server."
-  [session-atom]
+  [logger log-state-atom session-atom]
   {:name ::world-forker
    :enter (fn [{{:keys [:query-params]
                  :as request} :request
                 :as context}]
             (try
-              (println ::create-world
-                       "Received a request for code to fork a new World:")
+              (swap! log-state-atom
+                     #(log/trace %
+                                 ::create-world-interceptor
+                                 "Received a request for code to fork a new World:"))
               ;; These parameters need to be serialized into a signed "initiate"
               ;; param.
               (let [{initiate-wrapper :initiate
@@ -211,47 +214,69 @@
                          :as initiate} (serial/deserialize initiate-wrapper)]
                     (if (and cookie session-id world-key)
                       (do
-                        (println ::create-world "Trying to decode" cookie
-                                 "a" (class cookie))
+                        (swap! log-state-atom
+                               #(log/debug %
+                                           ::create-world-interceptor
+                                           "Trying to decode cookie"
+                                           {:frereth/cookie cookie
+                                            ::cookie-type (type cookie)}))
                         (let [session-id (-> session-id
                                              url/url-decode
                                              edn/read-string)
                               world-key (-> world-key
                                             url/url-decode
                                             edn/read-string)]
-                          (println ::create-world "Decoded params:")
-                          ;; There's a type mismatch between here and what the lib
-                          ;; expects.
-                          ;; These values are still JSON.
-                          ;; That's expecting cookie as a byte array.
-                          ;; session-id and world-key are supposed to be...whatever
-                          ;; I'm using to represent keys (the map of JWK values would
-                          ;; be most appropriate).
-                          ;; So I need to finish deserializing these.
-                          ;; At the same time, this should really have been sent as
-                          ;; a single signed blob that extracts to these values.
-                          (pprint {::cookie cookie
-                                   ::session-id session-id
-                                   ::world-key world-key
-                                   ::signature signature})
+                          (swap! log-state-atom
+                                 ;; FIXME: I think this comment is probably rotten
+                                 ;; There's a type mismatch between here and what the lib
+                                 ;; expects.
+                                 ;; These values are still JSON.
+                                 ;; That's expecting cookie as a byte array.
+                                 ;; session-id and world-key are supposed to be...whatever
+                                 ;; I'm using to represent keys (the map of JWK values would
+                                 ;; be most appropriate).
+                                 ;; So I need to finish deserializing these.
+                                 ;; At the same time, this should really have been sent as
+                                 ;; a single signed blob that extracts to these values.
+                                 #(log/debug %
+                                             ::create-world-interceptor
+                                             "Decoded params:"
+                                             {::cookie cookie
+                                              ::session-id session-id
+                                              ::world-key world-key
+                                              ::signature signature}))
                           (try
-                            (if-let [body (lib/get-code-for-world @session-atom
+                            (if-let [body (lib/get-code-for-world log-state-atom
+                                                                  @session-atom
                                                                   session-id
                                                                   world-key
                                                                   cookie)]
                               (do
-                                (println ::create-world "Response body:" body)
+                                (swap! log-state-atom
+                                       #(log/trace %
+                                                   ::create-world-interceptor
+                                                   ""
+                                                   {:response/body body}))
                                 (try
                                   (lib/register-pending-world! session-atom
                                                                session-id
                                                                world-key
                                                                cookie)
-                                  (println ::create-world
-                                           "Registration succeeded. Should be good to go")
+                                  (swap! log-state-atom
+                                         #(log/info %
+                                                    ::create-world-interceptor
+                                                    "Registration succeeded. Should be good to go"))
                                   (catch Throwable ex
-                                    (println ::create-world "Registration failed:" ex)
+                                    (swap! log-state-atom
+                                           #(log/exception %
+                                                           ex
+                                                           ::create-world-interceptor
+                                                           "Registration failed"))
                                     (throw ex)))
                                 (assoc context :response
+                                       ;; Q: Should we be friendlier and
+                                       ;; allow content negotiation
+                                       ;; here?
                                        (rsp/content-type (rsp/response body)
                                                          ;; Q: What is the response type, really?
                                                          ;; It seems like it would be really nice
@@ -269,34 +294,57 @@
                                                          ;; else).
                                                          "application/ecmascript")))
                               (do
-                                (println ::create-world "Missing")
-                                (pprint {:frereth/session-id session-id
-                                         :frereth/world-key world-key})
+                                (swap! log-state-atom
+                                       #(log/error %
+                                                   ::create-world-interceptor
+                                                   "Missing"
+                                                   {:frereth/session-id session-id
+                                                    :frereth/world-key world-key}))
                                 (assoc context :response
                                        (rsp/not-found "Unknown World"))))
                             (catch ExceptionInfo ex
-                              (println "Error retrieving code for World\n" ex)
-                              (pprint (ex-data ex))
+                              (swap! log-state-atom
+                                     #(log/exception %
+                                                     ex
+                                                     ::create-world-interceptor
+                                                     "Error retrieving code for World"))
                               (assoc context :response
                                      (rsp/bad-request "Malformed Request")))
                             (catch Exception ex
                               ;; This seems silly...but what would
                               ;; be more appropriate?
-                              (println "Unhandled exception:" ex)
+                              (swap! log-state-atom
+                                     #(log/exception %
+                                                     ex
+                                                     ::create-world-interceptor
+                                                     "Exception escaping") )
                               (throw ex)))))
                       (do
-                        (println "Missing piece of initiate")
-                        (pprint initiate)
+                        (swap! log-state-atom
+                               #(log/error %
+                                           ::create-world-interceptor
+                                           "Missing piece of initiate"
+                                           initiate))
                         (assoc context :response
                                (rsp/bad-request "Missing required parameter")))))
                   (do
-                    (println "Missing query param in")
-                    (pprint query-params)
+                    (swap! log-state-atom
+                           #(log/error %
+                                       ::create-world-interceptor
+                                       "Missing required query param"
+                                       query-params))
                     (assoc context :response
                            (rsp/bad-request "Missing required parameter")))))
               (catch Throwable ex
-                (println "Unhandled low-level outer exception:" ex)
-                (throw ex))))})
+                (swap! log-state-atom
+                       #(log/exception %
+                                       ex
+                                       ::create-world-interceptor
+                                       "Unhandled low-level outer exception:"))
+                (throw ex))
+              (finally
+                (swap! log-state-atom
+                       #(log/flush-logs! logger %)))))})
 
 (defn echo-page
   [request]
