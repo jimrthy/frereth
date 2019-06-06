@@ -22,26 +22,6 @@
                              #(s/valid? ::sessions (deref %))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;; Globals
-
-(def test-key
-  "Placeholder for crypto key to identify a connection.
-
-  Because I have to start somewhere, and that isn't with
-  key exchange algorithms.
-
-  Mostly, I don't want to copy/paste this any more than I
-  must."
-  [-39 -55 106 103
-   -31 117 120 57
-   -102 12 -102 -36
-   32 77 -66 -74
-   97 29 9 16
-   12 -79 -102 -96
-   89 87 -73 116
-   66 43 39 -61])
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Internal Implementation
 
 (defmethod ig/init-key ::session-atom
@@ -58,7 +38,7 @@
    ;; initial connection logic to negotiate this key so it's waiting
    ;; and ready when the websocket connects.
    (let [test-claims {}]
-     {test-key (connection/log-in (connection/create) test-claims)})))
+     {connection/test-key (connection/log-in (connection/create) test-claims)})))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Public
@@ -76,7 +56,8 @@
 
 (s/fdef get-by-state
   :args (s/cat :sessions ::sessions
-               :state ::connection/state))
+               :state ::connection/state)
+  :ret ::sessions)
 (defn get-by-state
   "Return sessions that match state"
   [sessions state]

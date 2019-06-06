@@ -232,7 +232,7 @@
   (when-let [{:keys [::web-socket/socket]} wrapper]
     (let [worker-manager (worker/manager clock session-manager wrapper)
           this (assoc this ::worker/manager worker-manager)
-          {:keys [::session/session-id]} session-manager]
+          {:keys [:frereth/session-id]} session-manager]
       ;; Q: Worth using a library like sente or haslett to wrap the
       ;; details?
       ;; TODO: Move these into session-socket

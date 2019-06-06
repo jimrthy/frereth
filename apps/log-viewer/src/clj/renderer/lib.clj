@@ -102,15 +102,14 @@
                            {::deserialized envelope
                             ::params params}))
         (try
-          (let [session-state (sessions/get-by-state @session-atom
-                                                     ::connection/pending)]
+          (let [session-map (sessions/get-by-state @session-atom ::connection/pending)]
             (swap! log-state-atom
                    #(log/debug %
                                ::finalize-login!
                                "Trying to activate session"
-                               {::connection/session-id session-id
+                               {:frereth/session-id session-id
                                 ::session-id-type (type session-id)
-                                ::sessions/session session-state})))
+                                ::sessions/session session-map})))
           (catch Exception ex
             ;; This was a nasty error that was very difficult to debug.
             ;; Q: Is it worth trying to log this if the message about
@@ -120,14 +119,14 @@
                                                   ex
                                                   ::finalize-login!
                                                   "Failed trying to log activation details"
-                                                  {::connection/session-id session-id
+                                                  {:frereth/session-id session-id
                                                    ::sessions/session-atom session-atom}))))
         (if (get @session-atom session-id)
           (try
             (swap! log-state-atom #(log/debug %
                                               ::finalize-login!
                                               "Activating session"
-                                              {::connection/session-id session-id}))
+                                              {:frereth/session-id session-id}))
             ;; FIXME: Don't particularly want the session-atom in here.
             ;; Q: Is there any way to avoid that?
             (swap! session-atom
@@ -222,7 +221,7 @@
                                    ;; difficult to refactor away.
                                    ::bus/event-bus {::bus/bus event-bus}
                                    ::handlers/routes routes
-                                   ::connection/session-id session-id)
+                                   :frereth/session-id session-id)
                   component (handlers/do-connect component session-id)
                   handler (partial handlers/on-message!
                                    component
@@ -239,7 +238,7 @@
                                                                           (log/info %
                                                                                     ::finalize-login!
                                                                                     "Websocket closed cleanly"
-                                                                                    {::connection/session-id session-id
+                                                                                    {:frereth/session-id session-id
                                                                                      ::success succeeded})))
                                   (handlers/disconnect! component session-id)
                                   (swap! session-atom
@@ -250,7 +249,7 @@
                                                                           (log/info %
                                                                                     ::finalize-login!
                                                                                     "Websocket failed"
-                                                                                    {::connection/session-id session-id
+                                                                                    {:frereth/session-id session-id
                                                                                      ::success failure})))
                                   (handlers/disconnect! component)
                                   (swap! session-atom

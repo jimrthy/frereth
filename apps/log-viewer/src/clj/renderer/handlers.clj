@@ -52,7 +52,7 @@
                                          ::lamport/clock
                                          ::weald/logger
                                          ::weald/state-atom
-                                         ::connection/session-id]))
+                                         :frereth/session-id]))
 
 (s/def ::world-connection (s/merge ::common-connection
                                    (s/keys :req [:frereth/world-key
@@ -68,7 +68,7 @@
 ;;;; Internal Helpers
 
 (s/fdef build-cookie
-  :args (s/cat :session-id ::sessions/session-id
+  :args (s/cat :session-id :frereth/session-id
                :world-key ::world-key
                :command :frereth/command)
   :ret bytes?)
@@ -157,7 +157,7 @@
 (defn post-real-message!
   ;; TODO: Move this elsewhere.
   "Forward serialized value to the associated World"
-  [{:keys [::connection/session-id
+  [{:keys [:frereth/session-id
            ::connection/state
            ::connection/web-socket]
     :as session} world-key wrapper]
@@ -277,7 +277,7 @@
     `(do
        (s/fdef ~real-handler-name
          :args (s/cat :this ::session-connection
-                      :session-id ::connection/session-id
+                      :session-id :frereth/session-id
                       :message ~message-spec)
          :ret any?)
        (defn ~real-handler-name
@@ -312,28 +312,36 @@
 (comment
   (macroexpand-1 'nil))
 (defhandler handle-disconnected
-  (s/keys :req [::connection/session-id :frereth/world-key])
-  [{supplied-session-id ::connection/session-id
-    supplied-world-key :frereth/world-key}]
+  (s/keys :req [:frereth/session-id :frereth/world-key])
+  [{supplied-session-id :frereth/session-id
+    supplied-world-key :frereth/world-key
+    :as real-params}]
   (if (and (= session-id supplied-session-id)
            (= world-key supplied-world-key))
-    (swap! session-atom
-           #(sessions/deactivate-world % session-id world-key))
-    (println (str "Disconnection mismatch. Trying to disconnect\n"
-                  (util/pretty supplied-world-key)
-                  "\ninstead of\n"
-                  (util/pretty world-key)
-                  "\ninside\n"
-                  (util/pretty session-id)
-                  "\ninstead of\n"
-                  (util/pretty supplied-session-id)))))
+    (do
+      (swap! log-state-atom
+             #(log/debug %
+                         ::handle-disconnected
+                         "Disconnecting"
+                         {:frereth/session-id session-id
+                          :frereth/world-key world-key}))
+      (swap! session-atom
+             #(sessions/deactivate-world % session-id world-key)))
+    (swap! log-state-atom
+           #(log/warn %
+                      ::handle-disconnected
+                      "Disconnection mismatch"
+                      {:supplied/session-id supplied-session-id
+                       :expected/session-id session-id
+                       :supplied/world-key supplied-world-key
+                       :expected/world-key world-key}))))
 
 (defhandler handle-forked
   (s/keys :req [::client
-                ::connection/session-id
+                :frereth/session-id
                 :frereth/world-key])
   [{:keys [::client
-           ::connection/session-id
+           :frereth/session-id
            :frereth/world-key]}]
   (post-message! session
                  clock
@@ -385,42 +393,8 @@
                                             ex
                                             ::handle-forking
                                             "Trying to post :frereth/ack-forking"
-                                            {::connection/session-id session-id
+                                            {:frereth/session-id session-id
                                              :frereth/world-key world-key})))))
-(comment
-  (do
-    (clojure.spec.alpha/fdef handle-forking :args (clojure.spec.alpha/cat :this :renderer.handlers/session-connection :session-id :frereth.apps.shared.connection/session-id :message any?) :ret clojure.core/any?)
-    (clojure.core/defn handle-forking
-      [{:keys [:backend.event-bus/event-bus
-               :frereth.apps.shared.lamport/clock
-               ::sessions/session-atom
-               :frereth/world-key
-               :renderer.handlers/world-stop-signal],
-        log-state-atom :frereth.weald.specs/state-atom, :as this} session-id {:keys [:renderer.handlers/cookie :frereth/world-key], :as message}]
-      (clojure.core/println "Top of some handler. log-state-atom:" log-state-atom)
-      (clojure.core/let [log-label__95102__auto__ (clojure.core/keyword (clojure.core/str clojure.core/*ns*) (clojure.core/str handle-forking))]
-        (try
-          (clojure.core/swap! log-state-atom
-                              (fn* [p1__95100__95103__auto__]
-                                   (frereth.weald.logging/trace p1__95100__95103__auto__
-                                                                log-label__95102__auto__
-                                                                "Incoming")))
-          (println "Looking for session inside" session-atom "\n====================")
-          (clojure.core/let [session (clojure.core/-> session-atom clojure.core/deref (clojure.core/get session-id))]
-            (try
-              (println "Top of handle-forking w/" log-state-atom)
-              (swap! log-state-atom (fn* [p1__95315#] (log/debug p1__95315# :renderer.handlers/handle-forking "top" #:renderer.handlers{:message message, :session-connection this})))
-              (post-message! session clock session-id world-key :frereth/ack-forking #:frereth{:cookie cookie})
-              (println "Forking")
-              (catch Exception ex (println "Oops") (swap! log-state-atom (fn* [p1__95316#] (log/exception p1__95316# ex :renderer.handlers/handle-forking "Trying to post :frereth/ack-forking" {:frereth.apps.shared.connection/session-id session-id, :frereth/world-key world-key}))))))
-          (catch java.lang.Exception ex__95104__auto__
-            (clojure.core/println "Oops in def'd handler:" ex__95104__auto__)
-            (clojure.core/swap! log-state-atom
-                                (fn* [p1__95101__95105__auto__]
-                                     (frereth.weald.logging/exception p1__95101__95105__auto__ ex__95104__auto__ log-label__95102__auto__)))))))))
-
-
-
 
 (s/fdef log-edges
   :args (s/cat :location keyword?  ; :frereth/atom better?
@@ -445,7 +419,7 @@
                                                            count))))]
     (reset! log-state-atom
             (if (= :leave phase)
-              ;; FIXME: Parameterize this
+              ;; FIXME: Parameterize whether to do this
               (log/flush-logs! logger
                                log-state)
               log-state)))
@@ -536,18 +510,25 @@
    :enter (fn [{:keys [::lamport/clock
                        ::weald/logger
                        ::sessions/session-atom
-                       ::connection/session-id]
+                       :frereth/session-id]
                 log-state-atom ::weald/state-atom
                 :as context}]
             ;; It shouldn't be possible to get here if the session isn't
             ;; active.
             ;; It seems worth checking for that scenario out of paranoia.
             (if-let [session (sessions/get-active-session @session-atom session-id)]
-              (-> context
-                  ;; Interceptors that need the session-id can get it
-                  ;; from the session
-                  (dissoc ::sessions/session-atom ::sessions/session-id)
-                  (assoc :frereth/session session))
+              (do
+                (swap! log-state-atom
+                       #(log/debug %
+                                   ::session-extractor
+                                   "Found an active session"
+                                   {:frereth/session-id session-id
+                                    :frereth/session session}))
+                (-> context
+                    ;; Interceptors that need the session-id can get it
+                    ;; from the session
+                    (dissoc ::sessions/session-atom :frereth/session-id)
+                    (assoc :frereth/session session)))
               (do
                 (swap! log-state-atom
                        #(log/error %
@@ -623,7 +604,7 @@
                     event-bus
                     :frereth/disconnect-world
                     (select-keys world-connection
-                                 [::connection/session-id
+                                 [:frereth/session-id
                                   :frereth/world-key])))))
 
 (def world-forked
@@ -732,12 +713,13 @@
                        :request]
                 lamport ::lamport/clock
                 log-state-atom ::weald/state-atom
-                {:keys [::sessions/session-id]
+                {:keys [:frereth/session-id]
                  :as session} :frereth/session
                 :as context}]
             (swap! log-state-atom #(log/trace %
                                               ::world-forking
-                                              "Top"))
+                                              "Top"
+                                              {:frereth/session-id session-id}))
             (let [{{:keys [:frereth/command
                             ;; It seems like it would be better to make this explicitly a
                             ;; :frereth/world-key instead.
@@ -759,7 +741,10 @@
                                                         ::world-forking
                                                         "Publishing cookie to event bus to trigger :frereth/ack-forking"
                                                         {::cookie cookie
-                                                         ::bus/event-bus event-bus}))
+                                                         ::bus/event-bus event-bus
+                                                         :frereth/session-id session-id
+                                                         :frereth/pid pid
+                                                         :frereth/command command}))
                       ;; TODO: Return this topic/message pair instead.
                       ;; Let the caller handle side-effects like the publish! separately.
                       (bus/publish! log-state-atom
@@ -824,7 +809,7 @@
            ::weald/logger
            ::routes
            ::sessions/session-atom
-           ::connection/session-id]
+           :frereth/session-id]
     log-state-atom ::weald/state-atom
     :as session-connection}
    raw-interceptors
@@ -833,7 +818,8 @@
          #(log/info %
                     ::on-message!
                     "Incoming"
-                    {::body message-string}))
+                    {::body message-string
+                     :frereth/session-id session-id}))
   ;; STARTED: Break this up into a Pedestal interceptor chain
   (try
     ;; TODO: Build the terminators/interceptors/routers elsewhere.
@@ -916,7 +902,7 @@
                                            ;; But I need to get it working before I
                                            ;; worry about the next round of cleanup.
                                            ::sessions/session-atom
-                                           ::connection/session-id
+                                           :frereth/session-id
                                            ::weald/state-atom])
 
                              :request message-string
@@ -967,7 +953,7 @@
                 ::forking [:frereth/ack-forking handle-forking]}]
   (s/fdef do-connect
     :args (s/cat :component ::session-connection
-                 :session-id ::connection/session-id)
+                 :session-id :frereth/session-id)
     :ret ::session-connection)
   (defn do-connect
     ;; This has almost the same problem as my original Component approach.

@@ -195,7 +195,7 @@
               (swap! log-state-atom
                      #(log/trace %
                                  ::create-world-interceptor
-                                 "Received a request for code to fork a new World:"))
+                                 "Received a request for code to fork a new World"))
               ;; These parameters need to be serialized into a signed "initiate"
               ;; param.
               (let [{initiate-wrapper :initiate
