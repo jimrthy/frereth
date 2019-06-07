@@ -3,7 +3,6 @@
    [aleph.http :as http]
    [cemerick.url :as url]
    [clojure.core.async :as async]
-
    [clojure.edn :as edn]
    [clojure.pprint :refer [pprint]]
    [clojure.spec.alpha :as s]
@@ -88,7 +87,7 @@
     ;; let-flow.
     ;; That seems like a sign that it's probably
     ;; worth avoiding it.
-    ;; So...what's the proper way to do that?
+    ;; So...what's the "proper" way to do this?
     (dfrd/let-flow [websocket (dfrd/catch
                                   dfrd-sock
                                   (fn [_] nil))]
@@ -117,6 +116,164 @@
                                                 (log/warn % ::connect-web-socket-to-session!
                                                           "No websocket")))
                        non-websocket-request)))))
+
+(s/fdef world-interceptor
+  :args (s/cat :logger ::weald/logger
+               :log-state-atom ::weald/state-atom
+               :session-atom ::sessions/session-atom
+               :context ::context)
+  :ret ::context)
+(defn pending-world-interceptor
+  "Browser signaled that it wants to fork/join a new world"
+  ;; This function is far too big and complex.
+  ;; TODO: Break it into smaller chunks
+  [logger log-state-atom session-atom
+   {{:keys [:query-params]
+       :as request} :request
+      :as context}]
+  (try
+    (swap! log-state-atom
+           #(log/trace %
+                       ::create-world-interceptor
+                       "Received a request for code to fork a new World"))
+    ;; These parameters need to be serialized into a signed "initiate"
+    ;; param.
+    (let [{initiate-wrapper :initiate
+           :keys [:signature]} query-params]
+      ;; It's tempting to think that we don't need/want the
+      ;; Cookie here.
+      ;; But we don't want some rogue World just randomly
+      ;; sending requests to try to interfere with legitimate
+      ;; ones.
+      ;; So the Cookie *is* needed to validate the Session
+      ;; and World keys.
+      (if (and initiate-wrapper signature)
+        (let [{:keys [:frereth/cookie
+                      :frereth/session-id
+                      :frereth/world-key]
+               :as initiate} (serial/deserialize initiate-wrapper)]
+          (if (and cookie session-id world-key)
+            (do
+              (swap! log-state-atom
+                     #(log/debug %
+                                 ::create-world-interceptor
+                                 "Trying to decode cookie"
+                                 {:frereth/cookie cookie
+                                  ::cookie-type (type cookie)}))
+              (let [session-id (-> session-id
+                                   url/url-decode
+                                   edn/read-string)
+                    world-key (-> world-key
+                                  url/url-decode
+                                  edn/read-string)]
+                (swap! log-state-atom
+                       #(log/debug %
+                                   ::create-world-interceptor
+                                   "Decoded params:"
+                                   {::cookie cookie
+                                    ::session-id session-id
+                                    ::world-key world-key
+                                    ::signature signature}))
+                (try
+                  (if-let [body (lib/get-code-for-world log-state-atom
+                                                        @session-atom
+                                                        session-id
+                                                        world-key
+                                                        cookie)]
+                    (do
+                      (swap! log-state-atom
+                             #(log/trace %
+                                         ::create-world-interceptor
+                                         ""
+                                         {:response/body body}))
+                      (try
+                        (lib/register-pending-world! session-atom
+                                                     session-id
+                                                     world-key
+                                                     cookie)
+                        (swap! log-state-atom
+                               #(log/info %
+                                          ::create-world-interceptor
+                                          "Registration succeeded. Should be good to go"))
+                        (catch Throwable ex
+                          (swap! log-state-atom
+                                 #(log/exception %
+                                                 ex
+                                                 ::create-world-interceptor
+                                                 "Registration failed"))
+                          (throw ex)))
+                      (assoc context :response
+                             ;; Q: Should we be friendlier and
+                             ;; allow content negotiation
+                             ;; here?
+                             (rsp/content-type (rsp/response body)
+                                               ;; Q: What is the response type, really?
+                                               ;; It seems like it would be really nice
+                                               ;; to return a script that sets up an
+                                               ;; environment with its own
+                                               ;; clojurescript compiler and a basic script
+                                               ;; to kick off whatever the World needs to
+                                               ;; do.
+                                               ;; That would be extremely presumptuous and
+                                               ;; wasteful, even for a project as
+                                               ;; extravagant as this one.
+                                               ;; (The fact that that's what I want
+                                               ;; to build/use isn't justification
+                                               ;; to impose that overhead on anyone
+                                               ;; else).
+                                               "application/ecmascript")))
+                    (do
+                      (swap! log-state-atom
+                             #(log/error %
+                                         ::create-world-interceptor
+                                         "Missing"
+                                         {:frereth/session-id session-id
+                                          :frereth/world-key world-key}))
+                      (assoc context :response
+                             (rsp/not-found "Unknown World"))))
+                  (catch ExceptionInfo ex
+                    (swap! log-state-atom
+                           #(log/exception %
+                                           ex
+                                           ::create-world-interceptor
+                                           "Error retrieving code for World"))
+                    (assoc context :response
+                           (rsp/bad-request "Malformed Request")))
+                  (catch Exception ex
+                    ;; This seems silly...but what would
+                    ;; be more appropriate?
+                    (swap! log-state-atom
+                           #(log/exception %
+                                           ex
+                                           ::create-world-interceptor
+                                           "Exception escaping") )
+                    (throw ex)))))
+            (do
+              (swap! log-state-atom
+                     #(log/error %
+                                 ::create-world-interceptor
+                                 "Missing piece of initiate"
+                                 initiate))
+              (assoc context :response
+                     (rsp/bad-request "Missing required parameter")))))
+        (do
+          (swap! log-state-atom
+                 #(log/error %
+                             ::create-world-interceptor
+                             "Missing required query param"
+                             query-params))
+          (assoc context :response
+                 (rsp/bad-request "Missing required parameter")))))
+    (catch Throwable ex
+      (swap! log-state-atom
+             #(log/exception %
+                             ex
+                             ::create-world-interceptor
+                             "Unhandled low-level outer exception:"))
+      (throw ex))
+    (finally
+      (swap! log-state-atom
+             #(log/flush-logs! logger %)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Handlers
@@ -188,163 +345,7 @@
   appropriate code from the Server."
   [logger log-state-atom session-atom]
   {:name ::world-forker
-   :enter (fn [{{:keys [:query-params]
-                 :as request} :request
-                :as context}]
-            (try
-              (swap! log-state-atom
-                     #(log/trace %
-                                 ::create-world-interceptor
-                                 "Received a request for code to fork a new World"))
-              ;; These parameters need to be serialized into a signed "initiate"
-              ;; param.
-              (let [{initiate-wrapper :initiate
-                     :keys [:signature]} query-params]
-                ;; It's tempting to think that we don't need/want the
-                ;; Cookie here.
-                ;; But we don't want some rogue World just randomly
-                ;; sending requests to try to interfere with legitimate
-                ;; ones.
-                ;; So the Cookie *is* needed to validate the Session
-                ;; and World keys.
-                (if (and initiate-wrapper signature)
-                  (let [{:keys [:frereth/cookie
-                                :frereth/session-id
-                                :frereth/world-key]
-                         :as initiate} (serial/deserialize initiate-wrapper)]
-                    (if (and cookie session-id world-key)
-                      (do
-                        (swap! log-state-atom
-                               #(log/debug %
-                                           ::create-world-interceptor
-                                           "Trying to decode cookie"
-                                           {:frereth/cookie cookie
-                                            ::cookie-type (type cookie)}))
-                        (let [session-id (-> session-id
-                                             url/url-decode
-                                             edn/read-string)
-                              world-key (-> world-key
-                                            url/url-decode
-                                            edn/read-string)]
-                          (swap! log-state-atom
-                                 ;; FIXME: I think this comment is probably rotten
-                                 ;; There's a type mismatch between here and what the lib
-                                 ;; expects.
-                                 ;; These values are still JSON.
-                                 ;; That's expecting cookie as a byte array.
-                                 ;; session-id and world-key are supposed to be...whatever
-                                 ;; I'm using to represent keys (the map of JWK values would
-                                 ;; be most appropriate).
-                                 ;; So I need to finish deserializing these.
-                                 ;; At the same time, this should really have been sent as
-                                 ;; a single signed blob that extracts to these values.
-                                 #(log/debug %
-                                             ::create-world-interceptor
-                                             "Decoded params:"
-                                             {::cookie cookie
-                                              ::session-id session-id
-                                              ::world-key world-key
-                                              ::signature signature}))
-                          (try
-                            (if-let [body (lib/get-code-for-world log-state-atom
-                                                                  @session-atom
-                                                                  session-id
-                                                                  world-key
-                                                                  cookie)]
-                              (do
-                                (swap! log-state-atom
-                                       #(log/trace %
-                                                   ::create-world-interceptor
-                                                   ""
-                                                   {:response/body body}))
-                                (try
-                                  (lib/register-pending-world! session-atom
-                                                               session-id
-                                                               world-key
-                                                               cookie)
-                                  (swap! log-state-atom
-                                         #(log/info %
-                                                    ::create-world-interceptor
-                                                    "Registration succeeded. Should be good to go"))
-                                  (catch Throwable ex
-                                    (swap! log-state-atom
-                                           #(log/exception %
-                                                           ex
-                                                           ::create-world-interceptor
-                                                           "Registration failed"))
-                                    (throw ex)))
-                                (assoc context :response
-                                       ;; Q: Should we be friendlier and
-                                       ;; allow content negotiation
-                                       ;; here?
-                                       (rsp/content-type (rsp/response body)
-                                                         ;; Q: What is the response type, really?
-                                                         ;; It seems like it would be really nice
-                                                         ;; to return a script that sets up an
-                                                         ;; environment with its own
-                                                         ;; clojurescript compiler and a basic script
-                                                         ;; to kick off whatever the World needs to
-                                                         ;; do.
-                                                         ;; That would be extremely presumptuous and
-                                                         ;; wasteful, even for a project as
-                                                         ;; extravagant as this one.
-                                                         ;; (The fact that that's what I want
-                                                         ;; to build/use isn't justification
-                                                         ;; to impose that overhead on anyone
-                                                         ;; else).
-                                                         "application/ecmascript")))
-                              (do
-                                (swap! log-state-atom
-                                       #(log/error %
-                                                   ::create-world-interceptor
-                                                   "Missing"
-                                                   {:frereth/session-id session-id
-                                                    :frereth/world-key world-key}))
-                                (assoc context :response
-                                       (rsp/not-found "Unknown World"))))
-                            (catch ExceptionInfo ex
-                              (swap! log-state-atom
-                                     #(log/exception %
-                                                     ex
-                                                     ::create-world-interceptor
-                                                     "Error retrieving code for World"))
-                              (assoc context :response
-                                     (rsp/bad-request "Malformed Request")))
-                            (catch Exception ex
-                              ;; This seems silly...but what would
-                              ;; be more appropriate?
-                              (swap! log-state-atom
-                                     #(log/exception %
-                                                     ex
-                                                     ::create-world-interceptor
-                                                     "Exception escaping") )
-                              (throw ex)))))
-                      (do
-                        (swap! log-state-atom
-                               #(log/error %
-                                           ::create-world-interceptor
-                                           "Missing piece of initiate"
-                                           initiate))
-                        (assoc context :response
-                               (rsp/bad-request "Missing required parameter")))))
-                  (do
-                    (swap! log-state-atom
-                           #(log/error %
-                                       ::create-world-interceptor
-                                       "Missing required query param"
-                                       query-params))
-                    (assoc context :response
-                           (rsp/bad-request "Missing required parameter")))))
-              (catch Throwable ex
-                (swap! log-state-atom
-                       #(log/exception %
-                                       ex
-                                       ::create-world-interceptor
-                                       "Unhandled low-level outer exception:"))
-                (throw ex))
-              (finally
-                (swap! log-state-atom
-                       #(log/flush-logs! logger %)))))})
+   :enter (partial pending-world-interceptor logger log-state-atom session-atom)})
 
 (defn echo-page
   [request]
@@ -367,26 +368,18 @@
 
 (defn index-page
   [_]
-  (comment
-    (println "Handling request for index"))
-  (let [response
-        (rsp/response
-         (html
-          (html5
-           [:head
-            [:title "Log Viewer"]
-            [:meta {:charset "utf-8"}]
-            [:meta {:http-equiv "X-UA-Compatible" :content "IE=edge"}]
-            [:meta {:name "viewport" :content "width=device-width, initial-scale=1.0"}]
-            (include-css "css/main.css")]
-           [:body
-            [:div.container [:div#app.app-wrapper]]
-            (include-js "js/main.js")])))]
-    (comment
-      (println "Response:")
-      (pprint response)
-      (println "a" (class response)))
-    response))
+  (rsp/response
+   (html
+    (html5
+     [:head
+      [:title "Log Viewer"]
+      [:meta {:charset "utf-8"}]
+      [:meta {:http-equiv "X-UA-Compatible" :content "IE=edge"}]
+      [:meta {:name "viewport" :content "width=device-width, initial-scale=1.0"}]
+      (include-css "css/main.css")]
+     [:body
+      [:div.container [:div#app.app-wrapper]]
+      (include-js "js/main.js")]))))
 
 (defn test-page
   [_]

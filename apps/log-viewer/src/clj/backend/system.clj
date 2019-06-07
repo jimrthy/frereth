@@ -3,6 +3,8 @@
 
   These include the web/renderer, client, and server."
   (:require [aleph.udp :as udp]
+            ;; This was a mistake.
+            ;; TODO: Make it go away.
             [backend.event-bus :as bus]
             [backend.web.routes :as routes]
             [backend.web.service]
@@ -230,17 +232,9 @@
    :backend.web.service/web-service (into {::routes/handler-map (ig/ref ::routes/handler-map)}
                                           (::web-server opts))
    ::bus/event-bus event-bus
-   ;; This Component doesn't make any sense.
-   ;; FIXME: it needs to go away.
-   ;; Q: How will the websocket handlers send messages to the event bus?
-   #_#_::handlers/internal (into {::bus/event-bus (ig/ref ::bus/event-bus)
-                              ::lamport/clock (ig/ref ::lamport/clock)
-                              ::sessions/session-atom (ig/ref ::sessions/session-atom)
-                              ::weald/state-atom (ig/ref ::weald/state-atom)}
-                             internal-handlers)
    ;; Surely both server and client need access to this.
    ;; The renderer/session manager definitely does.
-   ;; TODO: Share it.
+   ;; TODO: Share it with them
    ::lamport/clock clock
    ::log-chan log-chan
    ;; Note that this is really propagating the Server logs.
@@ -252,8 +246,8 @@
    ::sessions/session-atom (::sessions/session-atom opts)
    ;; Q: Can I get away with just storing a logger instance here?
    ;; And is there any real reason not to?
-   ::weald/logger (into {::chan (ig/ref ::log-chan)}
-                        logger)
+   ::weald/logger (assoc logger
+                         ::chan (ig/ref ::log-chan))
    ::weald/state-atom (into {::weald/context ::global}
                              log-context)})
 

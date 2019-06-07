@@ -1,4 +1,6 @@
 (ns backend.web.service
+  "Main wrapper that controls what the web server will do"
+  ;; FIXME: Convert all the print calls to use weald
   (:require [aleph.http.server :as aleph]
             [aleph.netty]
             [backend.web.routes :as routes]
@@ -158,6 +160,9 @@
                                            (let [{:keys [headers]} ring-request
                                                  upgrade (get headers "upgrade")]
                                              (when (= upgrade "websocket")
+                                               ;; FIXME: Thread the log-state atom and
+                                               ;; logger down into here so I can use that
+                                               ;; instead of plain STDOUT
                                                (println ::chain-provider "Incoming request:")
                                                (pprint ring-request)))
                                            _))
@@ -309,25 +314,6 @@
                                                                                                  :as ctx}]
                                                                                              (if response
                                                                                                (do
-                                                                                                 #_(println (str "Checking for deferred->async in\n"
-                                                                                                               response ",\na "
-                                                                                                               (class response)))
-                                                                                                 #_(update ctx :response
-                                                                                                           ;; If we have a manifold.deferred, convert
-                                                                                                           ;; it into a core.async channel.
-                                                                                                           ;; Pedestal waits for those if an
-                                                                                                           ;; interceptor returns that instead
-                                                                                                           ;; of a Context.
-                                                                                                           ;; In theory.
-                                                                                                           ;; That didn't work out so well
-                                                                                                           ;; for the websocket handler.
-                                                                                                           ;; The problem is that it is the body
-                                                                                                           ;; that can be an async channel rather
-                                                                                                           ;; than the response.
-                                                                                                           (fn [response]
-                                                                                                             (cond-> response
-                                                                                                               (dfrd/deferred? response) (async/go
-                                                                                                                                           @response))))
                                                                                                  (update-in ctx [:response :body]
                                                                                                             (fn [body]
                                                                                                            (cond-> body

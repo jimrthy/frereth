@@ -97,7 +97,7 @@
                             [metosin/boot-alt-test "0.3.2" :scope "test"]
                             [metosin/boot-deps-size "0.1.0" :scope "test"]
                             [nrepl "0.6.0" :exclusions [org.clojure/clojure]]
-                            [org.clojure/clojure "1.10.1-beta2"]
+                            [org.clojure/clojure "1.10.1"]
                             [org.clojure/clojurescript "1.10.520" :scope "test" :exclusions [commons-codec
                                                                                              com.cognitect/transit-clj
                                                                                              com.cognitect/transit-java
