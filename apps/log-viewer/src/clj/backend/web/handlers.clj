@@ -54,6 +54,8 @@
 ;; Q: What's actually allowed here?
 (s/def ::name keyword?)
 
+;; Actually, this is a dict that's suitable for converting into an
+;; interceptor.
 (s/def ::interceptor (s/keys :opt-un [::enter ::error ::leave ::name]))
 
 ;;; I know I've written a spec for this at some point or other.

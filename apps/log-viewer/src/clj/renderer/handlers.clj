@@ -130,11 +130,11 @@
                                 :world-key :frereth/world-key
                                 :action :frereth/action))
   :ret ::message-envelope)
-;; Honestly, this should be a Component in the System.
-;; And it needs to interact with the clock from weald.
-;; Interestingly enough, this makes it tempting to convert both
-;; do-wrap-message and on-message! into a Protocol.
+;; TODO: Just use weald's clock instead.
+;; Alt: modify weald to define something like a clock
+;; protocol that allows callers to override how it works.
 (defn do-wrap-message
+  "Combine raw parameters into a standard map for serialization"
   ([lamport world-key action]
    (println "Building a" action "message")
    (swap! lamport inc)
@@ -175,6 +175,13 @@
     (try
       (let [envelope (serial/serialize wrapper)]
         (try
+          ;; It wouldn't be tough to make this generic.
+          ;; Convert this to
+          #_#(strm/try-put! web-socket
+                          %
+                          500
+                          ::timed-out)
+          ;; Then make that part of the session
           (let [success (strm/try-put! web-socket
                                        envelope
                                        500
@@ -326,9 +333,7 @@
   [{:keys [::cookie
            :frereth/world-key]
     :as message}]
-  ;; No longer getting here
   (try
-    (println "Top of handle-forking w/" log-state-atom)
     (swap! log-state-atom #(log/debug %
                                       ::handle-forking
                                       "top"
@@ -337,23 +342,25 @@
                                        ::cookie cookie}))
     ;; It's tempting to add the world to the session here.
     ;; Actually, there doesn't seem like any good reason
-    ;; not to (if not earlier)
-    ;; There are lots of places for things to break along
-    ;; the way, but this is an important starting point.
-    ;; It's also very tempting to set up an Actor model
-    ;; sort of thing inside the Session to handle this
-    ;; World that we're trying to create.
-    ;; This makes me think this this is working at too high
-    ;; a layer in the abstraction tree.
+    ;; not to (if not earlier).
+    ;; Except that there are lots of places for things to break along
+    ;; the way.
+    ;; There isn't any reason to waste local state on a world that could
+    ;; easily be orphaned if anything goes wrong.
+    ;; But this is an important starting point.
+    ;; This is working at too high a layer in the abstraction tree.
     ;; We should really be running something like update-in
     ;; with just the piece that's being changed here (in
     ;; this case, the appropriate Session).
+    ;; Think of something like Om cursors or Om.next queries (?).
+    ;; Those don't seem as useful in a game as they are in a basically
+    ;; static SPA, but the idea does apply.
+    ;; FIXME: Messages to post! should be part of the return value.
     (post-message! session
                    clock
                    world-key
                    :frereth/ack-forking
                    {:frereth/cookie cookie})
-    (println "Forking")
     (catch Exception ex
       (println "Oops")
       (swap! log-state-atom #(log/exception %
@@ -367,7 +374,10 @@
   :args (s/cat :location keyword?  ; :frereth/atom better?
                :phase #{:enter :leave})
   ;; Return the context.
-  ;; FIXME: Need to spec that
+  ;; Have a definition for that in handlers.web.
+  ;; TODO: Move that into a shared spec ns to avoid circular
+  ;; dependencies.
+  ;; FIXME: Use that spec
   :ret any?)
 (defn log-edges
   [location
@@ -385,8 +395,14 @@
                                                            :intc-chain/queue
                                                            count))))]
     (reset! log-state-atom
-            (if (= :leave phase)
-              ;; FIXME: Parameterize whether to do this
+            (if (and (= :leave phase)
+                     (= ::outer location))
+              ;; Want to flush when we leave the outer logger
+              ;; It would be premature optimization, but is seems like
+              ;; it might be worth setting this up as its own special-
+              ;; case function to avoid the branching.
+              ;; A lot of that depends on how partial works with the
+              ;; JIT.
               (log/flush-logs! logger
                                log-state)
               log-state)))
@@ -412,12 +428,14 @@
 ;;;; Outer Handlers and their Interceptors
 
 (def inner-logger
+  "Logs the context just before/after the router"
   {:name ::inner-logger
    :enter (partial log-edges ::inner :enter)
    :leave (partial log-edges ::inner :leave)
    :error (partial log-error ::inner)})
 
 (def outer-logger
+  "Logs context around all other interceptors"
   {:name ::outer-logger
    :enter (partial log-edges ::outer :enter)
    :leave (partial log-edges ::outer :leave)
@@ -443,9 +461,8 @@
 (s/fdef build-ticker
   :args (s/cat :clock ::lamport/clock)
   ;; This returns an interceptor.
-  ;; FIXME: track down a spec for that
-  ;; Actually, it returns a dict that's suitable for converting into an
-  ;; interceptor.
+  ;; Like ::context, that's also defined in web.handlers.
+  ;; TODO: Also move that into a shared spec space
   :ret any?)
 (defn build-ticker
   "Update the Lamport clock"
@@ -472,7 +489,7 @@
             context)})
 
 (def session-extractor
-  "Pull the session out of the session atom"
+  "Pull the current session out of the session atom"
   {:name ::session-active?
    :enter (fn [{:keys [::lamport/clock
                        ::weald/logger
@@ -503,8 +520,6 @@
                                    "No matching active session to extract"
                                    context))
                 (lamport/do-tick clock)
-                ;; We're getting here. It looks as though trying to log this exception
-                ;; is what triggers the stack overflow (eventually)
                 (throw (ex-info "Websocket message for inactive session. This should be impossible"
                                 (assoc context
                                        ::sessions/active (keys (sessions/get-by-state @session-atom
@@ -513,25 +528,44 @@
                                                                                  ::sessions/pending)))))))})
 
 (s/fdef decode-cookie
-  :args (s/cat :cookie-bytes bytes?)
+  :args (s/cat :log-state-atom ::weald/state-atom
+               :cookie-bytes bytes?)
   :ret ::cookie)
 (defn decode-cookie
-  [cookie-bytes]
-  (println (str "Trying to get the cookie bytes from "
-                cookie-bytes
-                ", a " (type cookie-bytes)))
-  (let [cookie-bytes (.decode (Base64/getDecoder) cookie-bytes)
-        cookie-string (String. cookie-bytes)]
-    (println "Trying to decode" cookie-string "a"
-             (class cookie-string)
-             "from"
-             cookie-bytes "a" (class cookie-bytes))
+  [log-state-atom cookie-bytes]
+  (swap! log-state-atom #(log/trace %
+                                    ::decode-cookie
+                                    "Trying to get the cookie bytes"
+                                    {::cookie-bytes cookie-bytes
+                                     ::cookie-byte-type (type cookie-bytes)}))
+  (let [plain-cookie (.decode (Base64/getDecoder) cookie-bytes)
+        cookie-string (String. plain-cookie)]
+    (swap! log-state-atom #(log/trace %
+                                      ::decode-cookie
+                                      "Trying to decode"
+                                      {::cookie-string cookie-string
+                                       ::cookie-string-type (type cookie-string)
+                                       ::plain-cookie plain-cookie
+                                       ::plain-cookie-type (type plain-cookie)}))
     (serial/deserialize cookie-string)))
 
 (s/fdef handle-world-message!
   :args (s/cat :world-connection ::world-connection
                :global-bus ::bus/event-bus
                ;; Q: Right?
+               ;; It's tempting to use a ByteBuf here.
+               ;; That doesn't seem like an option, if everything else
+               ;; uses raw bytes.
+               ;; OTOH, this leads to the possibility that a misbehaving
+               ;; World can just consume memory and take down the entire
+               ;; system.
+               ;; The answer there is to be careful about which worlds
+               ;; you Serve, but...it seems like there really should be
+               ;; a way to isolate world memory.
+               ;; In a lot of ways, each one needs its own limited heap
+               ;; and stack space.
+               ;; That gets into details about java memory management
+               ;; that I've never explored, but need to.
                :raw-message bytes?))
 (defn handle-world-message!
   "Forward message from the browser to a world"
@@ -600,7 +634,7 @@
                 (let [{actual-pid :frereth/pid  ; TODO: Refactor/rename this to :frereth/world-key
                        actual-session :frereth/session-id
                        constructor-key :frereth/world-ctor
-                       :as decrypted} (decode-cookie cookie)]
+                       :as decrypted} (decode-cookie log-state-atom cookie)]
                   (if (and (= session-id actual-session)
                            (= world-key actual-pid))
                     (if-let [connector (registrar/lookup session-id constructor-key)]

@@ -1,5 +1,4 @@
 (ns frereth.apps.shared.lamport
-  ;; TODO: Refactor this into frereth.apps.shared
   "Think about splitting a singleton clock into a Component"
   (:require [clojure.spec.alpha :as s]
             [integrant.core :as ig]))
@@ -8,7 +7,8 @@
 ;;;; Specs
 
 ;; It's really very tempting to extend this into a
-;; map and add a wall-clock #inst member.
+;; map and add a wall-clock #inst member that gets updated with each
+;; tick.
 (s/def :frereth/lamport integer?)
 
 (s/def ::clock (s/and #?(:clj #(instance? clojure.lang.Atom %))
