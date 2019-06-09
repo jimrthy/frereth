@@ -47,7 +47,7 @@
                             [adzerk/boot-reload "0.6.0" :scope "test"]
                             [boot/core "2.8.3" :scope "provided"]
                             [buddy/buddy-auth "2.1.0"]
-                            [cider/piggieback "0.4.0" :scope "test" :exclusions [com.google.guava/guava
+                            [cider/piggieback "0.4.1" :scope "test" :exclusions [com.google.guava/guava
                                                                                  com.google.javascript/closure-compiler-externs
                                                                                  com.google.javascript/closure-compiler-unshaded
                                                                                  nrepl

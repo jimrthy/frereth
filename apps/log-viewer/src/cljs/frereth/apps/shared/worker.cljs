@@ -139,7 +139,7 @@
 ;; So it doesn't make any sense to define it there.
 (s/fdef send-message!
   :args (s/cat :this ::manager
-               :world-id :frereth/pid
+               :world-id :frereth/world-key
                ;; This really turns into a subset of the Pedestal
                ;; Request map.
                ;; TODO: Need to define exactly which subset.
@@ -162,7 +162,7 @@
   (let [envelope {:request request
                   :frereth/lamport @clock
                   :frereth/wall-clock (.now js/Date)
-                  :frereth/world world-id}]
+                  :frereth/world-key world-id}]
     ;; TODO: Check that bufferedAmount is low enough
     ;; to send more
     (try
@@ -191,7 +191,7 @@
     (if cookie
       (let [decorated (assoc raw-message
                              :frereth/cookie cookie
-                             :frereth/pid world-key)
+                             :frereth/world-key world-key)
             {:keys [::web-socket/socket]} wrapper]
         (send-message! this
                        world-key
@@ -239,7 +239,7 @@
   (let [raw-data (.-data event)
         {:keys [:frereth/action]
          :as data} (serial/deserialize raw-data)]
-    (console.log "Message from" worker ":" action)
+    (console.log "Message from" worker ":" action "in" data)
     (handle-worker-message this action world-key worker event data)))
 
 (s/fdef spawn-worker!
@@ -336,11 +336,11 @@
 
 (s/fdef do-build-actual-worker
   :args (s/cat :this ::manager
-               :ch ::specs/async-chan
+               :ch ::async/chan
                :spawner ::work-spawner
                :raw-key-pair ::key-pair
                :full-pk ::public-key)
-  :ret ::specs/async-chan)
+  :ret ::async/chan)
 (defn do-build-actual-worker
   [{:keys [::session/manager]
     :as this}
@@ -427,7 +427,7 @@
   (send-message! this full-pk {:path-info "/api/v1/forking"
                                :request-method :post
                                :params {:frereth/command 'shell
-                                        :frereth/pid full-pk}})
+                                        :frereth/world-key full-pk}})
   (console.log "Setting up worker 'fork' in worlds inside the manager in"
                this "\namong" (keys this))
   ;; Q: Should this next section wait on the forking-ACK?

@@ -1,6 +1,7 @@
 (ns frereth.apps.shared.world
   ;; TODO: Refactor move this to frereth.apps.shared.worlds
-  (:require [clojure.pprint :refer [pprint]]
+  (:require [clojure.core.async :as async]
+            [clojure.pprint :refer [pprint]]
             [clojure.spec.alpha :as s]
             [frereth.apps.shared.specs :as specs]))
 
@@ -31,7 +32,11 @@
 ;; idea).
 (s/def ::internal-state any?)
 
-(s/def ::notification-channel ::specs/async-chan)
+;; The clojurescript side can't find this.
+;; Even though it's totally defined in specs.
+;; Actually, it isn't looking there.
+;; I'm going to blame caching.
+(s/def ::notification-channel ::async/chan)
 
 (s/def ::world-without-history (s/keys :req [::specs/time-in-state
                                              ::connection-state

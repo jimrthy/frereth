@@ -365,6 +365,7 @@
       (sessions/get-by-state ::sessions/active))
   (-> ig-state/system keys)
   (-> ig-state/system ::weald/state-atom)
+  (-> ig-state/system ::weald/state-atom deref ::weald/entries)
   )
 
 (comment

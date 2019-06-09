@@ -2,7 +2,7 @@
   "These are really  more general"
   (:require  [clojure.core.async :as async]
              [clojure.core.async.impl.protocols :as async-protocols]
-            [clojure.spec.alpha :as s]))
+             [clojure.spec.alpha :as s]))
 
 (s/def ::async/chan #(satisfies? async-protocols/Channel %))
 

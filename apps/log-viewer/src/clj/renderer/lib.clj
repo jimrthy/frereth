@@ -282,11 +282,11 @@
 (defn verify-cookie
   [actual-session-id
    world-id
-   {:keys [:frereth/pid
+   {:keys [:frereth/world-key
            :frereth/session-id]
     :as cookie}]
-  ;; TODO: Need to verify the cookie plus its signature
-  (and (= pid world-id)
+  ;; TODO: Also need to verify the signature
+  (and (= world-key world-id)
        (= session-id actual-session-id)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -382,15 +382,15 @@
       ;; in renderer.handlers.
       ;; It seems silly to call it again here.
       ;; FIXME: Eliminate the spare.
-      (let [{:keys [:frereth/pid
+      (let [{:keys [:frereth/world-key
                     :frereth/world-ctor]
              expected-session-id :frereth/session-id
-             :as cookie} (handlers/decode-cookie cookie-bytes)]
+             :as cookie} (handlers/decode-cookie log-state-atom cookie-bytes)]
         (swap! log-state-atom
                #(log/trace %
                            ::get-code-for-world
                            "Have a session. Decoded cookie"))
-        (if (and pid expected-session-id world-ctor)
+        (if (and world-key expected-session-id world-ctor)
           (if (verify-cookie actual-session-id world-key cookie)
             (do
               (swap! log-state-atom
@@ -426,7 +426,7 @@
                                  ::get-code-for-world
                                  "Bad Initiate packet"
                                  {:frereth/cookie cookie
-                                  :frereth/pid world-key
+                                  :frereth/world-key world-key
                                   :actual/session-id actual-session-id
                                   :expected/session-id expected-session-id}))
               (throw (ex-info "Invalid Cookie: probable hacking attempt"
@@ -439,7 +439,7 @@
                    #(log/error %
                                ::get-code-for-world
                                "Incoming cookie has issue with one of:"
-                               {:frereth/pid pid
+                               {:frereth/world-key world-key
                                 :frereth/session-id expected-session-id
                                 :frereth/world-ctor world-ctor
                                 ::cookie cookie}))

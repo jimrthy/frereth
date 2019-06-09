@@ -31,7 +31,7 @@
 ;;;; Specs
 
 ;;; Low-level building blocks
-(s/def ::cookie (s/keys :req [:frereth/pid
+(s/def ::cookie (s/keys :req [:frereth/world-key
                               :frereth/state
                               :frereth/world-ctor]))
 
@@ -100,7 +100,7 @@
   ;; A malicious client could still share the client's private
   ;; key and request a billion copies of the browser page.
   ;; Then again, that seems like a weakness in CurveCP also.
-  (let [dscr {:frereth/pid world-key
+  (let [dscr {:frereth/world-key world-key
               :frereth/session-id session-id
               :frereth/world-ctor command}
         world-system-bytes (serial/serialize dscr)]
@@ -619,7 +619,7 @@
                 log-state-atom ::weald/state-atom
                 :as context}]
             (let [{:keys [:params]} request
-                  {world-key :frereth/pid
+                  {world-key :frereth/world-key
                    :keys [:frereth/cookie]} params]
               ;; Once the browser has its worker up and running, we need to start
               ;; interacting.
@@ -631,7 +631,7 @@
               ;; :frereth/forking prepped.
               ;; Or however that's configured.
               (if-let [world (world/get-pending worlds world-key)]
-                (let [{actual-pid :frereth/pid  ; TODO: Refactor/rename this to :frereth/world-key
+                (let [{actual-pid :frereth/world-key
                        actual-session :frereth/session-id
                        constructor-key :frereth/world-ctor
                        :as decrypted} (decode-cookie log-state-atom cookie)]
@@ -725,26 +725,26 @@
                             ;; It seems like it would be better to make this explicitly a
                             ;; :frereth/world-key instead.
                             ;; TODO: Refactor it
-                            :frereth/pid]
+                            :frereth/world-key]
                      :as body} :params} request]
               ;; TODO: Look into clojure core functionality.
               ;; Surely there's a better approach than these nested ifs
               ;; some-> would be obvious, if we didn't need error handling.
               ;; Since we do, there might not be a good alternative.
-              (if (and command pid)
+              (if (and command world-key)
                 (if session
-                  (if-not (connection/get-world session pid)
+                  (if-not (connection/get-world session world-key)
                     ;; TODO: Need to check with the Client registry
                     ;; to verify that command is legal for the current
                     ;; session (at the very least, this means authorization)
-                    (let [cookie (build-cookie session-id pid command)]
+                    (let [cookie (build-cookie session-id world-key command)]
                       (swap! log-state-atom #(log/trace %
                                                         ::world-forking
                                                         "Publishing cookie to event bus to trigger :frereth/ack-forking"
                                                         {::cookie cookie
                                                          ::bus/event-bus event-bus
                                                          :frereth/session-id session-id
-                                                         :frereth/pid pid
+                                                         :frereth/world-key world-key
                                                          :frereth/command command}))
                       ;; TODO: Return this topic/message pair instead.
                       ;; Let the caller handle side-effects like the publish! separately.
@@ -752,13 +752,13 @@
                                     event-bus
                                     :frereth/ack-forking
                                     {::cookie cookie
-                                     :frereth/world-key pid})
+                                     :frereth/world-key world-key})
                       (assoc context :response ::notified))
                     (do
                       (swap! log-state-atom #(log/warn %
                                                         ::world-forking
                                                         "Error: trying to re-fork world"
-                                                        {:frereth/world-key pid
+                                                        {:frereth/world-key world-key
                                                          :frereth/session session}))
                       context))
                   (do
@@ -771,7 +771,7 @@
                   (swap! log-state-atom #(log/warn %
                                                    ::world-forking
                                                    "Missing either/both"
-                                                   {:frereth/world-key pid
+                                                   {:frereth/world-key world-key
                                                     :frereth/command command
                                                     :request request
                                                     ::request-keys (keys request)}))
