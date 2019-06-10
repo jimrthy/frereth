@@ -149,7 +149,8 @@
      result)))
 
 (s/fdef post-real-message!
-  :args (s/cat :session ::sessions/session
+  :args (s/cat :log-state-atom ::weald/state-atom
+               :session ::sessions/session
                :world-key :frereth/world-key
                ;; This needs to be anything that we can cleanly
                ;; serialize
@@ -158,16 +159,18 @@
 (defn post-real-message!
   ;; TODO: Move this elsewhere.
   "Forward serialized value to the associated World"
-  [{:keys [:frereth/session-id
+  [log-state-atom
+   {:keys [:frereth/session-id
            ::connection/state
            ::connection/web-socket]
     :as session} world-key wrapper]
-  (println (str "Trying to send "
-                wrapper
-                "\nto "
-                world-key
-                "\nin\n"
-                session-id))
+  (swap! log-state-atom
+         #(log/trace %
+                     ::post-real-message!
+                     "Trying to send"
+                     {::wrapper wrapper
+                      :frereth/world-key world-key
+                      :frereth/session-id session-id}))
   ;; Q: Would calling post! to an inactive session really be so
   ;; terrible?
   ;; A: Maybe not. But it doesn't make any sense.
@@ -175,22 +178,16 @@
     (try
       (let [envelope (serial/serialize wrapper)]
         (try
-          ;; It wouldn't be tough to make this generic.
-          ;; Convert this to
-          #_#(strm/try-put! web-socket
-                          %
-                          500
-                          ::timed-out)
-          ;; Then make that part of the session
           (let [success (strm/try-put! web-socket
                                        envelope
                                        500
                                        ::timed-out)]
-            ;; FIXME: Add context about what we just tried to
-            ;; forward
             (dfrd/on-realized success
-                              #(println "Forwarded:" %)
-                              #(println "Forwarding failed:" %)))
+                              #(println "Forwarded:" %
+                                        "\n" wrapper)
+                              #(println "Forwarding\n"
+                                        wrapper
+                                        "\nfailed:" %)))
           (catch Exception ex
             (println "Message forwarding failed:" ex))))
       (catch Exception ex
@@ -203,24 +200,30 @@
 
 ;;; I'm not convinced this belongs in here.
 (s/fdef post-message!
-  :args (s/or :with-value (s/cat :session :frereth/session
+  :args (s/or :with-value (s/cat :log-state-atom ::weald/state-atom
+                                 :session :frereth/session
                                  :lamport ::lamport/clock
                                  :world-key :frereth/world-key
                                  :action :frereth/action
                                  :value :frereth/body)
-              :sans-value (s/cat :session :frereth/session
+              :sans-value (s/cat :log-state-atom ::weald/state-atom
+                                 :session :frereth/session
                                  :lamport ::lamport/clock
                                  :world-key :frereth/world-key
                                  :action :frereth/action))
   :ret any?)
 (defn post-message!
   "Marshalling wrapper around post-real-message!"
-  ([session lamport world-key action value]
-   (println ::post-message! " with value " value)
+  ([log-state-atom session lamport world-key action value]
+   (swap! log-state-atom
+          #(log/trace %
+                      ::post-message! "with value" value))
    (let [wrapper (do-wrap-message lamport world-key action value)]
-     (post-real-message! session world-key wrapper)))
-  ([session lamport world-key action]
-   (println ::post-message! " without value")
+     (post-real-message! log-state-atom session world-key wrapper)))
+  ([log-state-atom session lamport world-key action]
+   (swap! log-state-atom
+          #(log/trace %
+                      ::post-message! "without value"))
    (let [wrapper (do-wrap-message lamport world-key action)]
      (post-real-message! session world-key wrapper))))
 
@@ -317,7 +320,8 @@
   [{:keys [::client
            :frereth/session-id
            :frereth/world-key]}]
-  (post-message! session
+  (post-message! log-state-atom
+                 session
                  clock
                  world-key
                  :frereth/ack-forked)
@@ -356,7 +360,8 @@
     ;; Those don't seem as useful in a game as they are in a basically
     ;; static SPA, but the idea does apply.
     ;; FIXME: Messages to post! should be part of the return value.
-    (post-message! session
+    (post-message! log-state-atom
+                   session
                    clock
                    world-key
                    :frereth/ack-forking

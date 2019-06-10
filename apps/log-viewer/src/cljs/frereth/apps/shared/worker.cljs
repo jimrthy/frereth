@@ -40,7 +40,9 @@
 (defmulti handle-worker-message
   "Cope with message from Worker"
   ;; Q: Is this even worth using a multi-method?
-  ;; It's very tempting to use a 1-way Pedestal event chain
+  ;; It's very tempting to use a 1-way Pedestal event chain.
+  ;; It would be a lot more tempting if Pedestal supported
+  ;; clojurescript.
   (fn [this action world-key worker event data]
     action))
 
