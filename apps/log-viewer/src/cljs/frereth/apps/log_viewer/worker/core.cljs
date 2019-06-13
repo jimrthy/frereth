@@ -112,8 +112,7 @@
 ;; On the other hand, it would also be really nice to have some sort of
 ;; verification that this is what we expected.
 ;; Then again, that *is* one of the main points behind TLS.
-(let [message {:path-info "/api/v1/forked"
-               :request-method :put}]
+(let [message {:frereth/action :frereth/forked}]
   (.postMessage js/self (transit/write (transit/writer :json) message)))
 
 (console.log "Worker bottom")

@@ -197,12 +197,8 @@
             {:keys [::web-socket/socket]} wrapper]
         (send-message! this
                        world-key
-                       ;; send-message! will serialize this again.
-                       ;; Which seems wasteful.
-                       ;; Would be better to just have this :action as
-                       ;; a tag, followed by the body.
-                       ;; Except that we have added details to the value
-                       #_data
+                       {:path-info "/api/v1/forked"
+                        :request-method :put}
                        ;; Anyway, that's premature optimization.
                        ;; Worry about that detail later.
                        ;; Even though this is the boundary area where
