@@ -158,7 +158,7 @@
   :ret any?)
 (defn post-real-message!
   ;; TODO: Move this elsewhere.
-  "Forward serialized value to the associated World"
+  "Forward serialized value from browser to World"
   [log-state-atom
    {:keys [:frereth/session-id
            ::connection/state
@@ -213,7 +213,7 @@
                                  :action :frereth/action))
   :ret any?)
 (defn post-message!
-  "Marshalling wrapper around post-real-message!"
+  "Forward message from browser to World"
   ([log-state-atom session lamport world-key action value]
    (swap! log-state-atom
           #(log/trace %

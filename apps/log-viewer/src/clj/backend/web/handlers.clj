@@ -59,7 +59,7 @@
 (s/def ::interceptor (s/keys :opt-un [::enter ::error ::leave ::name]))
 
 ;;; I know I've written a spec for this at some point or other.
-;;; FIXME: Track that down so I don't need to duplicate it.
+;;; FIXME: Track that down so I don't have to duplicate the effort.
 (s/def ::ring-request map?)
 
 (s/def ::connection-specs (s/keys :req [::lamport/clock
@@ -77,49 +77,181 @@
 (s/fdef connect-web-socket-to-session!
   :args (s/cat :component ::connection-specs
                :deferred-socket dfrd/deferred?)
-  :ret ::async/chan)
+  ;; Originally, this returned an async/go-block
+  ;; Bypassing that particular abstraction doesn't seem to make any
+  ;; difference, and that original approach seemed weird.
+  ;; Q: Are we missing anything by handling it this way instead?
+  :ret dfrd/deferred?)
 (defn connect-web-socket-to-session!
   [{:keys [::weald/logger]
     log-state-atom ::weald/state-atom
     :as component}
    dfrd-sock]
-  (async/go
-    ;; The person who's probably taking over as
-    ;; the maintainer for aleph strongly dislikes
-    ;; let-flow.
-    ;; That seems like a sign that it's probably
-    ;; worth avoiding it.
-    ;; So...what's the "proper" way to do this?
-    (dfrd/let-flow [websocket (dfrd/catch
-                                  dfrd-sock
-                                  (fn [_] nil))]
-                   (swap! log-state-atom
-                          #(log/flush-logs! logger
-                                            (log/info % ::connect-web-socket-to-session!
-                                                      "websocket upgrade"
-                                                      {::result websocket})))
-                   (if websocket
-                     (do
-                       (swap! log-state-atom
-                              #(log/flush-logs! logger
-                                                (log/info % ::connect-web-socket-to-session!
-                                                          "Built a websocket")))
-                       (try
-                         (lib/activate-session! (assoc component
-                                                       ::connection/web-socket websocket))
-                         websocket
-                         (catch Exception ex
-                           (swap! log-state-atom
-                                  #(log/flush-logs! logger
-                                                    (log/exception % ex ::connect-web-socket-to-session!))))))
-                     (do
-                       (swap! log-state-atom
-                              #(log/flush-logs! logger
-                                                (log/warn % ::connect-web-socket-to-session!
-                                                          "No websocket")))
-                       non-websocket-request)))))
+  ;; The person who's probably taking over as
+  ;; the maintainer for aleph strongly dislikes
+  ;; let-flow.
+  ;; That seems like a sign that it's probably
+  ;; worth avoiding it.
+  ;; So...what's the "proper" way to do this?
+  (dfrd/let-flow [websocket (dfrd/catch
+                                dfrd-sock
+                                (fn [_] nil))]
+                 (swap! log-state-atom
+                        #(log/flush-logs! logger
+                                          (log/info % ::connect-web-socket-to-session!
+                                                    "websocket upgrade"
+                                                    {::result websocket})))
+                 (if websocket
+                   (do
+                     (swap! log-state-atom
+                            #(log/flush-logs! logger
+                                              (log/info % ::connect-web-socket-to-session!
+                                                        "Built a websocket")))
+                     (try
+                       (lib/activate-session! (assoc component
+                                                     ::connection/web-socket websocket))
+                       websocket
+                       (catch Exception ex
+                         (swap! log-state-atom
+                                #(log/flush-logs! logger
+                                                  (log/exception % ex ::connect-web-socket-to-session!))))))
+                   (do
+                     (swap! log-state-atom
+                            #(log/flush-logs! logger
+                                              (log/warn % ::connect-web-socket-to-session!
+                                                        "No websocket")))
+                     non-websocket-request))))
 
-(s/fdef world-interceptor
+(s/fdef safely-register-new-world!
+  :args (s/cat :log-state-atom ::weald/state-atom
+               :session-atom ::sessions/session-atom
+               :cookie bytes?
+               :session-id :frereth/session-id
+               :world-key :frereth/world-key)
+  :ret ::response)
+(defn safely-register-new-world!
+  ;; This really conflates 2 completely unrelated pieces.
+  ;; But it's the product of refactoring a real mess.
+  ;; Actually, it highlights that mess.
+  "1. Registers that a browser is legitimately trying to fork a new world
+  2. wraps up the response body nicely"
+  [log-state-atom
+   session-atom
+   cookie
+   session-id
+   world-key]
+  (try
+    (lib/register-pending-world! session-atom
+                                 session-id
+                                 world-key
+                                 cookie)
+    (swap! log-state-atom
+           #(log/info %
+                      ::build-world-code
+                      "Registration succeeded. Should be good to go"))
+    (catch Throwable ex
+      ;; This catch/log/rethrow seems silly, but the bug that
+      ;; escaped without it was a nightmare to track down
+      (swap! log-state-atom
+             #(log/exception %
+                             ex
+                             ::build-world-code
+                             "Registration failed"))
+      (throw ex))))
+
+(s/fdef build-world-code
+  :args (s/cat :log-state-atom ::weald/state-atom
+               :session-atom ::sessions/session-atom
+               :signature bytes?
+               :cookie bytes?
+               :session-id :frereth/session-id
+               :world-key :frereth/world-key)
+  :ret ::response)
+(defn build-world-code
+  [log-state-atom
+   session-atom
+   signature
+   cookie
+   session-id
+   world-key]
+  (swap! log-state-atom
+         #(log/debug %
+                     ::build-world-code
+                     "Trying to decode cookie"
+                     {:frereth/cookie cookie
+                      ::cookie-type (type cookie)}))
+  (let [session-id (-> session-id
+                       url/url-decode
+                       ;; Q: Would transit make more sense than EDN for these?
+                       edn/read-string)
+        world-key (-> world-key
+                      url/url-decode
+                      edn/read-string)]
+    (swap! log-state-atom
+           #(log/debug %
+                       ::build-world-code
+                       "Decoded params:"
+                       {::cookie cookie
+                        ::session-id session-id
+                        ::world-key world-key
+                        ::signature signature}))
+    (try
+      (if-let [body (lib/get-code-for-world log-state-atom
+                                            @session-atom
+                                            session-id
+                                            world-key
+                                            cookie)]
+        (do
+          (swap! log-state-atom
+                 #(log/trace %
+                             ::build-world-code
+                             "World code retrieved"
+                             {:response/body body}))
+          (safely-register-new-world! log-state-atom session-atom cookie session-id world-key)
+          ;; Q: Should we be friendlier and allow content negotiation
+          ;; here?
+          (rsp/content-type (rsp/response body)
+                            ;; Q: What is the response type, really?
+                            ;; It seems like it would be really nice
+                            ;; to return a script that sets up an
+                            ;; environment with its own
+                            ;; clojurescript compiler and a basic script
+                            ;; to kick off whatever the World needs to
+                            ;; do.
+                            ;; That would be extremely presumptuous and
+                            ;; wasteful, even for a project as
+                            ;; extravagant as this one.
+                            ;; (The fact that that's what I want
+                            ;; to build/use isn't justification
+                            ;; to impose that overhead on anyone
+                            ;; else).
+                            "application/ecmascript"))
+        (do
+          (swap! log-state-atom
+                 #(log/error %
+                             ::build-world-code
+                             "Missing"
+                             {:frereth/session-id session-id
+                              :frereth/world-key world-key}))
+          (rsp/not-found "Unknown World")))
+      (catch ExceptionInfo ex
+        (swap! log-state-atom
+               #(log/exception %
+                               ex
+                               ::build-world-code
+                               "Error retrieving code for World"))
+        (rsp/bad-request "Malformed Request"))
+      (catch Exception ex
+        ;; This seems silly...but what would
+        ;; be more appropriate?
+        (swap! log-state-atom
+               #(log/exception %
+                               ex
+                               ::build-world-code
+                               "Exception escaping") )
+        (throw ex)))))
+
+(s/fdef pending-world-interceptor
   :args (s/cat :logger ::weald/logger
                :log-state-atom ::weald/state-atom
                :session-atom ::sessions/session-atom
@@ -127,8 +259,6 @@
   :ret ::context)
 (defn pending-world-interceptor
   "Browser signaled that it wants to fork/join a new world"
-  ;; This function is far too big and complex.
-  ;; TODO: Break it into smaller chunks
   [logger log-state-atom session-atom
    {{:keys [:query-params]
        :as request} :request
@@ -155,101 +285,8 @@
                       :frereth/world-key]
                :as initiate} (serial/deserialize initiate-wrapper)]
           (if (and cookie session-id world-key)
-            (do
-              (swap! log-state-atom
-                     #(log/debug %
-                                 ::create-world-interceptor
-                                 "Trying to decode cookie"
-                                 {:frereth/cookie cookie
-                                  ::cookie-type (type cookie)}))
-              (let [session-id (-> session-id
-                                   url/url-decode
-                                   edn/read-string)
-                    world-key (-> world-key
-                                  url/url-decode
-                                  edn/read-string)]
-                (swap! log-state-atom
-                       #(log/debug %
-                                   ::create-world-interceptor
-                                   "Decoded params:"
-                                   {::cookie cookie
-                                    ::session-id session-id
-                                    ::world-key world-key
-                                    ::signature signature}))
-                (try
-                  (if-let [body (lib/get-code-for-world log-state-atom
-                                                        @session-atom
-                                                        session-id
-                                                        world-key
-                                                        cookie)]
-                    (do
-                      (swap! log-state-atom
-                             #(log/trace %
-                                         ::create-world-interceptor
-                                         ""
-                                         {:response/body body}))
-                      (try
-                        (lib/register-pending-world! session-atom
-                                                     session-id
-                                                     world-key
-                                                     cookie)
-                        (swap! log-state-atom
-                               #(log/info %
-                                          ::create-world-interceptor
-                                          "Registration succeeded. Should be good to go"))
-                        (catch Throwable ex
-                          (swap! log-state-atom
-                                 #(log/exception %
-                                                 ex
-                                                 ::create-world-interceptor
-                                                 "Registration failed"))
-                          (throw ex)))
-                      (assoc context :response
-                             ;; Q: Should we be friendlier and
-                             ;; allow content negotiation
-                             ;; here?
-                             (rsp/content-type (rsp/response body)
-                                               ;; Q: What is the response type, really?
-                                               ;; It seems like it would be really nice
-                                               ;; to return a script that sets up an
-                                               ;; environment with its own
-                                               ;; clojurescript compiler and a basic script
-                                               ;; to kick off whatever the World needs to
-                                               ;; do.
-                                               ;; That would be extremely presumptuous and
-                                               ;; wasteful, even for a project as
-                                               ;; extravagant as this one.
-                                               ;; (The fact that that's what I want
-                                               ;; to build/use isn't justification
-                                               ;; to impose that overhead on anyone
-                                               ;; else).
-                                               "application/ecmascript")))
-                    (do
-                      (swap! log-state-atom
-                             #(log/error %
-                                         ::create-world-interceptor
-                                         "Missing"
-                                         {:frereth/session-id session-id
-                                          :frereth/world-key world-key}))
-                      (assoc context :response
-                             (rsp/not-found "Unknown World"))))
-                  (catch ExceptionInfo ex
-                    (swap! log-state-atom
-                           #(log/exception %
-                                           ex
-                                           ::create-world-interceptor
-                                           "Error retrieving code for World"))
-                    (assoc context :response
-                           (rsp/bad-request "Malformed Request")))
-                  (catch Exception ex
-                    ;; This seems silly...but what would
-                    ;; be more appropriate?
-                    (swap! log-state-atom
-                           #(log/exception %
-                                           ex
-                                           ::create-world-interceptor
-                                           "Exception escaping") )
-                    (throw ex)))))
+            (assoc context :response
+                   (build-world-code log-state-atom session-atom signature cookie session-id world-key))
             (do
               (swap! log-state-atom
                      #(log/error %
