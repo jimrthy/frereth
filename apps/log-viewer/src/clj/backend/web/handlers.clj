@@ -77,7 +77,8 @@
 (s/fdef connect-web-socket-to-session!
   :args (s/cat :component ::connection-specs
                :deferred-socket dfrd/deferred?)
-  ;; Originally, this returned an async/go-block
+  ;; Originally, this returned an async/go-block wrapped around
+  ;; the deferred.
   ;; Bypassing that particular abstraction doesn't seem to make any
   ;; difference, and that original approach seemed weird.
   ;; Q: Are we missing anything by handling it this way instead?
@@ -87,40 +88,32 @@
     log-state-atom ::weald/state-atom
     :as component}
    dfrd-sock]
-  ;; The person who's probably taking over as
-  ;; the maintainer for aleph strongly dislikes
-  ;; let-flow.
-  ;; That seems like a sign that it's probably
-  ;; worth avoiding it.
-  ;; So...what's the "proper" way to do this?
-  (dfrd/let-flow [websocket (dfrd/catch
-                                dfrd-sock
-                                (fn [_] nil))]
-                 (swap! log-state-atom
-                        #(log/flush-logs! logger
-                                          (log/info % ::connect-web-socket-to-session!
-                                                    "websocket upgrade"
-                                                    {::result websocket})))
-                 (if websocket
-                   (do
-                     (swap! log-state-atom
-                            #(log/flush-logs! logger
-                                              (log/info % ::connect-web-socket-to-session!
-                                                        "Built a websocket")))
-                     (try
-                       (lib/activate-session! (assoc component
-                                                     ::connection/web-socket websocket))
-                       websocket
-                       (catch Exception ex
-                         (swap! log-state-atom
-                                #(log/flush-logs! logger
-                                                  (log/exception % ex ::connect-web-socket-to-session!))))))
-                   (do
-                     (swap! log-state-atom
-                            #(log/flush-logs! logger
-                                              (log/warn % ::connect-web-socket-to-session!
-                                                        "No websocket")))
-                     non-websocket-request))))
+  (let [result (dfrd/deferred)]
+    (dfrd/on-realized dfrd-sock
+                      (fn [websocket]
+                        (if websocket
+                          (do
+                            (swap! log-state-atom
+                                   #(log/flush-logs! logger
+                                                     (log/info % ::connect-web-socket-to-session!
+                                                               "Built a websocket")))
+                            (try
+                              (lib/activate-session! (assoc component
+                                                            ::connection/web-socket websocket))
+                              (dfrd/success! result websocket)
+                              (catch Exception ex
+                                (swap! log-state-atom
+                                       #(log/flush-logs! logger
+                                                         (log/exception % ex ::connect-web-socket-to-session!)))
+                                (dfrd/error! result ex))))))
+                      (fn [problem]
+                        (do
+                          (swap! log-state-atom
+                                 #(log/flush-logs! logger
+                                                   (log/warn % ::connect-web-socket-to-session!
+                                                             "No websocket")))
+                          (dfrd/success! result non-websocket-request))))
+    result))
 
 (s/fdef safely-register-new-world!
   :args (s/cat :log-state-atom ::weald/state-atom
@@ -130,11 +123,7 @@
                :world-key :frereth/world-key)
   :ret ::response)
 (defn safely-register-new-world!
-  ;; This really conflates 2 completely unrelated pieces.
-  ;; But it's the product of refactoring a real mess.
-  ;; Actually, it highlights that mess.
-  "1. Registers that a browser is legitimately trying to fork a new world
-  2. wraps up the response body nicely"
+  "Registers that a browser is legitimately trying to fork a new world"
   [log-state-atom
    session-atom
    cookie
@@ -172,19 +161,19 @@
    session-atom
    signature
    cookie
-   session-id
-   world-key]
+   raw-session-id
+   raw-world-key]
   (swap! log-state-atom
          #(log/debug %
                      ::build-world-code
                      "Trying to decode cookie"
                      {:frereth/cookie cookie
                       ::cookie-type (type cookie)}))
-  (let [session-id (-> session-id
+  (let [session-id (-> raw-session-id
                        url/url-decode
                        ;; Q: Would transit make more sense than EDN for these?
                        edn/read-string)
-        world-key (-> world-key
+        world-key (-> raw-world-key
                       url/url-decode
                       edn/read-string)]
     (swap! log-state-atom
@@ -207,9 +196,10 @@
                              ::build-world-code
                              "World code retrieved"
                              {:response/body body}))
-          (safely-register-new-world! log-state-atom session-atom cookie session-id world-key)
-          ;; Q: Should we be friendlier and allow content negotiation
-          ;; here?
+          (safely-register-new-world! log-state-atom session-atom cookie
+                                      session-id world-key)
+          ;; It's tempting to be friendlier and allow content
+          ;; negotiation here, but what else could possibly make sense?
           (rsp/content-type (rsp/response body)
                             ;; Q: What is the response type, really?
                             ;; It seems like it would be really nice
@@ -286,7 +276,9 @@
                :as initiate} (serial/deserialize initiate-wrapper)]
           (if (and cookie session-id world-key)
             (assoc context :response
-                   (build-world-code log-state-atom session-atom signature cookie session-id world-key))
+                   (build-world-code log-state-atom session-atom
+                                     signature cookie session-id
+                                     world-key))
             (do
               (swap! log-state-atom
                      #(log/error %
@@ -342,9 +334,6 @@
                                                  request)))
               (let [dfrd-sock (http/websocket-connection request)]
                 (assoc ctx
-                       ;; Having the response body return a go block that, in turn,
-                       ;; derefs as a manifold.Deferred seems weird, at best.
-                       ;; But it seems to work.
                        :response {:body (connect-web-socket-to-session! component dfrd-sock)}))
               (catch Exception ex
                 (swap! log-state-atom #(log/exception % ex ::connect-renderer)))

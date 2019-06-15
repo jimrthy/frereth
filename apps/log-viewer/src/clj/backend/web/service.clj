@@ -126,7 +126,10 @@
         (nil? headers) (assoc pedestal-response :headers {})
         :else (update pedestal-response :headers #(apply hash-map %))))
 
-(def request-printer (agent nil))
+(def request-printer
+  "Used for synchronizing original raw println logs to STDOUT"
+  ;; FIXME: This should go away with the transition to weald
+  (agent nil))
 
 (s/fdef chain-provider
   :args (s/cat :service-map ::service-map-sans-handler)
