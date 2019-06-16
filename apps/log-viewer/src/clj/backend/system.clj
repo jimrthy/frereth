@@ -75,13 +75,19 @@
   (if logger
     logger
     (do
+      ;; It seems wrong to not use weald's log-state for this.
+      ;; But it wouldn't make any sense at all for the logger to have
+      ;; access to that.
+      ;; Well, except that it might during initialization.
+      ;; We could always dissoc it before returning the started state.
+      (println "Calling async-log-factory for" (::ch chan)
+               "among" opts)
       ;; The only real reason to use a CompositeLog here is
       ;; to test it out.
       ;; Then again, debugging what the browser displays isn't a terrible
       ;; idea.
       ;; Writing to a file would probably be better for debugging than
       ;; STDOUT.
-      (println "Calling async-log-factory for" (::ch chan))
       (let [std-out-logger (log/std-out-log-factory)
             async-logger
             (try
@@ -110,13 +116,19 @@
 ;; like to make the dependency explicit.
 (defmethod ig/init-key ::server-socket
   [_ {:keys [::server-port]
+      log-state-atom ::weald/state-atom
       ;; Note that the server-port actually needs to be shared
       :or {server-port 31425}
       :as opts}]
-  (println "Starting server socket on port" server-port "(this may take a bit)")
+  (swap! log-state-atom #(log/info %
+                                   ::server-socket-init
+                                   "Starting server socket (this may take a bit)"
+                                   {::server-port server-port}))
   (let [result
         (assoc opts ::udp-socket @(udp/socket {:port server-port}))]
-    (println "UDP socket ready to serve")
+    (swap! log-state-atom #(log/info %
+                                     ::server-socket-init
+                                     "UDP socket ready to serve"))
     result))
 
 (defmethod ig/halt-key! ::server-socket
@@ -198,11 +210,11 @@
                                     :server.networking/my-name server-name
                                     :server.networking/socket (ig/ref ::server-socket)}
                                    (::server opts))
-   ::server-socket (into {::server-port 34122}
+   ::server-socket (into {::server-port 34122
+                          ::weald/state-atom (ig/ref ::weald/state-atom)}
                          socket-opts)
    ::weald/logger logger
-   ::weald/state-atom (assoc {::weald/context ::local-server}
-                             log-context)})
+   ::weald/state-atom {::weald/context (or log-context ::local-server)}})
 
 (defn monitoring-ctor
   [{:keys [::clock
