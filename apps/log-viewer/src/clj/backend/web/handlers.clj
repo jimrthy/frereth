@@ -1,22 +1,19 @@
 (ns backend.web.handlers
   (:require
    [aleph.http :as http]
+   [backend.specs :as backend-specs]
    [cemerick.url :as url]
-   [clojure.core.async :as async]
    [clojure.edn :as edn]
    [clojure.pprint :refer [pprint]]
    [clojure.spec.alpha :as s]
    [frereth.apps.shared.connection :as connection]
    [frereth.apps.shared.lamport :as lamport]
    [frereth.apps.shared.serialization :as serial]
-   ;; Initially, at least, this is for ::async/chan
-   [frereth.apps.shared.specs :as specs]
    [frereth.cp.shared.util :as cp-util]
    [frereth.weald.logging :as log]
    [frereth.weald.specs :as weald]
    [hiccup.core :refer [html]]
    [hiccup.page :refer [html5 include-js include-css]]
-   [io.pedestal.interceptor.chain :as interceptor-chain]
    [manifold.deferred :as dfrd]
    [renderer.lib :as lib]
    [renderer.sessions :as sessions]
@@ -25,42 +22,6 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Specs
-
-;; FIXME: Most of these should honestly be in a Pedestal ns
-;; And there's some definite overlap with the backend.web.service ns
-
-;; FIXME: Specify which keys are expected for Request and Response
-(s/def ::request map?)
-(s/def ::response map?)
-(s/def ::interceptor-chain/error #(instance? ExceptionInfo %))
-
-(s/def ::context (s/keys :req-un [::request]
-                         :opt-un [::interceptor-chain/error
-                                  ::response]))
-
-(s/def ::possibly-deferred-context (s/or :context ::context
-                                         :deferred ::async/chan))
-
-(s/def ::enter (s/fspec :args (s/cat :context ::context)
-                        :ret ::possibly-deferred-context))
-
-(s/def ::leave (s/fspec :args (s/cat :context ::context)
-                        :ret ::possibly-deferred-context))
-
-(s/def ::error (s/fspec :args (s/cat :context ::context
-                                     :exception ::interceptor-chain/error)
-                        :ret ::context))
-
-;; Q: What's actually allowed here?
-(s/def ::name keyword?)
-
-;; Actually, this is a dict that's suitable for converting into an
-;; interceptor.
-(s/def ::interceptor (s/keys :opt-un [::enter ::error ::leave ::name]))
-
-;;; I know I've written a spec for this at some point or other.
-;;; FIXME: Track that down so I don't have to duplicate the effort.
-(s/def ::ring-request map?)
 
 (s/def ::connection-specs (s/keys :req [::lamport/clock
                                         ::sessions/session-atom
@@ -121,7 +82,7 @@
                :cookie bytes?
                :session-id :frereth/session-id
                :world-key :frereth/world-key)
-  :ret ::response)
+  :ret ::backend-specs/response)
 (defn safely-register-new-world!
   "Registers that a browser is legitimately trying to fork a new world"
   [log-state-atom
@@ -155,7 +116,7 @@
                :cookie bytes?
                :session-id :frereth/session-id
                :world-key :frereth/world-key)
-  :ret ::response)
+  :ret ::backend-specs/response)
 (defn build-world-code
   [log-state-atom
    session-atom
@@ -245,8 +206,8 @@
   :args (s/cat :logger ::weald/logger
                :log-state-atom ::weald/state-atom
                :session-atom ::sessions/session-atom
-               :context ::context)
-  :ret ::context)
+               :context ::backend-specs/context)
+  :ret ::backend-specs/context)
 (defn pending-world-interceptor
   "Browser signaled that it wants to fork/join a new world"
   [logger log-state-atom session-atom
@@ -311,7 +272,7 @@
 
 (s/fdef build-renderer-connection
   :args (s/cat :connection-specs ::connection-specs)
-  :ret ::interceptor)
+  :ret ::backend-specs/interceptor)
 (defn build-renderer-connection
   [{:keys [::sessions/session-atom
            ::weald/logger]
@@ -344,7 +305,7 @@
 (s/fdef create-world-interceptor
   :args (s/cat :log-state-atom ::weald/state-atom
                :session-atom ::sessions/session-atom)
-  :ret ::interceptor)
+  :ret ::backend-specs/interceptor)
 ;; FIXME: This name seems misleading.
 ;; It seems like connect-to-possibly-new-world might be more
 ;; accurate.

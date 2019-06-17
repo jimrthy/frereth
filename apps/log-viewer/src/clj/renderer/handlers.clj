@@ -6,6 +6,7 @@
   "Handlers for the messages involving individual apps"
   (:require
    [backend.event-bus :as bus]
+   [backend.specs :as backend-specs]
    [client.registrar :as registrar]
    [clojure.pprint :refer (pprint)]
    [clojure.spec.alpha :as s]
@@ -42,10 +43,6 @@
                                         :frereth/lamport
                                         :frereth/world-key]))
 
-;; TODO: Write this, assuming no one else already has.
-;; It's a Pedestal route table
-(s/def ::routes any?)
-
 ;;; Higher-level concepts
 
 (s/def ::common-connection (s/keys :req [::bus/event-bus
@@ -59,10 +56,8 @@
                                                  ::world-stop-signal])))
 
 (s/def ::session-connection (s/merge ::common-connection
-                                     (s/keys :req [::routes
+                                     (s/keys :req [::backend-specs/routes
                                                    ::sessions/session-atom])))
-
-;; TODO: Need a spec for ::context and ::internal
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Internal Helpers
@@ -86,7 +81,7 @@
 
   ;; Take a page from the CurveCP handshake. Use a
   ;; minute-cookie for encryption.
-  ;; When the client notifies us that it has forked, we can
+  ;; When the [browser] client notifies us that it has forked, we can
   ;; decrypt the cookie and mark this World active for the
   ;; appropriate SESSION.
   ;; Q: Would it be worthwhile to add another layer to this?
@@ -94,12 +89,14 @@
   ;; cookie to inject another short-term cookie key into that
   ;; worker code.
   ;; Then the ::forked handler could verify them all.
+  ;; Update to that plan: really just want a ::joined handler
   ;; It seems like we really have to do something along those
-  ;; lines, since we cannot possibly trust the browser and the
+  ;; lines, since we cannot possibly trust the browser, and the
   ;; HTTP request could come from anywhere.
   ;; A malicious client could still share the client's private
   ;; key and request a billion copies of the browser page.
   ;; Then again, that seems like a weakness in CurveCP also.
+  ;; That *is* the hard part: which keys do you trust?
   (let [dscr {:frereth/world-key world-key
               :frereth/session-id session-id
               :frereth/world-ctor command}
@@ -122,11 +119,13 @@
     stream))
 
 (s/fdef do-wrap-message
-  :args (s/or :with-body (s/cat :lamport ::lamport/clock
+  :args (s/or :with-body (s/cat :log-state-atom ::weald/state-atom
+                                :lamport ::lamport/clock
                                 :world-key :frereth/world-key
                                 :action :frereth/action
                                 :value :frereth/body)
-              :sans-body (s/cat :lamport ::lamport/clock
+              :sans-body (s/cat :log-state-atom ::weald/state-atom
+                                :lamport ::lamport/clock
                                 :world-key :frereth/world-key
                                 :action :frereth/action))
   :ret ::message-envelope)
@@ -135,17 +134,25 @@
 ;; protocol that allows callers to override how it works.
 (defn do-wrap-message
   "Combine raw parameters into a standard map for serialization"
-  ([lamport world-key action]
-   (println "Building a" action "message")
+  ([log-state-atom lamport world-key action]
+   (swap! log-state-atom
+          #(log/trace %
+                      ::do-wrap-message
+                      "Building"
+                      {:frereth/action action}))
    (swap! lamport inc)
    {:frereth/action action
     :frereth/lamport @lamport
     :frereth/world-key world-key})
-  ([lamport world-key action value]
+  ([log-state-atom lamport world-key action value]
    (let [result
          (assoc (do-wrap-message lamport world-key action)
                 :frereth/body value)]
-     (println "Adding" value "to message")
+     (swap! log-state-atom
+            #(log/trace %
+                        ::do-wrap-message
+                        "Extending with value"
+                        :frereth/body value))
      result)))
 
 (s/fdef post-real-message!
@@ -158,12 +165,21 @@
   :ret any?)
 (defn post-real-message!
   ;; TODO: Move this elsewhere.
+  ;; This really needs to be something that's dependency-injected
+  ;; so callers can manage the details.
+  ;; That's mostly coming from the standpoint of being able to test
+  ;; sensibly.
+  ;; OTOH, it shouldn't get called the way it does.
+  ;; TODO: Handle the call view a :leave interceptor that performs
+  ;; the side-effects.
   "Forward serialized value from browser to World"
   [log-state-atom
    {:keys [:frereth/session-id
            ::connection/state
            ::connection/web-socket]
-    :as session} world-key wrapper]
+    :as session}
+   world-key
+   wrapper]
   (swap! log-state-atom
          #(log/trace %
                      ::post-real-message!
@@ -183,22 +199,39 @@
                                        500
                                        ::timed-out)]
             (dfrd/on-realized success
-                              #(println "Forwarded:" %
-                                        "\n" wrapper)
-                              #(println "Forwarding\n"
-                                        wrapper
-                                        "\nfailed:" %)))
+                              (fn [succeeded]
+                                (swap! log-state-atom
+                                       #(log/debug %
+                                                   ::post-real-message!
+                                                   "Forwarded"
+                                                   {::wrapper wrapper
+                                                    ::success succeeded})))
+                              (fn [failure]
+                                (swap! log-state-atom
+                                       #(log/error %
+                                                   ::post-real-message!
+                                                   "Forwarding failed"
+                                                   {::wrapper wrapper
+                                                    ::failure failure})))))
           (catch Exception ex
-            (println "Message forwarding failed:" ex))))
+            (swap! log-state-atom
+                   #(log/exception % ex
+                                   ::post-real-message!
+                                   "Message forwarding failed")))))
       (catch Exception ex
-        (println "Serializing message failed:" ex)))
+        (swap! log-state-atom
+               #(log/exception % ex ::post-real-message!
+                               "Serializing message failed"))))
     (do
-      (println "Session not active")
+      (swap! log-state-atom
+             #(log/error % ::post-real-message! "Session not active"))
       (throw (ex-info "Trying to POST to inactive Session"
                       {::connection/session session
                        :frereth/world-key world-key})))))
 
-;;; I'm not convinced this belongs in here.
+;;; I'm not convinced this belongs in here either.
+;;; It only makes sense for a web-based renderer.
+;;; Then again, I'm building a prototype. Not the actual framework.
 (s/fdef post-message!
   :args (s/or :with-value (s/cat :log-state-atom ::weald/state-atom
                                  :session :frereth/session
@@ -218,13 +251,13 @@
    (swap! log-state-atom
           #(log/trace %
                       ::post-message! "with value" value))
-   (let [wrapper (do-wrap-message lamport world-key action value)]
+   (let [wrapper (do-wrap-message log-state-atom lamport world-key action value)]
      (post-real-message! log-state-atom session world-key wrapper)))
   ([log-state-atom session lamport world-key action]
    (swap! log-state-atom
           #(log/trace %
                       ::post-message! "without value"))
-   (let [wrapper (do-wrap-message lamport world-key action)]
+   (let [wrapper (do-wrap-message log-state-atom lamport world-key action)]
      (post-real-message! session world-key wrapper))))
 
 
@@ -281,13 +314,13 @@
                (println "Oops in def'd handler:" ex#)
                (swap! ~'log-state-atom #(log/exception %
                                                        ex#
-                                                       log-label#)))
+                                                       log-label#))
+               ;; Q: What should this return?
+               (throw ex#))
              (finally
                (let [logger# (::weald/logger ~'this)]
                  (swap! ~'log-state-atom #(log/flush-logs! logger# %))))))))))
 
-(comment
-  (macroexpand-1 'nil))
 (defhandler handle-disconnected
   (s/keys :req [:frereth/session-id :frereth/world-key])
   [{supplied-session-id :frereth/session-id
@@ -330,8 +363,6 @@
                                    world-key
                                    client))
 
-(comment
-  (macroexpand-1 'nil))
 (defhandler handle-forking
   any?
   [{:keys [::cookie
@@ -367,7 +398,6 @@
                    :frereth/ack-forking
                    {:frereth/cookie cookie})
     (catch Exception ex
-      (println "Oops")
       (swap! log-state-atom #(log/exception %
                                             ex
                                             ::handle-forking
@@ -378,12 +408,7 @@
 (s/fdef log-edges
   :args (s/cat :location keyword?  ; :frereth/atom better?
                :phase #{:enter :leave})
-  ;; Return the context.
-  ;; Have a definition for that in handlers.web.
-  ;; TODO: Move that into a shared spec ns to avoid circular
-  ;; dependencies.
-  ;; FIXME: Use that spec
-  :ret any?)
+  :ret ::backend-specs/context)
 (defn log-edges
   [location
    phase
@@ -465,10 +490,7 @@
 
 (s/fdef build-ticker
   :args (s/cat :clock ::lamport/clock)
-  ;; This returns an interceptor.
-  ;; Like ::context, that's also defined in web.handlers.
-  ;; TODO: Also move that into a shared spec space
-  :ret any?)
+  :ret ::backend-specs/interceptor)
 (defn build-ticker
   "Update the Lamport clock"
   [clock]
@@ -571,6 +593,22 @@
                ;; and stack space.
                ;; That gets into details about java memory management
                ;; that I've never explored, but need to.
+               ;;
+               ;; Follow-up note to that original:
+               ;; this isn't even about Worlds that are running on a
+               ;; local Server.
+               ;; This really represents the web-server-side state of
+               ;; a World to which your "local" client has connected.
+               ;; This potentially gets much nastier if multiple end-
+               ;; users are connecting to this at the same time to
+               ;; interact with multiple worlds.
+               ;; Ultimately, this really does need to be something like
+               ;; a ByteBuf. Each connection gets a pool of these, and
+               ;; it has the responsibility to release them as fast as
+               ;; possible.
+               ;; That still doesn't protect against a misbehaving
+               ;; World, so maybe we're back into the "this is all a
+               ;; terrible idea" realm.
                :raw-message bytes?))
 (defn handle-world-message!
   "Forward message from the browser to a world"
@@ -601,11 +639,6 @@
       ;; That leads to its own set of problems with busy Worlds that
       ;; need to cope with millions of these.
       (bus/publish! log-state-atom event-bus :frereth/disconnect ::what-goes-here?)
-      ;; FIXME: This needs its own handler that can
-      ;; update the session atom to mark the world
-      ;; deactivated.
-      ;; Which means that we need both the session-id
-      ;; and world-key.
       (bus/publish! log-state-atom
                     event-bus
                     :frereth/disconnect-world
@@ -614,6 +647,11 @@
                                   :frereth/world-key])))))
 
 (def world-forked
+  "This is really more like world-joined.
+
+  We can totally fork a new World without having any client Join.
+
+  That's pretty much exactly what a daemon is all about."
   {:name ::world-forked
    :enter (fn [{{:keys [::connection/session-id
                         :frereth/worlds]
@@ -629,7 +667,7 @@
               ;; Once the browser has its worker up and running, we need to start
               ;; interacting.
               ;; Actually, there's an entire lifecycle here.
-              ;; It's probably worth contemplating the way React handles the entire
+              ;; It's probably worth contemplating the way React handles the
               ;; idea (though it may not fit at all).
               ;; Main point:
               ;; This needs to start up a new System of Component(s) that
@@ -787,7 +825,7 @@
 
 (s/fdef build-routes
   :args nil
-  :ret ::routes)
+  :ret ::backend-specs/routes)
 (defn build-routes
   []
   #{["/api/v1/forked" :post world-forked :route-name ::forked]
@@ -813,7 +851,7 @@
   ;; like this is complete overkill.
   [{:keys [::bus/event-bus
            ::weald/logger
-           ::routes
+           ::backend-specs/routes
            ::sessions/session-atom
            :frereth/session-id]
     log-state-atom ::weald/state-atom

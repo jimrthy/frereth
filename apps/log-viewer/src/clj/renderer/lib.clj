@@ -2,6 +2,7 @@
   "Library functions specific for the web renderer"
   (:require
    [backend.event-bus :as bus]
+   [backend.specs :as backend-specs]
    [clojure.core.async :as async]
    [clojure.java.io :as io]
    [clojure.pprint :refer [pprint]]
@@ -220,7 +221,7 @@
                                    ;; and using that directly would be more
                                    ;; difficult to refactor away.
                                    ::bus/event-bus {::bus/bus event-bus}
-                                   ::handlers/routes routes
+                                   ::backend-specs/routes routes
                                    :frereth/session-id session-id)
                   component (handlers/do-connect component session-id)
                   handler (partial handlers/on-message!
