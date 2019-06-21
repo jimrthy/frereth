@@ -1,9 +1,10 @@
 (ns frereth.apps.shared.specs
   "These are really  more general"
-  (:require [clojure.spec.alpha :as s]))
+  (:require  [clojure.core.async :as async]
+             [clojure.core.async.impl.protocols :as async-protocols]
+             [clojure.spec.alpha :as s]))
 
-;; Q: Worth converting to a real spec?
-(s/def ::async-chan any?)
+(s/def ::async/chan #(satisfies? async-protocols/Channel %))
 
 ;; It's tempting to make this a limited set.
 ;; But it's not like specifying that here would

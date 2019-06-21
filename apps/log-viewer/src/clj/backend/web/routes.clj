@@ -5,6 +5,8 @@
    [clojure.pprint :refer [pprint]]
    [clojure.spec.alpha :as s]
    [frereth.apps.shared.lamport :as lamport]
+   [frereth.weald.logging :as log]
+   [frereth.weald.specs :as weald]
    [integrant.core :as ig]
    [io.pedestal.http.content-negotiation :as conneg]
    [io.pedestal.http.route :as route]
@@ -72,7 +74,6 @@
 (defn accepted-type
   [{:keys [:request]
     :as context}]
-  (println "Looking for accepted response type among" request)
   (get-in request [:accept :field] "text/plain"))
 
 (defn transform-content
@@ -104,12 +105,17 @@
 ;;;; Internal
 
 (s/fdef build-pedestal-routes
-  :args (s/cat :lamport-clock ::lamport/clock
-               :session-atom ::sessions/session-atom)
+  :args (s/keys :req [::lamport/clock
+                      ::sessions/session-atom
+                      ::weald/logger
+                      ::weald/state-atom])
   :ret ::route-set)
 (defn build-pedestal-routes
-  [lamport-clock
-   session-atom]
+  [{:keys [::lamport/clock
+           ::sessions/session-atom
+           ::weald/logger]
+    log-state-atom ::weald/state-atom
+    :as component}]
   (let [content-neg-intc (conneg/negotiate-content ["text/html" "application/edn" "text/plain"])
         default-intc [coerce-content-type content-neg-intc]
         definition
@@ -119,13 +125,12 @@
           ["/index.php" :get (conj default-intc handlers/index-page) :route-name ::default-php]
           ["/api/fork" :get
            (conj default-intc
-                 (handlers/create-world-interceptor session-atom))
+                 (handlers/create-world-interceptor logger log-state-atom session-atom))
            :route-name ::connect-world]
           ["/echo" :any (conj default-intc handlers/echo-page) :route-name ::echo]
           ["/test" :any (conj default-intc handlers/test-page) :route-name ::test]
-          ["/ws" :get (handlers/build-renderer-connection
-                       lamport-clock
-                       session-atom) :route-name ::renderer-ws]}]
+          ["/ws" :get (handlers/build-renderer-connection component)
+           :route-name ::renderer-ws]}]
     (route/expand-routes definition)))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -133,11 +138,16 @@
 
 (defmethod ig/init-key ::handler-map
   [_ {:keys [::debug?
-             ::lamport/clock
-             ::sessions/session-atom]
+             ::weald/logger]
+      log-state-atom ::weald/state-atom
       :as opts}]
-  (println "Setting up router. Debug mode:" debug? "\nbased on")
-  (comment (pprint opts))
+  (swap! log-state-atom #(log/flush-logs! logger
+                                          (log/info %
+                                                    ::handler-map-init-key
+                                                    "Setting up router"
+                                                    (dissoc opts
+                                                            ::weald/state-atom
+                                                            ::weald/logger))))
   ;; It seems like there's an interesting implementation issue here:
   ;; This doesn't really play nicely with route/url-for-routes.
   ;; In order to use that, the individual handlers really should
@@ -147,10 +157,10 @@
   ;; to the context map.
   {::routes
    (if-not debug?
-     (build-pedestal-routes clock session-atom)
+     (build-pedestal-routes opts)
      ;; Use this to set routes to be reloadable without a
      ;; full (reset).
      ;; Note that this will rebuild on every request, which slows it
      ;; down.
      (fn []
-       (build-pedestal-routes clock session-atom)))})
+       (build-pedestal-routes opts)))})

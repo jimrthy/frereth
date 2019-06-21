@@ -47,6 +47,7 @@
   (let [location (.-location js/window)
         origin-protocol (.-protocol location)
         protocol-length (count origin-protocol)
+        ;; https: vs. http:
         protocol (if (= \s
                         (clojure.string/lower-case (aget origin-protocol
                                                          (- protocol-length 2))))
@@ -59,9 +60,9 @@
         ;; FIXME: The path-to-fork is something that should
         ;; come back as part of the login handshake.
         ;; It's the equivalent of where to find the user's
-        ;; login shell.
+        ;; login shell
         manager-config {::session/path-to-fork "/api/fork"
-                        ::session/session-id session-id-from-server}]
+                        :frereth/session-id session-id-from-server}]
     (console.log "Configuring system, starting with ws-url:" ws-url)
     ;; FIXME: This can't *really* happen until after login.
     ;; That's when we have a session-id and know what "post-login-shell"

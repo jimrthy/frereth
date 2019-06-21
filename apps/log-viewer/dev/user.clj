@@ -13,9 +13,10 @@
              [data :as data]
              [edn :as edn]
              [pprint :refer (pprint)]
-             [reflect :as reflect]
-             [repl :refer (apropos dir doc pst root-cause source)]]
+             [reflect :as reflect]]
             [clojure.java.io :as io]
+            [clojure.repl :refer (apropos dir doc pst root-cause source)]
+            [clojure.set :as set]
             [clojure.spec.alpha :as s]
             [clojure.spec.gen.alpha :as gen]
             [clojure.spec.test.alpha :as test]
@@ -27,6 +28,7 @@
              [generators :as lo-gen]]
             ;; These are moderately useless under boot.
             [clojure.tools.namespace.repl :refer (refresh refresh-all)]
+            [frereth.apps.shared.connection :as connection]
             [frereth.cp
              [message :as msg]
              [shared :as cp-shared]]
@@ -42,9 +44,12 @@
             [integrant.core :as ig]
             [integrant.repl :refer [clear go halt prep init reset reset-all] :as ig-repl]
             [integrant.repl.state :as ig-state]
+            [io.pedestal.http.route :as route]
+            [io.pedestal.http.route.definition.table :as table-route]
             [manifold
              [deferred :as dfrd]
              [stream :as strm]]
+            [renderer.handlers :as renderer-handlers]
             [renderer.lib :as renderer]
             [renderer.sessions :as sessions]))
 
@@ -217,8 +222,30 @@
   (go)
   (halt)
 
-  (-> ig-state/system
-      keys)
+  (-> ig-state/system keys)
+  (-> ig-state/system :renderer.sessions/session-atom)
+  (-> ig-state/system :renderer.sessions/session-atom deref keys)
+  (-> ig-state/system :renderer.sessions/session-atom deref pprint)
+  (-> ig-state/system :renderer.sessions/session-atom deref vals first)
+  (-> ig-state/system :renderer.sessions/session-atom deref vals first keys)
+  (-> ig-state/system :renderer.sessions/session-atom deref vals first ::connection/state)
+  (-> ig-state/system :renderer.sessions/session-atom deref vals first :frereth/worlds)
+
+  (-> ig-state/system :renderer.sessions/session-atom deref vals first :renderer.handlers/disconnected)
+  (-> ig-state/system :renderer.sessions/session-atom deref vals first :renderer.handlers/forked)
+  (-> ig-state/system :renderer.sessions/session-atom deref vals first :renderer.handlers/forked (strm/put!))
+  (def posted
+    (-> ig-state/system
+        :renderer.sessions/session-atom
+        deref
+        vals
+        first
+        :renderer.handlers/forked
+        (strm/try-take! 500)))
+  posted
+  (-> ig-state/system :renderer.sessions/session-atom deref vals first :renderer.handlers/forking)
+
+  (-> ig-state/system :backend.event-bus/event-bus)
   (-> ig-state/system :backend.web.service/web-service keys)
   (-> ig-state/system :backend.web.service/web-service :io.pedestal.http/interceptors)
   (->> ig-state/system :backend.web.service/web-service :io.pedestal.http/interceptors (map :name))
@@ -336,4 +363,25 @@
       ::sessions/session-atom
       deref
       (sessions/get-by-state ::sessions/active))
+  (-> ig-state/system keys)
+  (-> ig-state/system ::weald/state-atom)
+  (-> ig-state/system ::weald/state-atom deref ::weald/entries)
+  )
+
+(comment
+  (source renderer.handlers/handle-forked)
+
+  (let [raw-routes (renderer-handlers/build-routes)
+        custom-verbs #{:frereth/forward}
+        verbs (set/union @#'table-route/default-verbs
+                         custom-verbs)
+        processed-routes (table-route/table-routes {:verbs verbs}
+                                                   raw-routes)
+        router-intc (route/router processed-routes :map-tree)
+        router (:enter router-intc)
+        request {:path-info "/api/v1/forking"
+                 :request-method :post}
+        initial-context {:request request}
+        routed (router initial-context)]
+    routed)
   )

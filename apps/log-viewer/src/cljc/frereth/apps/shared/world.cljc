@@ -1,6 +1,7 @@
 (ns frereth.apps.shared.world
   ;; TODO: Refactor move this to frereth.apps.shared.worlds
-  (:require [clojure.pprint :refer [pprint]]
+  (:require [clojure.core.async :as async]
+            [clojure.pprint :refer [pprint]]
             [clojure.spec.alpha :as s]
             [frereth.apps.shared.specs :as specs]))
 
@@ -31,7 +32,11 @@
 ;; idea).
 (s/def ::internal-state any?)
 
-(s/def ::notification-channel ::specs/async-chan)
+;; The clojurescript side can't find this.
+;; Even though it's totally defined in specs.
+;; Actually, it isn't looking there.
+;; I'm going to blame caching.
+(s/def ::notification-channel ::async/chan)
 
 (s/def ::world-without-history (s/keys :req [::specs/time-in-state
                                              ::connection-state
@@ -231,6 +236,14 @@
   [world-map world-key]
   (get-world-in-state world-map world-key ::active))
 
+(s/fdef get-pending
+  :args (s/cat :world-map :frereth/worlds
+               :world-key :frereth/world-key)
+  :ret (s/nilable ::world))
+(defn get-pending
+  [world-map world-key]
+  (get-world-in-state world-map world-key ::pending))
+
 (s/fdef activate-forked
   :args (s/cat :world-map ::world-map
                :world-key ::world-key
@@ -278,14 +291,6 @@
 (defn disconnected
   [world-map world-key]
   (update-world-connection-state world-map world-key ::disconnected))
-
-(s/fdef get-pending
-  :args (s/cat :world-map :frereth/worlds
-               :world-key :frereth/world-key)
-  :ret (s/nilable ::world))
-(defn get-pending
-  [world-map world-key]
-  (get-world-in-state world-map world-key ::pending))
 
 ;; TODO: Add a macro to define these mark-state functions
 ;; and their specs
@@ -357,6 +362,5 @@
   :args (s/cat :world ::world))
 (defn trigger-disconnection!
   [world]
-  ;; Need to send a signal to the world to do whatever it needs to
-  ;; disconnect.
-  (throw (ex-info "write this" {})))
+  (throw (ex-info "Need to send a ::disconnect signal to the world"
+                  {})))

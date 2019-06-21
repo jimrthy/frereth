@@ -1,4 +1,5 @@
 (ns frereth.apps.shared.session
+  "Manage a web socket session"
   (:require [cljs.core.async :as async]
             [clojure.spec.alpha :as s]
             ;; It seems highly likely that everything that's currently

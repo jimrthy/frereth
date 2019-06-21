@@ -108,7 +108,10 @@
 ;; It seems like this should include the cookie that arrived with ::forking
 ;; It should not. We don't have any reason to know about that sort of
 ;; implementation detail here.
-;; It would be nice to not even need to know this much.
+;; It would be nice to not even need to do this much.
+;; On the other hand, it would also be really nice to have some sort of
+;; verification that this is what we expected.
+;; Then again, that *is* one of the main points behind TLS.
 (let [message {:frereth/action :frereth/forked}]
   (.postMessage js/self (transit/write (transit/writer :json) message)))
 

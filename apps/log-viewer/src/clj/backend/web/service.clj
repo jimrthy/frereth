@@ -1,4 +1,6 @@
 (ns backend.web.service
+  "Main wrapper that controls what the web server will do"
+  ;; FIXME: Convert all the print calls to use weald
   (:require [aleph.http.server :as aleph]
             [aleph.netty]
             [backend.web.routes :as routes]
@@ -9,6 +11,7 @@
             [clojure.core.async]
             [integrant.core :as ig]
             [io.pedestal.http :as http]
+            [io.pedestal.http.impl.servlet-interceptor :as servlet-interceptor]
             [io.pedestal.http.secure-headers :as secure-headers]
             [io.pedestal.interceptor :as interceptor]
             [io.pedestal.interceptor.chain :as chain]
@@ -99,6 +102,9 @@
   :ret :pedestal/request)
 (defn translate-request
   "Convert aleph's Ring Request into a Pedestal request map"
+  ;; Pedestal can use Zero-copy requests.
+  ;; Look at and consider
+  ;; https://github.com/pedestal/pedestal/pull/422
   [{:keys [:scheme :server-name :server-port :uri] :as ring-request}]
   (let [my-uri (str scheme
                     "://" server-name
@@ -119,6 +125,11 @@
   (cond (map? headers) pedestal-response
         (nil? headers) (assoc pedestal-response :headers {})
         :else (update pedestal-response :headers #(apply hash-map %))))
+
+(def request-printer
+  "Used for synchronizing original raw println logs to STDOUT"
+  ;; FIXME: This should go away with the transition to weald
+  (agent nil))
 
 (s/fdef chain-provider
   :args (s/cat :service-map ::service-map-sans-handler)
@@ -143,8 +154,21 @@
   [service-map]
   (let [interceptors (::http/interceptors service-map)]
     (assoc service-map ::handler (fn [ring-request]
-                                   (println "Incoming request")
-                                   (pprint ring-request)
+                                   ;; As long as I'm going to do this, it needs
+                                   ;; to be thread-safe.
+                                   ;; These things come in hot/fast enough to get totally
+                                   ;; jumbled.
+                                   (send request-printer
+                                         (fn [_]
+                                           (let [{:keys [headers]} ring-request
+                                                 upgrade (get headers "upgrade")]
+                                             (when (= upgrade "websocket")
+                                               ;; FIXME: Thread the log-state atom and
+                                               ;; logger down into here so I can use that
+                                               ;; instead of plain STDOUT
+                                               (println ::chain-provider "Incoming request:")
+                                               (pprint ring-request)))
+                                           _))
                                    (let [initial-context (translate-request ring-request)
                                          resp-ctx (chain/execute initial-context
                                                                  interceptors)]
@@ -210,6 +234,8 @@
          :join? false
 
          ::http/routes (::routes/routes handler-map)
+         ;; TODO: Supposedly, service.clj has suggestions about ways
+         ;; to tailor CSP for production
 
          ::http/secure-headers (let [default-csp {:object-src "'none'"
                                                   ;; Default uses 'unsafe-inline' 'unsafe-eval' 'strict-dynamic' https: http:
@@ -266,7 +292,18 @@
                   ;; Ignore CORS for dev mode
                   ::http/allowed-origins {:creds true :allowed-origins (constantly true)}})
           http/default-interceptors
-          #_http/dev-interceptors  ;; Q: Do I want these?
+          ;; TODO: replace(?) middlewares/resource with
+          ;; (middlewares/fast-resource resource-path)
+          ;; see pedestal/service/src/io/pedestal/http.clj
+
+          ;; Q: Do I want these?
+          ;; A: There's io.pedestal.http.cors/dev-allow-origin and
+          ;; servlet-interceptor/exception-debug
+          ;; Even though I'm not using servlets, it seems like I might
+          ;; want both of those.
+          ;; Though dev-allow-origin sounds like it might be a bad
+          ;; idea (want to keep dev mode as close to prod as feasible)
+          #_http/dev-interceptors
           (update ::http/interceptors (fn [chain]
                                         (let [err-log (interceptor/interceptor {:name ::outer-error-logger
                                                                                 :error (fn [ctx ex]
@@ -280,25 +317,6 @@
                                                                                                  :as ctx}]
                                                                                              (if response
                                                                                                (do
-                                                                                                 (println (str "Checking for deferred->async in\n"
-                                                                                                               response ",\na "
-                                                                                                               (class response)))
-                                                                                                 #_(update ctx :response
-                                                                                                           ;; If we have a manifold.deferred, convert
-                                                                                                           ;; it into a core.async channel.
-                                                                                                           ;; Pedestal waits for those if an
-                                                                                                           ;; interceptor returns that instead
-                                                                                                           ;; of a Context.
-                                                                                                           ;; In theory.
-                                                                                                           ;; That didn't work out so well
-                                                                                                           ;; for the websocket handler.
-                                                                                                           ;; The problem is that it is the body
-                                                                                                           ;; that can be an async channel rather
-                                                                                                           ;; than the response.
-                                                                                                           (fn [response]
-                                                                                                             (cond-> response
-                                                                                                               (dfrd/deferred? response) (async/go
-                                                                                                                                           @response))))
                                                                                                  (update-in ctx [:response :body]
                                                                                                             (fn [body]
                                                                                                            (cond-> body
@@ -308,7 +326,8 @@
                                                                                                  (println "Missing response in context:")
                                                                                                  (pprint ctx)
                                                                                                  ctx)))})]
-                                          (concat [err-log] (conj chain dfrd->async)))))))))
+                                          (concat [err-log servlet-interceptor/terminator-injector]
+                                                  (conj chain dfrd->async)))))))))
 
 (comment
   (let [base-service-map (build-basic-service-map {::routes/handler-map {::routes/routes (routes/build-pedestal-routes nil (atom nil))}})

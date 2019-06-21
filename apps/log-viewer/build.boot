@@ -45,9 +45,9 @@
 (set-env! :dependencies   '[[adzerk/boot-cljs "2.1.5" :scope "test"]
                             [adzerk/boot-cljs-repl "0.4.0" :scope "test"]
                             [adzerk/boot-reload "0.6.0" :scope "test"]
-                            [boot/core "2.8.2" :scope "provided"]
+                            [boot/core "2.8.3" :scope "provided"]
                             [buddy/buddy-auth "2.1.0"]
-                            [cider/piggieback "0.4.0" :scope "test" :exclusions [com.google.guava/guava
+                            [cider/piggieback "0.4.1" :scope "test" :exclusions [com.google.guava/guava
                                                                                  com.google.javascript/closure-compiler-externs
                                                                                  com.google.javascript/closure-compiler-unshaded
                                                                                  nrepl
@@ -69,7 +69,7 @@
                                                                               ;; relies on newer versions of this
                                                                               com.fasterxml.jackson.core/jackson-core]]
                             [com.cognitect/transit-cljs "0.8.256"]
-                            [com.nimbusds/nimbus-jose-jwt "7.0.1"]
+                            [com.nimbusds/nimbus-jose-jwt "7.1"]
                             [com.nimbusds/srp6a "2.0.2"]
                             [crisptrutski/boot-cljs-test "0.3.4" :scope "test"]
                             [deraen/boot-sass "0.3.1" :scope "test"]
@@ -88,7 +88,7 @@
                                                                      org.clojure/google-closure-library-third-party
                                                                      org.clojure/spec.alpha
                                                                      org.clojure/tools.reader]]
-                            [funcool/promesa "2.0.0"]
+                            [funcool/promesa "2.0.1"]
                             ;; Seems worth mentioning that this brings in both crypto-equality and
                             ;; crypto-random
                             [io.pedestal/pedestal.service "0.5.5"]
@@ -97,14 +97,14 @@
                             [metosin/boot-alt-test "0.3.2" :scope "test"]
                             [metosin/boot-deps-size "0.1.0" :scope "test"]
                             [nrepl "0.6.0" :exclusions [org.clojure/clojure]]
-                            [org.clojure/clojure "1.10.0"]
+                            [org.clojure/clojure "1.10.1"]
                             [org.clojure/clojurescript "1.10.520" :scope "test" :exclusions [commons-codec
                                                                                              com.cognitect/transit-clj
                                                                                              com.cognitect/transit-java
                                                                                              org.clojure/clojure]]
                             [org.clojure/core.async "0.4.490"]
                             [org.clojure/spec.alpha "0.2.176" :exclusions [org.clojure/clojure]]
-                            [org.clojure/test.check "0.10.0-alpha3" :scope "test" :exclusions [org.clojure/clojure]]
+                            [org.clojure/test.check "0.10.0-alpha4" :scope "test" :exclusions [org.clojure/clojure]]
                             [org.clojure/tools.reader "1.3.2"]
                             ;; Required by boot-less
                             [org.slf4j/slf4j-nop "1.7.25" :scope "test"]
@@ -157,7 +157,7 @@
                                                                         org.clojure/spec.alpha]]
                             ;; Ironically, this really is for the sake of the front-end.
                             ;; It has something to do with the clojurescript watcher.
-                            [http-kit "2.4.0-alpha3" :scope "test"]
+                            [http-kit "2.4.0-alpha4" :scope "test"]
                             [binaryage/devtools "0.9.10" :scope "test" :exclusions [org.clojure/tools.reader]]
                             ;; Q: Why do we need this?
                             [cljsjs/babel-standalone "6.18.1-3" :scope "test" :exclusions [org.clojure/clojure]]

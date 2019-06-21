@@ -18,13 +18,20 @@
 (s/def ::connection (s/keys :required [::lamport/clock
                                        ::session/manager
                                        ::web-socket/wrapper
+                                       ;; This is a bit redundant.
+                                       ;; The ::worker/manager consists
+                                       ;; of those 3 keys plus
+                                       ;; ::worker/workers.
+                                       ;; Then again, we should probably
+                                       ;; treat it as a black box here.
+                                       ;; The duplication is really just
+                                       ;; an implementation detail.
                                        ::worker/manager]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Implementation
 
-;;; These duplicate pieces in core
-;;; And most of them should probably move into socket.
+;;; Most of these should probably move into socket.
 ;;; Since this ns is about coordinating those.
 
 (s/fdef recv-message!
@@ -33,6 +40,8 @@
                :event any?))
 
 (defn recv-message!
+  ;; This function is nuts.
+  ;; TODO: Refactor it into smaller pieces.
   [{:keys [::lamport/clock
            ::session/manager]
     :as this} event]
@@ -162,47 +171,15 @@
         ;; This should be impossible: it will throw an exception
         (console.error "Missing world" world-key "inside" worlds)))))
 
-(s/fdef send-message!
-  :args (s/cat :this ::connection
-               ;; should be bytes? but cljs doesn't have the concept
-               ;; Q: Is it a string?
-               ;; A: Actually, it should be a map of a JWK
-               :world-id any?
-               ;; Anything that transit can serialize natively, anyway
-               :body any?))
-(defn send-message!
-  "Send `body` over `socket` for `world-id`"
-  [{:keys [::lamport/clock
-           ::web-socket/wrapper]
-    :as this}
-   world-id
-   body]
-  (lamport/do-tick clock)
-  (let [envelope {:frereth/body body
-                  :frereth/lamport @clock
-                  :frereth/wall-clock (.now js/Date)
-                  :frereth/world world-id}
-        {:keys [::web-socket/socket]} wrapper]
-    ;; TODO: Check that bufferedAmount is low enough
-    ;; to send more
-    (try
-      (console.log "Trying to send-message!" envelope "to" socket)
-      (.send socket (serial/serialize envelope))
-      (console.log body "sent successfully")
-      (catch :default ex
-        (console.error "Sending message failed:" ex)))))
-
-;;; aka fork-login! in core
 (s/fdef notify-logged-in!
   :args (s/cat :this ::connection
                :session-id ::session-id)
   :ret any?)
 (defn notify-logged-in!
-  ;; TODO: Auth before this. Probably using some kind of PAKE.
+  ;; TODO: Auth before this. Some kind of PAKE is tempting.
   "Tell the web socket handler that a session just connected"
   [this session-id]
-  ;; Probably reasonable to base this on something like the
-  ;; CurveCP handshake.
+  ;; This is loosely based on the CurveCP handshake.
 
   ;; Remember the login protocol that never actually exchanges
   ;; passwords. (SRP: Secure Remote Password protocol)
@@ -214,11 +191,11 @@
   ;; However:
   ;; There really needs to be an intermediate login step that
   ;; handles this for real.
-  ;; In terms of a linux ssh connection, loading the
-  ;; web page is similar to connecting to a pty.
+  ;; In the frame of a linux ssh connection, loading the
+  ;; web page was similar to connecting to a pty.
   ;; It's constantly tempting to allow anonymous connections
   ;; there.
-  ;; That temptation is wrong: this is like logging into
+  ;; That frame is wrong: this is like logging into
   ;; your local computer (and, no matter what Macs might
   ;; allow, doing that without authentication is wrong).
   ;; This is like the login "process" that authenticates the user.
@@ -231,7 +208,16 @@
   ;; Which makes this approach even more incorrect: that should
   ;; really be an http-only cookie to which we don't have any
   ;; access.
-  (send-message! this ::login session-id))
+  (.log js/console "Trying to send logged-in notification for" this)
+  (worker/send-message! (::worker/manager this)
+                        ::login
+                        {:path-info "/api/v1/logged-in"
+                         :request-method :put
+                         :params {:frereth/session-id session-id}}))
+
+(defn check
+  []
+  (js/alert "defined"))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Public
@@ -247,13 +233,16 @@
                "\nin:" this)
   (when-let [{:keys [::web-socket/socket]} wrapper]
     (let [worker-manager (worker/manager clock session-manager wrapper)
-          {:keys [::session/session-id]} session-manager]
+          this (assoc this ::worker/manager worker-manager)
+          {:keys [:frereth/session-id]} session-manager]
       ;; Q: Worth using a library like sente or haslett to wrap the
       ;; details?
       ;; TODO: Move these into session-socket
       (set! (.-onopen socket)
             (fn [event]
               (console.log "Websocket opened:" event socket)
+              ;; This is really just a
+              ;; placeholder until I add real auth.
               (notify-logged-in! this session-id)
               ;; TODO: This needs to wait for something like a
               ;; ::login-complete-ack message.
@@ -273,4 +262,4 @@
       (set! (.-onerror socket)
             (fn [event]
               (console.error "Frereth Connection error:" event)))
-      (assoc this ::worker/manager worker-manager))))
+      this)))

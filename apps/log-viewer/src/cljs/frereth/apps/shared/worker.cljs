@@ -40,7 +40,9 @@
 (defmulti handle-worker-message
   "Cope with message from Worker"
   ;; Q: Is this even worth using a multi-method?
-  ;; It's very tempting to use a 1-way Pedestal event chain
+  ;; It's very tempting to use a 1-way Pedestal event chain.
+  ;; It would be a lot more tempting if Pedestal supported
+  ;; clojurescript.
   (fn [this action world-key worker event data]
     action))
 
@@ -133,35 +135,42 @@
                        content))
                    body))))))
 
+;; This doesn't belong in here.
+;; But the session-socket ns depends on this ns,
+;; and we need to call this function here.
+;; So it doesn't make any sense to define it there.
 (s/fdef send-message!
   :args (s/cat :this ::manager
-               ;; should be bytes? but cljs doesn't have the concept
-               ;; Q: Is it a string?
-               ;; A: Actually, it should be a map of a JWK
-               :world-id any?
-               ;; Anything that transit can serialize natively, anyway
-               :body any?))
+               :world-id :frereth/world-key
+               ;; This really turns into a subset of the Pedestal
+               ;; Request map.
+               ;; TODO: Need to define exactly which subset.
+               ;; And think this through a bit more.
+               ;; Would it be worth splitting into something
+               ;; more traditional, like post/get/delete
+               ;; methods?
+               :request any?))
 (defn send-message!
   "Send `body` over `socket` for `world-id`"
   [{{:keys [::web-socket/socket]} ::web-socket/wrapper
     :keys [::lamport/clock]
     :as this}
    world-id
-   body]
+   request]
   (when-not clock
     (throw (ex-info "Missing clock"
                     {::problem this})))
   (lamport/do-tick clock)
-  (let [envelope {:frereth/body body
+  (let [envelope {:request request
                   :frereth/lamport @clock
                   :frereth/wall-clock (.now js/Date)
-                  :frereth/world world-id}]
+                  :frereth/world-key world-id}]
     ;; TODO: Check that bufferedAmount is low enough
     ;; to send more
     (try
-      (println "Trying to send-message!" envelope)
+      (console.log "Trying to send-message!" envelope)
       (.send socket (serial/serialize envelope))
-      (println body "sent successfully")
+      (console.log request "sent successfully")
       (catch :default ex
         (console.error "Sending message failed:" ex)))))
 
@@ -184,16 +193,12 @@
     (if cookie
       (let [decorated (assoc raw-message
                              :frereth/cookie cookie
-                             :frereth/pid world-key)
+                             :frereth/world-key world-key)
             {:keys [::web-socket/socket]} wrapper]
         (send-message! this
                        world-key
-                       ;; send-message! will serialize this again.
-                       ;; Which seems wasteful.
-                       ;; Would be better to just have this :action as
-                       ;; a tag, followed by the body.
-                       ;; Except that we have added details to the value
-                       #_data
+                       {:path-info "/api/v1/forked"
+                        :request-method :put}
                        ;; Anyway, that's premature optimization.
                        ;; Worry about that detail later.
                        ;; Even though this is the boundary area where
@@ -224,20 +229,15 @@
   [{:keys [::web-socket/wrapper]
     :as this}
    world-key worker event]
+  ;; I'd really like to feed this through a pedestal interceptor chain.
+  ;; Since that's currently server-side only, I'll probably have to
+  ;; bring bidi back into the mix.
+  ;; Then again, there aren't really enough variations to justify
+  ;; that.
   (let [raw-data (.-data event)
-        ;; This is dubious:
-        ;; We're calling deserialize here to get the dispatch
-        ;; value.
-        ;; However: the actual implementation method is almost
-        ;; required to call it again to get to any data.
-        ;; TODO: Move the deserialization up to the caller.
-        ;; Or, more realistically, make this a simple public
-        ;; function that does the deserialization and then
-        ;; calls a multimethod that can just dispatch on
-        ;; :frereth/action
         {:keys [:frereth/action]
          :as data} (serial/deserialize raw-data)]
-    (console.log "Message from" worker ":" action)
+    (console.log "Message from" worker ":" action "in" data)
     (handle-worker-message this action world-key worker event data)))
 
 (s/fdef spawn-worker!
@@ -334,11 +334,11 @@
 
 (s/fdef do-build-actual-worker
   :args (s/cat :this ::manager
-               :ch ::specs/async-chan
+               :ch ::async/chan
                :spawner ::work-spawner
                :raw-key-pair ::key-pair
                :full-pk ::public-key)
-  :ret ::specs/async-chan)
+  :ret ::async/chan)
 (defn do-build-actual-worker
   [{:keys [::session/manager]
     :as this}
@@ -421,10 +421,11 @@
    spawner raw-key-pair full-pk]
   (console.log "Set up pending World. Notify about pending fork.")
   ;; Want this part to happen asap to minimize the length of time
-  ;; we have to spend waiting on it
-  (send-message! this full-pk {:frereth/action :frereth/forking
-                               :frereth/command 'shell
-                               :frereth/pid full-pk})
+  ;; we have to spend waiting on network hops
+  (send-message! this full-pk {:path-info "/api/v1/forking"
+                               :request-method :post
+                               :params {:frereth/command 'shell
+                                        :frereth/world-key full-pk}})
   (console.log "Setting up worker 'fork' in worlds inside the manager in"
                this "\namong" (keys this))
   ;; Q: Should this next section wait on the forking-ACK?
@@ -470,6 +471,7 @@
 (defn fork-shell!
   [this
    session-id]
+  (.log js/console "Setting up shell fork request")
   ;; TODO: Look into using something like
   ;; https://tweetnacl.js.org/#/
   ;; instead.
@@ -491,6 +493,7 @@
         key-pair-atom (atom nil)
         export-pk-promise (.then signing-key-promise
                                  (fn [key-pair]
+                                   (.log js/console "Exporting the signing key we just generated")
                                    (reset! key-pair-atom key-pair)
                                    (export-public-key!
                                     this
@@ -498,6 +501,7 @@
                                     crypto
                                     key-pair)))]
     (.then export-pk-promise (fn [exported]
+                               (.log js/console "Building the worker to spawn")
                                (let [key-pair @key-pair-atom
                                      raw-public (.-publicKey key-pair)
                                      raw-secret (.-privateKey key-pair)

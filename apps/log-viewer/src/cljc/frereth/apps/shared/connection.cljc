@@ -83,7 +83,7 @@
 ;; So is a java.security.auth.Subject)
 #?(:clj (s/def ::subject any?))
 
-(s/def :frereth/session-sans-history (s/keys :req [::session-id
+(s/def :frereth/session-sans-history (s/keys :req [:frereth/session-id
                                                    ::state
                                                    ::state-id
                                                    ::specs/time-in-state
@@ -107,6 +107,26 @@
                                  (s/keys :req [::history])))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; Globals
+
+(def test-key
+  "Placeholder for crypto key to identify a connection.
+
+  Because I have to start somewhere, and that isn't with
+  key exchange algorithms.
+
+  Mostly, I don't want to copy/paste this any more than I
+  must."
+  [-39 -55 106 103
+   -31 117 120 57
+   -102 12 -102 -36
+   32 77 -66 -74
+   97 29 9 16
+   12 -79 -102 -96
+   89 87 -73 116
+   66 43 39 -61])
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Internal Implementation
 
 (s/fdef update-state
@@ -127,8 +147,9 @@
    (update-fn
     (update-state current new-state)))
   ([current new-state]
-   (assoc (if-not new-state current
-                  (assoc current ::state new-state))
+   (assoc (if-not new-state
+            current
+            (assoc current ::state new-state))
           ::state-id #?(:clj (cp-util/random-uuid)
                         :cljs (random-uuid))
           ;; So we can time out the oldest connection if/when we get
@@ -219,7 +240,8 @@
   ;; And it gets trickier when we get into the websocket interactions.
   "Create a new anonymous SESSION"
   []
-  (update-state {} ::connected
+  (update-state {:frereth/session-id test-key}
+                ::connected
                 #(assoc % :frereth/worlds {})))
 
 (s/fdef disconnect-all

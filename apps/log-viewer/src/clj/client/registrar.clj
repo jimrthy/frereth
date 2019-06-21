@@ -8,6 +8,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Globals
 
+;;;; FIXME: Convert this to a Component
 ;; TODO: Switch to this
 (defonce registry (atom {}))
 
