@@ -146,13 +146,13 @@
     :frereth/world-key world-key})
   ([log-state-atom lamport world-key action value]
    (let [result
-         (assoc (do-wrap-message lamport world-key action)
+         (assoc (do-wrap-message log-state-atom lamport world-key action)
                 :frereth/body value)]
      (swap! log-state-atom
             #(log/trace %
                         ::do-wrap-message
                         "Extending with value"
-                        :frereth/body value))
+                        {:frereth/body value}))
      result)))
 
 (s/fdef post-real-message!
@@ -353,6 +353,12 @@
   [{:keys [::client
            :frereth/session-id
            :frereth/world-key]}]
+  ;; This is really handle-joined.
+  ;; The forking part signalled that the browser wanted a World to
+  ;; start.
+  ;; Assuming the client is authorized, we should start it.
+  ;; The part that downloads the code to visualize and interact is
+  ;; a totally different animal.
   (post-message! log-state-atom
                  session
                  clock
@@ -383,6 +389,14 @@
     ;; There isn't any reason to waste local state on a world that could
     ;; easily be orphaned if anything goes wrong.
     ;; But this is an important starting point.
+    ;; TODO: The thinking behind this decision was wrong.
+    ;; If the Principal that made the request to Fork is authorized,
+    ;; then start it.
+    ;; The round trip that follows immediately to download source and
+    ;; start a Web Worker is something distinct.
+    ;; That part is really a Join.
+
+    ;; On a different note:
     ;; This is working at too high a layer in the abstraction tree.
     ;; We should really be running something like update-in
     ;; with just the piece that's being changed here (in
@@ -391,6 +405,7 @@
     ;; Those don't seem as useful in a game as they are in a basically
     ;; static SPA, but the idea does apply.
     ;; FIXME: Messages to post! should be part of the return value.
+    ;; Q: Should they really?
     (post-message! log-state-atom
                    session
                    clock
@@ -565,6 +580,9 @@
                                     "Trying to get the cookie bytes"
                                     {::cookie-bytes cookie-bytes
                                      ::cookie-byte-type (type cookie-bytes)}))
+  ;; TODO: Need a pair of functions for round-tripping the Cookie
+  ;; through encryption.
+  ;; They need to be stateful enough to cope with a minute-key.
   (let [plain-cookie (.decode (Base64/getDecoder) cookie-bytes)
         cookie-string (String. plain-cookie)]
     (swap! log-state-atom #(log/trace %
@@ -579,7 +597,6 @@
 (s/fdef handle-world-message!
   :args (s/cat :world-connection ::world-connection
                :global-bus ::bus/event-bus
-               ;; Q: Right?
                ;; It's tempting to use a ByteBuf here.
                ;; That doesn't seem like an option, if everything else
                ;; uses raw bytes.
@@ -598,7 +615,8 @@
                ;; this isn't even about Worlds that are running on a
                ;; local Server.
                ;; This really represents the web-server-side state of
-               ;; a World to which your "local" client has connected.
+               ;; a World to which your Renderer has connected via the
+               ;; Client library.
                ;; This potentially gets much nastier if multiple end-
                ;; users are connecting to this at the same time to
                ;; interact with multiple worlds.
@@ -625,19 +643,13 @@
     (do
       ;; Tell the world that a browser connection has disconnected from
       ;; it.
-      ;; FIXME: Need to specify which connection.
-      ;; It's tempting to use the session-id.
-      ;; That temptation almost seems like a yellow, if not red, flag.
-      ;; It seems like it would be safer to give each world its own
-      ;; version of the session-id.
-      ;; Then maintain a map of "real" session-ids to what the world
-      ;; sees.
-      ;; This way, one world doesn't have any way to identify its
-      ;; sessions in other worlds.
-      ;; TODO: At the very least, each WorldConnection should have
-      ;; its own EventBus to minimize the possibilities of collisions.
-      ;; That leads to its own set of problems with busy Worlds that
-      ;; need to cope with millions of these.
+      ;; TODO: Ditch the event-bus.
+      ;; I already worked this out with frereth-cp.
+      ;; Handle this with straight function calls. That's plenty decoupled for
+      ;; an inproc interface.
+      ;; (That function could trigger a broadcast, fanout, or whatever other
+      ;; communication mechanism actually makes sense, but it's more loosely
+      ;; coupled for the caller to not know).
       (bus/publish! log-state-atom event-bus :frereth/disconnect ::what-goes-here?)
       (bus/publish! log-state-atom
                     event-bus
@@ -672,7 +684,12 @@
               ;; Main point:
               ;; This needs to start up a new System of Component(s) that
               ;; :frereth/forking prepped.
-              ;; Or however that's configured.
+              ;; Well, not exactly.
+              ;; Think of a client connecting to the MySQL daemon.
+              ;; Or a tmux session.
+              ;; Joining a game server (which is what this really means) *is*
+              ;; likely to trigger a chain of events, but they mostly shouldn't
+              ;; happen at this level.
               (if-let [world (world/get-pending worlds world-key)]
                 (let [{actual-pid :frereth/world-key
                        actual-session :frereth/session-id
@@ -683,6 +700,8 @@
                     (if-let [connector (registrar/lookup session-id constructor-key)]
                       (let [world-stop-signal (gensym "frereth.stop.")
                             ;; Q: Is there a better way to do this?
+                            ;; A: Yes. It ties right in with eliminating the
+                            ;; event-bus dependency at this level.
                             world-bus (ig/init-key ::bus/event-bus {})
                             client (connector world-stop-signal
                                               (partial handle-world-message!
@@ -693,7 +712,6 @@
                                       event-bus
                                       :frereth/ack-forked
                                       ;; Q: How many of these parameters are redundant?
-                                      ;; We have the ones that are associated with the
                                       (assoc (select-keys context
                                                           [::connection/session
                                                            ::lamport/clock])
@@ -716,6 +734,10 @@
                     ;; completely compromised and take drastic measures.
                     ;; Notifying the user and closing the websocket to end the session
                     ;; might be a reasonable start.
+                    ;; Q: How do we notify the user if the browser session is
+                    ;; compromised?
+                    ;; A: Well, do our best. We need a message hook to signal things
+                    ;; like an email to the sysadmin and a siren for the devops team
                     (let [error-message
                           (str "session/world mismatch:\n* "
                                (cond
@@ -751,7 +773,7 @@
   ;; to spawn/fork a new connection to some world.
   ;; We need set up that connection and the event loop that passes
   ;; messages between the world and the browser.
-  "Now the nesting is getting deep"
+  "Something on browser has requested a new World instance"
   {:name ::world-forking
    :enter (fn [{:keys [::bus/event-bus
                        :request]
@@ -871,13 +893,13 @@
     ;; session.
     ;; Definitely need to pull this all apart so I can unit test what I have.
     (let [terminators #{}  ; Q: Is there anything useful to put in here?
-          custom-verbs #{:frereth/forward}  ; Q: Is this work it?
+          custom-verbs #{:frereth/forward}  ; Q: Is a single extra verb worth the effort?
           ;; TODO: need an option, at least in debug mode, for this
           ;; to be a function that gets called each time.
           routes (if (set? routes)
                    routes
                    ;; Q: Doesn't Pedestal handle the "build new set of routes
-                   ;; each time" for us?
+                   ;; each time" for us? Or did I bypass that?
                    (routes))
           ;; With this approach, need to combine custom-verbs with the
           ;; standard HTTP ones.
@@ -906,7 +928,7 @@
                                                    ::route-table routes}
                                                   ex))))
           raw-interceptors (conj raw-interceptors
-                                 ;; It might make sense to parameterize this,
+                                 ;; It might make sense to parameterize the routing,
                                  ;; but it doesn't seem likely.
                                  ;; If I do add the concept of a URI path
                                  ;; here, I don't see adding in path params.
@@ -963,7 +985,7 @@
           ;; chain handler.
           ;; Which is one reason this is worth keeping separate from the
           ;; dispatching code, which needs to move elsewhere.
-          ;; Current theory:
+          ;; Current approach:
           ;; Follow the front-end idea of "data down, events up."
           ;; Any side-effects that should happen get triggered by
           ;; posting messages to the event bus
@@ -1017,8 +1039,8 @@
     ;; I want to be paranoid about what's allowed to happen here
     ;; because it just seems dangerous.
     ;; These messages should be safe enough. They come from code
-    ;; that I supplied (right?) that couldn't possibly have been
-    ;; compromised (also right?)
+    ;; that I supplied (Q: right?) that couldn't possibly have been
+    ;; compromised (also Q: right?)
     ;; There should never be a malicious actor on the other side
     ;; that manages to get the signing key to send disconnect
     ;; messages.

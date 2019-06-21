@@ -47,6 +47,7 @@
   (let [location (.-location js/window)
         origin-protocol (.-protocol location)
         protocol-length (count origin-protocol)
+        ;; https: vs. http:
         protocol (if (= \s
                         (clojure.string/lower-case (aget origin-protocol
                                                          (- protocol-length 2))))

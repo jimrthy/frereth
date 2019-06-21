@@ -40,6 +40,8 @@
                :event any?))
 
 (defn recv-message!
+  ;; This function is nuts.
+  ;; TODO: Refactor it into smaller pieces.
   [{:keys [::lamport/clock
            ::session/manager]
     :as this} event]

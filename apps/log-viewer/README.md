@@ -7,7 +7,8 @@ This is an attempt to ease that burden.
 
 ## Usage
 
-Currently, this is strictly REPL-based, going through Docker.
+Currently, this is strictly REPL-based. I have mixed feelings about Docker's
+usefulness.
 
 ### Docker
 
