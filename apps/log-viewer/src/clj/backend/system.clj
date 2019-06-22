@@ -191,6 +191,7 @@
   :ret (s/keys :req [:server.networking/server
                      ::server-socket]))
 (defn server-ctor
+  ""
   [{:keys [::weald/logger]
     log-context ::weald/context
     socket-opts ::socket
@@ -205,7 +206,7 @@
                                     ;; required
                                     ;; FIXME: Just store the logger instance.
                                     ::weald/logger (ig/ref ::weald/logger)
-                                    ::weald/state (ig/ref ::weald/state-atom)
+                                    ::weald/state-atom (ig/ref ::weald/state-atom)
                                     ;; FIXME: Can this use a network state?
                                     :server.networking/my-name server-name
                                     :server.networking/socket (ig/ref ::server-socket)}

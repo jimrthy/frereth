@@ -28,25 +28,26 @@
 
 (s/fdef server-options
   :args (s/cat :logger ::weald/logger
-               :log-state ::weald/state
+               :log-state-atom ::weald/state-atom
                :->child ::msg-specs/->child
                :server-extension-vector (s/and vector?
                                                #(= (count %) K/extension-length))
                :server-name string?)
   :ret ::cp-server)
 (defn server-options
-  [logger log-state ->child server-extension-vector server-name]
+  [logger log-state-atom ->child server-extension-vector server-name]
   (let [child-id-atom (atom 0)
         executor (exec/fixed-thread-executor 4)
         server-extension (byte-array server-extension-vector)
         server-binary-name (shared/encode-server-name server-name)]
     {::weald/logger logger
-     ::weald/state log-state
+     ::weald/state-atom log-state-atom
      ::msg-specs/->child ->child
      ::msg-specs/child-spawner! (fn [io-handle]
-                                  (log/flush-logs! logger
-                                                   (log/debug (log/clean-fork log-state ::child-spawner!)
-                                                              ::top)))
+                                  (swap! log-state-atom
+                                         #(log/flush-logs! logger
+                                                           (log/debug (log/clean-fork % ::child-spawner!)
+                                                                      ::top))))
      ::shared/extension server-extension
      ::shared/my-keys #::shared{::shared-specs/srvr-name server-binary-name
                                 :keydir "server-sample"}}))
@@ -56,7 +57,7 @@
 
 (s/fdef build-server
   :args (s/cat :logger ::weald/logger
-               :log-state ::weald/state
+               :log-state-atom ::weald/state-atom
                :child-> ::msg-specs/->child
                :server-extension-vector (s/and vector?
                                                #(= (count %) K/extension-length))
@@ -71,14 +72,14 @@
   :ret ::server/pre-state)
 (defn build-server
   "Set up the server definition"
-  [logger log-state ->child server-extension-vector server-name socket-source socket-sink]
+  [logger log-state-atom ->child server-extension-vector server-name socket-source socket-sink]
   (try
-    (let [log-state (log/info log-state
-                              ::build-server
-                              "Trying to construct a server"
-                              {::weald/logger logger})
-          base-options (server-options logger
-                                       log-state
+    (swap! log-state-atom #(log/info %
+                                     ::build-server
+                                     "Trying to construct a server"
+                                     {::weald/logger logger}))
+    (let [base-options (server-options logger
+                                       log-state-atom
                                        ->child
                                        server-extension-vector
                                        server-name)
@@ -88,9 +89,13 @@
       (server/ctor actual-options))
     (catch ExceptionInfo ex
       (try
-        (log/flush-logs! logger (log/exception log-state
-                                               ex
-                                               ::build-server))
+        (if log-state-atom
+          (do
+            (swap! log-state-atom #(log/exception %
+                                                  ex
+                                                  ::build-server))
+            (swap! log-state-atom #(log/flush-logs! logger %)))
+          (println "Missing log state atom. Possibly related to:" ex))
         (catch Exception ex1
           (println "Double jeapordy failure:\n"
                    ex1
@@ -107,28 +112,36 @@
              ::extension-vector
              ::my-name
              ::socket]
+      log-state-atom ::weald/state-atom
       :as opts}]
-  (println ::server "init-key logger:" logger "among" (keys opts) "\nin\n" opts)
-  (pprint opts)
+  (swap! log-state-atom #(log/debug %
+                                    ::init-server
+                                    "init-key"
+                                    {::weald/logger logger
+                                     ::options opts}))
   (try
-    (let [log-state (log/init ::component)
-          inited (build-server logger
-                               log-state
+    (let [inited (build-server logger
+                               log-state-atom
                                ->child
                                extension-vector
                                my-name
                                socket
-                               socket)
-          log-state (log/info (::weald/state inited)
-                              ::init-key
-                              "Component constructed. Ready to Start"
-                              {::keys (keys inited)})]
+                               socket)]
+      (swap! log-state-atom #(log/info %
+                                       ::init-server
+                                       "Component constructed. Ready to Start"
+                                       {::keys (keys inited)
+                                        ::inited inited}))
       (assoc opts
              ::cp-server (server/start! (assoc inited
-                                               ::weald/state log-state))))
+                                               ::weald/state @log-state-atom))))
     (catch Exception ex
       (println "Oops" ex)
-      ;; This gives us a chance to close the socket on a failure
+      (swap! log-state-atom #(log/exception %
+                                            ex
+                                            ::init-server))
+      ;; Q: close the socket on a failure?
+      ;; A: No. We don't own it.
       opts)))
 
 (defmethod ig/halt-key! ::server
