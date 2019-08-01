@@ -1,0 +1,30 @@
+== Plan
+
+=== Installation
+
+Have some sort of setup script that sets up database schemas and then
+adds things like privileged user accounts and trusted hosts.
+
+The basic idea is that admins should be able to manage things via the
+GUI from either inside the local network or from specific trusted
+machines.
+
+It may be worth setting up options for 2-way TLS verification (or
+whatever the terminology is to indicate that the server authorizes
+client certs) to allow other remote options, but that seems like a
+next-gen sort of thing.
+
+=== Auth
+
+I'd like to use Buddy.
+
+I'd also really like to use FIDO.
+
+The two are not mutually exclusive, but this approach may take more
+effort that just hacking together something bespoke.
+
+It's totally worth doing, and may be a good way to get other people
+involved.
+
+On the other hand...the W3C has a new authentication standard that's
+supported in varying degrees in Chrome, Firefox, and Edge.
