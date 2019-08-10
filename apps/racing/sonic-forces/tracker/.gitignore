@@ -15,7 +15,6 @@ resources/public/js/cards
 resources/public/js/test/js
 target
 out
-package-lock.json
 resources/private
 .lein-repl-history
 .shadow-cljs
