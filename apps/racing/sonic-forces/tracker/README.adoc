@@ -134,6 +134,12 @@ If you're using CIDER
 see [the Shadow-cljs User's Guide](https://shadow-cljs.github.io/docs/UsersGuide.html#_cider)
 and the comments in `deps.edn` for more information.
 
+Short version:
+* M-x `cider-jack-in-cljs`
+* (there's an extra lein vs. shadow step in here)
+* Select ClojureScript REPL type: `shadow`
+* Select shadow-cljs build: `main`
+
 === The API Server
 
 In order to work with your main application you'll want to
@@ -157,6 +163,14 @@ see how your resolvers and mutations are performing!
 The URL to work on your application is then
 [http://localhost:3000](http://localhost:3000).
 
+==== CIDER
+
+In a .clj buffer, use `C-c C-s b` and choose the clj REPL so you can
+work with the current buffer.
+
+There must be a better way, but is this the first I've found that works.
+
+=== Browser Reloads
 Hot code reload, preloads, and such are all coded into the javascript.
 
 IMPORTANT: The server comes pre-secured with CSRF protection. If you have

@@ -45,14 +45,15 @@
 
   Returns a User (e.g. :user/id) which can resolve to a mutation join return graph.
   "
-  [{:keys [config ring/request]} {:user/keys [id name]}]
-  {::pc/params #{:user/id :user/name}
-   ::pc/output [:user/id]}
+  [{:keys [config ring/request]} {:player/keys [id level name rings]}]
+  {::pc/params #{:player/id :player/level :player/name :player/rings}
+   ::pc/output [:player/id]}
   (log/debug "Upsert user with server config that has keys: " (keys config))
   (log/debug "Ring request that has keys: " (keys request))
-  (when (and id name)
-    (swap! user-database assoc id {:user/id   id
-                                   :user/name name})
-    ;; Returning the user id allows the UI to query for the result. In this case we're "virtually" adding an address for
-    ;; them!
-    {:user/id id}))
+  (when (and id name level rings)
+    (do
+      (swap! user-database assoc id {:user/id   id
+                                     :user/name name})
+      ;; Returning the user id allows the UI to query for the result. In this case we're "virtually" adding an address for
+      ;; them!
+      {:user/id id})))

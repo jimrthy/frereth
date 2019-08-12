@@ -21,7 +21,7 @@
 (defn ^:export init []
   (reset! SPA (fc/make-fulcro-client
                 {:client-did-mount (fn [tracker]
-                                     (df/load tracker :all-users root/User))
+                                     (df/load tracker :all-users root/Player))
                  ;; This ensures your client can talk to a CSRF-protected server.
                  ;; See middleware.clj to see how the token is embedded into the HTML
                  :networking       {:remote (net/fulcro-http-remote

@@ -12,7 +12,8 @@
     [tracker.server-components.config :refer [config]]
 
     ;; ALL namespaces that use pathom-wrappers MUST be included for auto-registration to work
-    tracker.model.user))
+    tracker.model.player
+    #_tracker.model.user))
 
 (defn preprocess-parser-plugin
   "Helper to create a plugin that can view/modify the env/tx of a top-level request.
@@ -56,4 +57,3 @@
       (async/<!! (real-parser env (if trace?
                                     (conj tx :com.wsscode.pathom/trace)
                                     tx))))))
-
