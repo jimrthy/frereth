@@ -1,19 +1,23 @@
-(ns main.tracker.model.player
+(ns tracker.model.player
   (:require
     [com.wsscode.pathom.connect :as pc]
     [tracker.server-components.pathom-wrappers :refer [defmutation defresolver]]
     [taoensso.timbre :as log]))
 
-(defonce player-database (atom {}))
+(defonce player-database (atom {#uuid "197e0b56-88be-4040-b4d2-ab6ebc91f6ac" {:player/id #uuid "197e0b56-88be-4040-b4d2-ab6ebc91f6ac"
+                                                                              :player/name "Slopoke"
+                                                                              :player/level 1
+                                                                              :player/rings 0}}))
 (comment
-  @player-database)
+  @player-database
+  )
 
 (defresolver all-players-resolver
-  "Resolve queries for :all-users."
+  "Resolve queries for :all-players."
   [env input]
   {;;GIVEN nothing
-   ::pc/output [{:all-players [:playerer/id]}]}                   ;; I can output all users. NOTE: only ID is needed...other resolvers resolve the rest
-  (log/info "All users. Database contains: " @player-database)
+   ::pc/output [{:all-players [:player/id]}]}                   ;; I can output all players. NOTE: only ID is needed...other resolvers resolve the rest
+  (log/info "All players. Database contains: " @player-database)
   {:all-players (mapv
                  (fn [id] {:player/id id})
                  (keys @player-database))})
@@ -22,10 +26,15 @@
   "Resolve details of a single player.  (See pathom docs for adding batching)"
   [env {:player/keys [id]}]
   {::pc/input  #{:player/id}                                  ; GIVEN a player ID
-   ::pc/output [:player/name]}                                ; I can produce a player's details
+   ::pc/output [:player/level
+                :player/name
+                :player/rings]}                                ; I can produce a player's details
   ;; Look up the player (e.g. in a database), and return what you promised
-  (when (contains? @player-database id)
-    (get @player-database id)))
+  (get @player-database id))
+(comment
+  (player-resolver nil {:player/id "197e0b56-88be-4040-b4d2-ab6ebc91f6ac"})
+  (get @player-database "197e0b56-88be-4040-b4d2-ab6ebc91f6ac")
+  )
 
 (defmutation upsert-player
   "Add/save a player. Required parameters are:

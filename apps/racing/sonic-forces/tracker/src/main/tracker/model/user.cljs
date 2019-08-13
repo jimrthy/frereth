@@ -3,25 +3,25 @@
     [fulcro.incubator.mutation-interface :as mi :refer [declare-mutation]]
     [fulcro.client.mutations :as m :refer [defmutation]]))
 
-(defn player-path
+(defn user-path
   "Normalized path to a user entity or field in Fulcro state-map"
-  ([id field] [:player/id id field])
-  ([id] [:player/id id]))
+  ([id field] [:user/id id field])
+  ([id] [:user/id id]))
 
-(defn insert-player*
+(defn insert-user*
   "Insert a user into the correct table of the Fulcro state-map database."
-  [state-map {:player/keys [id] :as player}]
-  (assoc-in state-map (player-path id) player))
+  [state-map {:user/keys [id] :as user}]
+  (assoc-in state-map (user-path id) user))
 
 ;; IF you declare your mutations like this, then you can use them WITHOUT quoting in the UI!
 (declare-mutation upsert-player `upsert-player)
-(defmutation upsert-player
+(defmutation upsert-user
   "Client Mutation: Upsert a user (full-stack. see CLJ version for server-side)."
-  [{:player/keys [id level name rings]
+  [{:user/keys [id level name rings]
     :as params}]
   (action [{:keys [state]}]
     (swap! state (fn [s]
                    (-> s
-                     (insert-player* params)
-                     (m/integrate-ident* [:player/id id] :append [:all-players])))))
+                     (insert-user* params)
+                     (m/integrate-ident* [:user/id id] :append [:all-users])))))
   (remote [env] true))
