@@ -1,11 +1,11 @@
 (ns tracker.model.account
   (:require
-    [tracker.model.mock-database :as db]
-    [datascript.core :as d]
-    [ghostwheel.core :refer [>defn => | ?]]
-    [com.wsscode.pathom.connect :as pc :refer [defresolver defmutation]]
-    [taoensso.timbre :as log]
-    [clojure.spec.alpha :as s]))
+   #_[tracker.model.free-database :as db]
+   [datascript.core :as d]
+   [ghostwheel.core :refer [>defn => | ?]]
+   [com.wsscode.pathom.connect :as pc :refer [defresolver defmutation]]
+   [taoensso.timbre :as log]
+   [clojure.spec.alpha :as s]))
 
 (>defn all-account-ids
   "Returns a sequence of UUIDs for all of the active accounts in the system"

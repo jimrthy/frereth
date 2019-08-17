@@ -5,10 +5,11 @@
            bk/ring-gzip                        {:mvn/version "0.3.0"}
            com.taoensso/timbre                 {:mvn/version "4.10.0"}
            com.taoensso/tufte                  {:mvn/version "2.1.0-RC4"}
-           ;; 2.2.23 was released yesterday.
+           ;; 2.2.23 was released on 2019-AUG-15.
            ;; Q: Is it backwards-compatible enough?
            com.wsscode/pathom                  {:mvn/version "2.2.15"}
-           com.fulcrologic/fulcro              {:mvn/version "3.0.0-alpha-22"}
+           com.fulcrologic/fulcro              {#_#_:mvn/version "3.0.0-alpha-22"
+                                                :local/root "/mnt/share/home/james/projects/programming/3rd/web/fulcro3"}
            com.fulcrologic/fulcro-garden-css   {:mvn/version "3.0.4"}
            com.fulcrologic/semantic-ui-wrapper {:mvn/version "1.0.0-SNAPSHOT"}
            gnl/ghostwheel                      {:mvn/version "0.4.0-SNAPSHOT"}
@@ -20,11 +21,17 @@
 
            ;; To simulate Datomic on the back-end
            datascript                          {:mvn/version "0.18.4"}
+           ;; 5703.21 seems like an important bug-fix version, but
+           ;; this is the latest available on clojars.
+           ;; Q: Is it worth bothering with that?
+           com.datomic/datomic-free {:mvn/version #_"0.9.5697" "0.9.5703.21"}
 
            ring/ring-core                      {:mvn/version "1.7.1"}
            ring/ring-defaults                  {:mvn/version "0.3.2"}}
 
- :aliases {:clj-tests {:extra-paths ["src/test"]
+ :aliases {:cider {:extra-deps {cider/cider-nrepl {:mvn/version "0.21.1"}
+                                refactor-nrepl {:mvn/version "2.4.0"}}}
+           :clj-tests {:extra-paths ["src/test"]
                        :main-opts   ["-m" "kaocha.runner"]
                        :extra-deps  {lambdaisland/kaocha {:mvn/version "0.0-521"}}}
 
@@ -36,5 +43,5 @@
                                      expound                     {:mvn/version "0.7.2"}
                                      fulcrologic/fulcro-spec     {:mvn/version "3.1.2"}
                                      binaryage/devtools          {:mvn/version "0.9.10"}
-                                     ;nubank/workspaces           {:mvn/version "1.0.3"},
+                                     #_#_nubank/workspaces       {:mvn/version "1.0.3"},
                                      org.clojure/tools.namespace {:mvn/version "0.3.0"}}}}}

@@ -1,5 +1,6 @@
 (ns tracker.server-components.pathom
   (:require
+   [datomic.api :as d]
     [mount.core :refer [defstate]]
     [taoensso.timbre :as log]
     [com.wsscode.pathom.connect :as pc]
@@ -9,7 +10,8 @@
     [tracker.model.account :as acct]
     [tracker.model.session :as session]
     [tracker.server-components.config :refer [config]]
-    [tracker.model.mock-database :as db]))
+    [tracker.model.free-database :as db]
+    #_[tracker.model.mock-database :as db]))
 
 (pc/defresolver index-explorer [env _]
   {::pc/input  #{:com.wsscode.pathom.viz.index-explorer/id}
@@ -40,8 +42,9 @@
   (log/debug "Pathom transaction:" (pr-str tx))
   req)
 
-(defn build-parser [db-connection]
-  (let [real-parser (p/parallel-parser
+(defn build-parser [db-uri]
+  (let [db-connection (d/connect db-uri)
+        real-parser (p/parallel-parser
                       {::p/mutate  pc/mutate-async
                        ::p/env     {::p/reader               [p/map-reader pc/parallel-reader
                                                               pc/open-ident-reader p/env-placeholder-reader]
@@ -51,9 +54,9 @@
                                                          ;; Here is where you can dynamically add things to the resolver/mutation
                                                          ;; environment, like the server config, database connections, etc.
                                                          (assoc env
-                                                           :db @db-connection ; real datomic would use (d/db db-connection)
-                                                           :connection db-connection
-                                                           :config config)))
+                                                                :db (d/db db-connection)
+                                                                :connection db-connection
+                                                                :config config)))
                                     (preprocess-parser-plugin log-requests)
                                     p/error-handler-plugin
                                     p/request-cache-plugin
@@ -68,4 +71,4 @@
                                     tx))))))
 
 (defstate parser
-  :start (build-parser db/conn))
+  :start (build-parser db/url))

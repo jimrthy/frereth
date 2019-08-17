@@ -136,14 +136,16 @@
 
 (def ui-login (comp/factory Login))
 
-(defsc Main [this props]
+(defsc Main [this {:keys [:main/welcome-message]
+                   :as props}]
   {:query         [:main/welcome-message]
    :initial-state {:main/welcome-message "Hi!"}
    :ident         (fn [] [:component/id :main])
    :route-segment ["main"]
    :will-enter    (fn [_ _] (dr/route-immediate [:component/id :main]))}
   (div :.ui.container.segment
-    (h3 "Main")))
+       (h3 "Main")
+       (p welcome-message)))
 
 (defsc Settings [this {:keys [:account/time-zone :account/real-name] :as props}]
   {:query         [:account/time-zone :account/real-name]

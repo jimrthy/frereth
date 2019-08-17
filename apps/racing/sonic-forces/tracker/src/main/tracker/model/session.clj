@@ -1,14 +1,12 @@
 (ns tracker.model.session
   (:require
-    [tracker.model.mock-database :as db]
-    [datascript.core :as d]
-    [ghostwheel.core :refer [>defn => | ?]]
-    [com.wsscode.pathom.connect :as pc :refer [defresolver defmutation]]
-    [taoensso.timbre :as log]
-    [clojure.spec.alpha :as s]
-    [com.fulcrologic.fulcro.server.api-middleware :as fmw]))
-
-(defonce account-database (atom {}))
+   [tracker.model.free-database :as db]
+   [datascript.core :as d]
+   [ghostwheel.core :refer [>defn => | ?]]
+   [com.wsscode.pathom.connect :as pc :refer [defresolver defmutation]]
+   [taoensso.timbre :as log]
+   [clojure.spec.alpha :as s]
+   [com.fulcrologic.fulcro.server.api-middleware :as fmw]))
 
 (defresolver current-session-resolver [env input]
   {::pc/output [{::current-session [:session/valid? :account/name]}]}
@@ -31,9 +29,9 @@
 
 (defmutation login [env {:keys [username password]}]
   {::pc/output [:session/valid? :account/name]}
-  (log/info "Authenticating" username)
+  (log/info "Authenticating" username "based around" env)
   (let [{expected-email    :email
-         expected-password :password} (get @account-database username)]
+         expected-password :password} (db/bad-credentials-retrieval env username)]
     (if (and (= username expected-email) (= password expected-password))
       (response-updating-session env
         {:session/valid? true
@@ -48,8 +46,7 @@
 
 (defmutation signup! [env {:keys [email password]}]
   {::pc/output [:signup/result]}
-  (swap! account-database assoc email {:email    email
-                                       :password password})
+  (db/bad-create-account! env email password)
   {:signup/result "OK"})
 
 (def resolvers [current-session-resolver login logout signup!])

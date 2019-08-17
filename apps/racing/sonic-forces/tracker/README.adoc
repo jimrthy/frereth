@@ -146,6 +146,24 @@ If you're using CIDER
 see [the Shadow-cljs User's Guide](https://shadow-cljs.github.io/docs/UsersGuide.html#_cider)
 and the comments in `deps.edn` for more information.
 
+Short version:
+Don't try to run from the command line.
+
+- M-x cider-jack-in-cljs
+- Q: Which command should be used?
+  A: shadow-cljs
+  Wait for the server to start
+- Q: Select ClojureScript REPL type:
+  A: shadow
+- Q: Select shadow-cljs build (e.g. dev):
+  A: pick the name of one of your :builds in shadow-cljs.edn.
+  For this example, "main" is a good choice.
+- Q: Visit `http://localhost:8022' in a browser? (y or n)
+  A: n
+
+Later, once the API server is running, and you've browsed to your app
+(in this case, localhost:3000), the cljs REPL will connect.
+
 === The API Server
 
 In order to work with your main application you'll want to
@@ -277,3 +295,22 @@ make sure your workspaces js file isn't deployed to production.
 == Standalone Runnable Jar (Production, with advanced optimized client js)
 
 TODO: Use tools deps setup to build runnable jar...
+
+== Switching to Datomic
+
+=== Free
+
+Have to download this anyway. So might as well use the latest/greatest.
+
+After extraction, in the datomic root directory:
+
+```bin/maven-install```
+
+to make the client library available.
+
+Then
+
+```bin/transactor config/samples/free-transactor-template.properties```
+
+That should start storing datoms in the data/ folder and listening on
+datomic:free://localhost:4334/<DB_NAME>
