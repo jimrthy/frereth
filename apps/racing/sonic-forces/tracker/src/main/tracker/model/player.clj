@@ -4,10 +4,12 @@
     [tracker.server-components.pathom-wrappers :refer [defmutation defresolver]]
     [taoensso.timbre :as log]))
 
-(defonce player-database (atom {#uuid "197e0b56-88be-4040-b4d2-ab6ebc91f6ac" {:player/id #uuid "197e0b56-88be-4040-b4d2-ab6ebc91f6ac"
-                                                                              :player/name "Slopoke"
-                                                                              :player/level 1
-                                                                              :player/rings 0}}))
+(let [player-1-id #uuid "197e0b56-88be-4040-b4d2-ab6ebc91f6ac"
+      player-1 {:player/id player-1-id
+                :player/level 1
+                :player/name "Slopoke"
+                :player/rings 0}]
+  (defonce player-database (atom {player-1-id player-1})))
 (comment
   @player-database
   )
@@ -44,18 +46,20 @@
 
   Returns a Player (e.g. :player/id) which can resolve to a mutation join return graph.
   "
-  [{:keys [config ring/request]} {:player/keys [id level name rings]}]
-  {::pc/params #{:player/id :player/level :player/name :player/rings}
+  [{:keys [config ring/request]} {:player/keys [exp id level name rings stars]}]
+  {::pc/params #{:player/exp :player/id :player/level :player/name :player/rings :player/stars}
    ::pc/output [:player/id]}
   (log/debug "Upsert player with server config that has keys: " (keys config))
   (log/debug "Ring request that has keys: " (keys request))
   (when (and id name level rings)
     (if (< 0 level 17)
       (do
-        (swap! player-database assoc id {:player/id   id
+        (swap! player-database assoc id {:player/exp exp
+                                         :player/id   id
                                          :player/name name
                                          :player/level level
-                                         :player/rings rings})
+                                         :player/rings rings
+                                         :player/stars stars})
         ;; Returning the player id allows the UI to query for the result.
         {:player/id id})
       (throw (RuntimeException. "Q: How do I return a 400 error?")))))

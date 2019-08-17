@@ -8,9 +8,9 @@
    [tracker.ui.components :as comp]
    [taoensso.timbre :as log]))
 
-(defsc Player [this {:player/keys [id name level rings]
+(defsc Player [this {:player/keys [id exp name level rings stars]
                      :as props}]
-  {:query [:player/id :player/name :player/level :player/rings]
+  {:query [:player/exp :player/id :player/name :player/level :player/rings :player/stars]
    :ident [:player/id :player/id]}
   (.log js/console "Rendering player from" props)
   (li :.ui.item {:id id}
@@ -50,22 +50,28 @@
 (def ui-player-level (prim/factory PlayerLevel))
 
 (defsc PlayerAdder [this {player-name :player/name
-                          :keys [:player/level
+                          :keys [:player/exp
+                                 :player/level
                                  :player/rings
+                                 :player/stars
                                  :ui/react-key]
                           :or {rings 0}}]
   {:ident [:ui/player-adder :ui/react-key]
    :initial-state (fn [{:keys [:ui/react-key]
                         :as initial-state-props}]
                     (.log js/console "Setting up initial state for PlayerAdder based on " initial-state-props)
-                    {:player/name ""
+                    {:player/exp "0"
+                     :player/name ""
                      :player/rings "0"
+                     :player/stars "0"
                      :ui/react-key react-key
                      :player/level (prim/get-initial-state PlayerLevel initial-state-props)})
-   :query [:player/name :player/rings :ui/react-key
+   :query [:player/exp :player/name :player/rings :player/stars :ui/react-key
            {:player/level (prim/get-query PlayerLevel)}]}
-  (let [new-name-id (str "new-player-name-" react-key)
-        new-ring-id (str "new-player-ring-count-" react-key)]
+  (let [new-exp-id (str "new-player-exp-" react-key)
+        new-name-id (str "new-player-name-" react-key)
+        new-ring-id (str "new-player-ring-count-" react-key)
+        new-stars-id (str "new-player-stars-count-" react-key)]
     (div
      "Add New Player"
      (div
@@ -89,6 +95,22 @@
                       :min 0
                       :type "number"
                       :value (str rings)}))
+     (div
+      (dom/label {:htmlFor new-exp-id} "Starting EXP: ")
+      (dom/input {:id new-exp-id
+                  :onChange (fn [evt]
+                              (m/set-string! this :player/exp :event evt))
+                  :min 0
+                  :type "number"
+                  :value (str exp)}))
+     (div
+      (dom/label {:htmlFor new-stars-id} "Starting stars: ")
+      (dom/input {:id new-stars-id
+                  :onChange (fn [evt]
+                              (m/set-string! this :player/stars :event evt))
+                  :min 0
+                  :type "number"
+                  :value (str stars)}))
      (div
       (dom/button :.ui.icon.button
                   #js {:onClick (fn []
