@@ -54,8 +54,8 @@
         db (d/db conn)
         raw (d/q '[:find ?e ?password
                    :in $ ?email
-                   :where [?e :player/email ?email]
-                   [?e :player/proto-password-bad ?password]]
+                   :where [?e :account/email ?email]
+                   [?e :account/proto-password-bad ?password]]
                  db email)
         record (first raw)]
     (when record

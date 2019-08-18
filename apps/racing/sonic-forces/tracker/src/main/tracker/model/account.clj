@@ -11,6 +11,7 @@
   "Returns a sequence of UUIDs for all of the active accounts in the system"
   [db]
   [any? => (s/coll-of uuid? :kind vector?)]
+  (println "Extracting all active account IDs from" db)
   (d/q '[:find [?v ...]
          :where
          [?e :account/active? true]
