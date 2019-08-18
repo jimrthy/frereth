@@ -1,7 +1,7 @@
 (ns tracker.model.session
   (:require
    [tracker.model.free-database :as db]
-   [datascript.core :as d]
+   [datomic.api :as d]
    [ghostwheel.core :refer [>defn => | ?]]
    [com.wsscode.pathom.connect :as pc :refer [defresolver defmutation]]
    [taoensso.timbre :as log]

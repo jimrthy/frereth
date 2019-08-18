@@ -59,21 +59,8 @@
             {:keys [:db-after :tx-data]
              :as success} @success-future
             db (d/db (d/connect db-uri))
-            _ (println "Looking for active accounts among" db-after)
             ids (acct/all-account-ids db)]
         (is (= db-after db))
-        (println "tx-data:" (mapv vector tx-data))
-        (println "Active accounts:" ids)
-        #_(let [raw
-              (d/q '[:find [?v ...]
-                     :where
-                     [?e :account/active? true]
-                     [?e :account/id ?v]]
-                   db)]
-            (is (not raw)))
-        #_(let [direct (acct/q-all-account-ids db)]
-          (is (not direct)))
-        #_(is (not ids))
         (assertions
          "can find the active account IDs that are in the given database"
          (set ids) => #{(uuid 2) (uuid 3)}))
@@ -102,7 +89,8 @@
 (deftest get-account-test
   (let [db-uri (safe-db-uri)]
     (try
-      (let [{:keys [::db]} (seeded-setup)
+      (let [{:keys [::conn]} (seeded-setup db-uri)
+            db (d/db conn)
             entity (acct/get-account db (uuid 2) [:account/email])]
         (assertions
          "can find the requested account details"
@@ -115,7 +103,7 @@
              (let [db-uri (safe-db-uri)
                    {:keys [::conn]} (seeded-setup db-uri)]
                (try
-                 (let [parser (build-parser conn)]
+                 (let [parser (build-parser db-uri)]
                    (assertions
                     "Pulls details for all active accounts"
                     (parser {} [{:all-accounts [:account/email]}])
@@ -138,7 +126,7 @@
                         (let [db-uri (safe-db-uri)
                               {:keys [conn]} (seeded-setup db-uri)]
                           (try
-                            (let [parser (build-parser conn)]
+                            (let [parser (build-parser db-uri)]
                               (assertions
                                "Can pull the details of an account"
                                (parser {} [{[:account/id (uuid 2)] [:account/id :account/email :account/active?]}])
