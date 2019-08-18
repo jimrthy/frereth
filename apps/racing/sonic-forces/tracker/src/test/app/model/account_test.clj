@@ -31,7 +31,8 @@
                                   {:account/id (uuid 2) :account/active? true :account/email "account@example.net"}
                                   {:account/id (uuid 3) :account/active? true}])]
     {::conn conn
-     ::db   (d/db conn)
+     ;; The txn has not necessarily been applied yet
+     #_#_::db   (d/db conn)
      ::success-future success}))
 
 (deftest verify-seeding
@@ -54,13 +55,49 @@
 (deftest all-account-ids-test
   (let [db-uri (safe-db-uri)]
     (try
-      (let [{:keys [::db]} (seeded-setup db-uri)
+      (let [{:keys [::success-future]} (seeded-setup db-uri)
+            {:keys [:db-after :tx-data]
+             :as success} @success-future
+            db (d/db (d/connect db-uri))
+            _ (println "Looking for active accounts among" db-after)
             ids (acct/all-account-ids db)]
+        (is (= db-after db))
+        (println "tx-data:" (mapv vector tx-data))
+        (println "Active accounts:" ids)
+        #_(let [raw
+              (d/q '[:find [?v ...]
+                     :where
+                     [?e :account/active? true]
+                     [?e :account/id ?v]]
+                   db)]
+            (is (not raw)))
+        #_(let [direct (acct/q-all-account-ids db)]
+          (is (not direct)))
+        #_(is (not ids))
         (assertions
-         "can find the active account IDs that are in the database given"
+         "can find the active account IDs that are in the given database"
          (set ids) => #{(uuid 2) (uuid 3)}))
       (finally
         (tear-down db-uri)))))
+
+(comment
+  (def check-db-uri (safe-db-uri))
+  check-db-uri
+  (def test-db (seeded-setup check-db-uri))
+  test-db
+  (::success-future test-db)
+  (deref (::success-future test-db))
+  (let [conn (new-mem-connection check-db-uri)]
+    conn)
+  (try
+    (let [{:keys [::success-future]}
+          db (:db-after @success-future)
+          _ (println "Looking for active accounts among" db)
+          ids (acct/all-account-ids #_db (d/db (d/connect db-uri)))]
+      (print "Active accounts:" ids))
+    (finally
+      (tear-down db-uri)))
+  )
 
 (deftest get-account-test
   (let [db-uri (safe-db-uri)]

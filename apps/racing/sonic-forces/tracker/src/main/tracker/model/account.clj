@@ -1,22 +1,26 @@
 (ns tracker.model.account
   (:require
    #_[tracker.model.free-database :as db]
-   [datascript.core :as d]
+   #_[datascript.core :as d]
+   [datomic.api :as d]
    [ghostwheel.core :refer [>defn => | ?]]
    [com.wsscode.pathom.connect :as pc :refer [defresolver defmutation]]
    [taoensso.timbre :as log]
    [clojure.spec.alpha :as s]))
 
-(>defn all-account-ids
-  "Returns a sequence of UUIDs for all of the active accounts in the system"
+(defn q-all-account-ids
   [db]
-  [any? => (s/coll-of uuid? :kind vector?)]
-  (println "Extracting all active account IDs from" db)
   (d/q '[:find [?v ...]
          :where
          [?e :account/active? true]
          [?e :account/id ?v]]
-    db))
+       db))
+
+(>defn all-account-ids
+  "Returns a sequence of UUIDs for all of the active accounts in the system"
+  [db]
+  [any? => (s/coll-of uuid? :kind vector?)]
+  (q-all-account-ids db))
 
 (defresolver all-users-resolver [{:keys [db]} input]
   {;;GIVEN nothing (e.g. this is usable as a root query)
