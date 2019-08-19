@@ -1,13 +1,13 @@
 (ns app.model.account-test
   (:require
+   [clojure.test :refer [are deftest is testing]]
    [datomic.api :as d]
-    [tracker.server-components.pathom :refer [build-parser]]
-    [tracker.model.account :as acct]
-    [tracker.util :refer [uuid]]
-    [clojure.test :refer [are deftest is]]
-    [fulcro-spec.core :refer [specification provided behavior assertions component provided!]]
-    [tracker.model.free-database :as db]
-    [taoensso.timbre :as log]))
+   [fulcro-spec.core :refer [specification provided behavior assertions component provided!]]
+   [taoensso.timbre :as log]
+   [tracker.model.free-database :as db]
+   [tracker.model.account :as acct]
+   [tracker.server-components.pathom :refer [build-parser]]
+   [tracker.util :refer [uuid]]))
 
 (defn safe-db-uri
   []
@@ -106,7 +106,9 @@
                  (let [parser (build-parser db-uri)]
                    (assertions
                     "Pulls details for all active accounts"
-                    (parser {} [{:all-accounts [:account/email]}])
+                    (dissoc
+                     (parser {} [{:all-accounts [:account/email]}])
+                     :com.wsscode.pathom/trace)
                     => {:all-accounts [{}
                                        {:account/email "account@example.net"}]}))
                  (finally
@@ -126,10 +128,21 @@
                         (let [db-uri (safe-db-uri)
                               {:keys [conn]} (seeded-setup db-uri)]
                           (try
-                            (let [parser (build-parser db-uri)]
-                              (assertions
-                               "Can pull the details of an account"
-                               (parser {} [{[:account/id (uuid 2)] [:account/id :account/email :account/active?]}])
-                               => {[:account/id (uuid 2)] {:account/id      (uuid 2)
-                                                           :account/email   "boo@bah.com"
-                                                           :account/active? false}})))))))
+                            (testing "Can pull the details of an account"
+                              (let [parser (build-parser db-uri)
+                                    expected {[:account/id (uuid 2)]
+                                              {:account/id      (uuid 2)
+                                               :account/email   "boo@bah.com"
+                                               :account/active? false}}
+                                    actual (dissoc (parser {} [{[:account/id (uuid 2)] [:account/id :account/email :account/active?]}])
+                                                   :com.wsscode.pathom/trace)]
+                                #_(is (not actual))
+                                #_(is (not expected))
+                                (is (= expected
+                                       actual))
+                                #_(assertions
+                                   "Can pull the details of an account"
+                                   (parser {} [{[:account/id (uuid 2)] [:account/id :account/email :account/active?]}])
+                                   => {[:account/id (uuid 2)] {:account/id      (uuid 2)
+                                                               :account/email   "boo@bah.com"
+                                                               :account/active? false}}))))))))

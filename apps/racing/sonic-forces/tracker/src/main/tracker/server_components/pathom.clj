@@ -10,8 +10,7 @@
     [tracker.model.account :as acct]
     [tracker.model.session :as session]
     [tracker.server-components.config :refer [config]]
-    [tracker.model.free-database :as db]
-    #_[tracker.model.mock-database :as db]))
+    [tracker.model.free-database :as db]))
 
 (pc/defresolver index-explorer [env _]
   {::pc/input  #{:com.wsscode.pathom.viz.index-explorer/id}

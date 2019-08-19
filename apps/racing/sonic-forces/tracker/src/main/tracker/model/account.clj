@@ -1,7 +1,6 @@
 (ns tracker.model.account
   (:require
    #_[tracker.model.free-database :as db]
-   #_[datascript.core :as d]
    [datomic.api :as d]
    [ghostwheel.core :refer [>defn => | ?]]
    [com.wsscode.pathom.connect :as pc :refer [defresolver defmutation]]
@@ -10,6 +9,7 @@
 
 (defn q-all-account-ids
   [db]
+  ;; Q: What does the ... mean here?
   (d/q '[:find [?v ...]
          :where
          [?e :account/active? true]
@@ -22,17 +22,22 @@
   [any? => (s/coll-of uuid? :kind vector?)]
   (q-all-account-ids db))
 
-(defresolver all-users-resolver [{:keys [db]} input]
+(defresolver all-users-resolver [{:keys [db] :as env} input]
   {;;GIVEN nothing (e.g. this is usable as a root query)
    ;; I can output all accounts. NOTE: only ID is needed...other resolvers resolve the rest
    ::pc/output [{:all-accounts [:account/id]}]}
+  (println "Querying" db "from" env "for all account IDs")
   {:all-accounts (mapv
                    (fn [id] {:account/id id})
                    (all-account-ids db))})
 
 (>defn get-account [db id subquery]
-  [any? uuid? vector? => (? map?)]
-  (d/pull db subquery [:account/id id]))
+       [any? uuid? vector? => (? map?)]
+       (println "Pulling" subquery "from" db)
+       (let [result
+             (d/pull db subquery [:account/id id])]
+         (println "Result:" result)
+         result))
 
 (defresolver account-resolver [{:keys [db] :as env} {:account/keys [id]}]
   {::pc/input  #{:account/id}
