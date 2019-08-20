@@ -1,5 +1,6 @@
 (ns tracker.model.session
   (:require
+   [clojure.pprint :refer [pprint]]
    [tracker.model.free-database :as db]
    [datomic.api :as d]
    [ghostwheel.core :refer [>defn => | ?]]
@@ -29,7 +30,8 @@
 
 (defmutation login [env {:keys [username password]}]
   {::pc/output [:session/valid? :account/name]}
-  (log/info "Authenticating" username "based around" env)
+  (log/info "Authenticating" username "based around" (keys env) "in"
+            (with-out-str (pprint env)))
   (let [{expected-email    :email
          expected-password :password} (db/bad-credentials-retrieval env username)]
     (if (and (= username expected-email) (= password expected-password))

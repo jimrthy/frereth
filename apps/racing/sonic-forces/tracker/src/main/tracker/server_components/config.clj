@@ -12,7 +12,7 @@
 
 
 (defstate config
-  :start (let [{:keys [config] :or {config "config/dev.edn"}} (args)
+  :start (let [{:keys [:config] :or {config "config/dev.edn"}} (args)
                configuration (load-config! {:config-path config})]
            (log/info "Loaded config" config)
            (configure-logging! configuration)

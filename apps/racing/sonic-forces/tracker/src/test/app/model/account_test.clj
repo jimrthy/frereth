@@ -1,3 +1,5 @@
+;;;; FIXME: Move/rename to tracker.model.account-test
+;;;; to match the ns being tested
 (ns app.model.account-test
   (:require
    [clojure.test :refer [are deftest is testing]]
@@ -31,8 +33,6 @@
                                   {:account/id (uuid 2) :account/active? true :account/email "account@example.net"}
                                   {:account/id (uuid 3) :account/active? true}])]
     {::conn conn
-     ;; The txn has not necessarily been applied yet
-     #_#_::db   (d/db conn)
      ::success-future success}))
 
 (deftest verify-seeding
@@ -129,20 +129,12 @@
                               {:keys [conn]} (seeded-setup db-uri)]
                           (try
                             (testing "Can pull the details of an account"
-                              (let [parser (build-parser db-uri)
-                                    expected {[:account/id (uuid 2)]
-                                              {:account/id      (uuid 2)
-                                               :account/email   "boo@bah.com"
-                                               :account/active? false}}
-                                    actual (dissoc (parser {} [{[:account/id (uuid 2)] [:account/id :account/email :account/active?]}])
-                                                   :com.wsscode.pathom/trace)]
-                                #_(is (not actual))
-                                #_(is (not expected))
-                                (is (= expected
-                                       actual))
-                                #_(assertions
-                                   "Can pull the details of an account"
-                                   (parser {} [{[:account/id (uuid 2)] [:account/id :account/email :account/active?]}])
+                              (let [parser (build-parser db-uri)]
+                                (assertions
+                                 "Can pull the details of an account"
+                                 (dissoc
+                                  (parser {} [{[:account/id (uuid 2)] [:account/id :account/email :account/active?]}])
+                                  :com.wsscode.pathom/trace)
                                    => {[:account/id (uuid 2)] {:account/id      (uuid 2)
                                                                :account/email   "boo@bah.com"
                                                                :account/active? false}}))))))))

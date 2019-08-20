@@ -19,8 +19,8 @@
         connection (d/connect db-uri)]
     (d/transact connection schema)))
 
-(def raw-url "datomic:free://localhost:4334/sf-tracker")
-(defstate url :start raw-url)
+;;; FIXME: Load this from the config
+(def url "datomic:free://localhost:4334/sf-tracker")
 
 (comment
   raw-url
@@ -49,7 +49,8 @@
     (d/transact conn txn)))
 
 (defn bad-credentials-retrieval
-  [db-uri email]
+  [{db-uri :db
+    :as env} email]
   (let [conn (d/connect db-uri)
         db (d/db conn)
         raw (d/q '[:find ?e ?password
