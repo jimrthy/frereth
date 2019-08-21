@@ -1,13 +1,13 @@
 (ns tracker.model.session
   (:require
    [clojure.pprint :refer [pprint]]
-   [tracker.model.free-database :as db]
+   [clojure.spec.alpha :as s]
+   [com.fulcrologic.fulcro.server.api-middleware :as fmw]
+   [com.wsscode.pathom.connect :as pc :refer [defresolver defmutation]]
    [datomic.api :as d]
    [ghostwheel.core :refer [>defn => | ?]]
-   [com.wsscode.pathom.connect :as pc :refer [defresolver defmutation]]
-   [taoensso.timbre :as log]
-   [clojure.spec.alpha :as s]
-   [com.fulcrologic.fulcro.server.api-middleware :as fmw]))
+   [tracker.model.free-database :as db]
+   [taoensso.timbre :as log]))
 
 (defresolver current-session-resolver [env input]
   {::pc/output [{::current-session [:session/valid? :account/name]}]}
@@ -33,7 +33,9 @@
   (log/info "Authenticating" username "based around" (keys env) "in"
             (with-out-str (pprint env)))
   (let [{expected-email    :email
-         expected-password :password} (db/bad-credentials-retrieval env username)]
+         expected-password :password
+         :as credentials} (db/bad-credentials-retrieval db/db-uri username)]
+    (log/info "Credentials:" credentials)
     (if (and (= username expected-email) (= password expected-password))
       (response-updating-session env
         {:session/valid? true

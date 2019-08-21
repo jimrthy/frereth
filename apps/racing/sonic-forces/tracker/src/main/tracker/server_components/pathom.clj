@@ -1,16 +1,16 @@
 (ns tracker.server-components.pathom
   (:require
+   [clojure.core.async :as async]
+   [com.wsscode.pathom.connect :as pc]
+   [com.wsscode.pathom.core :as p]
+   [com.wsscode.common.async-clj :refer [let-chan]]
    [datomic.api :as d]
-    [mount.core :refer [defstate]]
-    [taoensso.timbre :as log]
-    [com.wsscode.pathom.connect :as pc]
-    [com.wsscode.pathom.core :as p]
-    [com.wsscode.common.async-clj :refer [let-chan]]
-    [clojure.core.async :as async]
-    [tracker.model.account :as acct]
-    [tracker.model.session :as session]
-    [tracker.server-components.config :refer [config]]
-    [tracker.model.free-database :as db]))
+   [mount.core :refer [defstate]]
+   [taoensso.timbre :as log]
+   [tracker.model.account :as acct]
+   [tracker.model.free-database :as db]
+   [tracker.model.session :as session]
+   [tracker.server-components.config :refer [config]]))
 
 (pc/defresolver index-explorer [env _]
   {::pc/input  #{:com.wsscode.pathom.viz.index-explorer/id}
@@ -53,7 +53,6 @@
                                                          ;; Here is where you can dynamically add things to the resolver/mutation
                                                          ;; environment, like the server config, database connections, etc.
                                                          (assoc env
-                                                                :db (d/db db-connection)
                                                                 :connection db-connection
                                                                 :config config)))
                                     (preprocess-parser-plugin log-requests)
@@ -70,4 +69,4 @@
                                     tx))))))
 
 (defstate parser
-  :start (build-parser db/url))
+  :start (build-parser db/db-uri))
