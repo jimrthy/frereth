@@ -1,11 +1,9 @@
 (ns tracker.server-components.http-server
   (:require
     [clojure.pprint :refer [pprint]]
-
     [io.pedestal.http :as http]
     [mount.core :refer [defstate]]
     [muuntaja.core :as m]
-    #_[org.httpkit.server :as http-kit]
     [reitit.coercion.spec]
     [reitit.dev.pretty :as pretty]
     [reitit.http.coercion :as coercion]
@@ -79,22 +77,28 @@
     (ring/create-default-handler))))
 
 (defstate service-map
-  :start (let [{:keys [:port]
-                :as cfg} (::http/http config)
+  :start (let [{:keys [:io.pedestal/http]} config
+               {:keys [:port]} http  ; TODO: nested destructuring
                ;; TODO: define a default :port value
-               config {:env :dev   ; Q: ?
-                       ::http/join? false
-                       ::http/port port
-                       ;; Using reitit for routing
-                       ::http/routes []
-                       ;; Allow serving the swagger-ui styles and scripts from self
-                       ::http/secure-headers {:content-security-policy-settings {:default-src "'self'"
-                                                                                 ;; really?!
-                                                                                 :style-src "'self' 'unsafe-inline'"
-                                                                                 :script-src "'self' 'unsafe-inline'"}}
-                       ::http/type :immutant}]
-           (log/info "Starting HTTP Server with config " (with-out-str (pprint config)))
-           (-> config
+               local-config {:env :dev   ; Q: ?
+                             ::http/join? false
+                             ::http/port port
+                             ;; Using reitit for routing
+                             ::http/routes []
+                             ;; Allow serving the swagger-ui styles and scripts from self
+                             ::http/secure-headers {:content-security-policy-settings {:default-src "'self'"
+                                                                                       ;; really?!
+                                                                                       :style-src "'self' 'unsafe-inline'"
+                                                                                       :script-src "'self' 'unsafe-inline'"}}
+                             ::http/type :immutant}]
+           (log/info "Starting HTTP Server with config " (with-out-str (pprint local-config))
+                     " based on keys "
+                     (keys config)
+                     "\nin\n"
+                     (with-out-str (pprint config))
+                     "\nbased on\n"
+                     http)
+           (-> local-config
                (http/default-interceptors)
                ;; use the reitit router
                (pedestal/replace-last-interceptor routes)
