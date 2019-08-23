@@ -1,6 +1,6 @@
 {:legal-origins              #{"localhost" "dev.lvh.me"}
 
- :org.httpkit.server/config {:port 3000}
+ :io.pedestal/http {:port 3000}
 
  :taoensso.timbre/logging-config
                              {:level        :info
@@ -16,6 +16,7 @@
                                              "org.projectodd.wunderboss.web.Web"
                                              "shadow.cljs.devtools.server.worker.impl"]}
 
+ ;; Q: How badly does pedestal break this?
  ;; The ssl-redirect defaulted to off, but for security should probably be on in production.
  :ring.middleware/defaults-config
                              {:params    {:keywordize true
