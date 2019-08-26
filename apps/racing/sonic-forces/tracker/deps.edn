@@ -27,6 +27,7 @@
            io.pedestal/pedestal.service-tools  {:mvn/version "0.5.7"}
            metosin/reitit-pedestal             {:mvn/version "0.3.9"}
            metosin/reitit                      {:mvn/version "0.3.9"}
+           metosin/reitit-swagger-ui           {:mvn/version "0.3.9"}
            mount                               {:mvn/version "0.1.12"}
            org.clojure/core.async              {:mvn/version "0.4.500"}
            ring/ring-core                      {:mvn/version "1.7.1"}

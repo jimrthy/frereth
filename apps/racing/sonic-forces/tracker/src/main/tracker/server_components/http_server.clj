@@ -22,7 +22,7 @@
     [tracker.server-components.config :refer [config]]
     [tracker.server-components.middleware :refer [middleware]]))
 
-(def routes
+(def router
   (pedestal/routing-interceptor
    (reitit.http/router
     [["/swagger.json" {:get {:no-doc true
@@ -70,7 +70,7 @@
    ;; optional default ring(?) handler (if no routes have matched)
    (ring/routes
     (swagger-ui/create-swagger-ui-handler
-     {:path "/"
+     {:path "/swagger-ui"
       :config {:validatorUrl nil
                :operationsSorter "alpha"}})
     (ring/create-resource-handler)
@@ -101,11 +101,42 @@
            (-> local-config
                (http/default-interceptors)
                ;; use the reitit router
-               (pedestal/replace-last-interceptor routes)
+               (pedestal/replace-last-interceptor router)
                ;; Q: How to handle this only in dev mode?
                (http/dev-interceptors)
                (http/create-server))))
 
-(defstate http-server
-  :start (http/start service-map)
+(defstate ^{:on-reload :noop} http-server
+  ;; Q: What's a good way to write this?
+  :start (reduce (fn [acc delay-time]
+                   (log/debug "Delaying " delay-time " ms")
+                   (Thread/sleep delay-time)
+                   (try
+                     (let [success
+                           (http/start service-map)]
+                       (log/debug "Succeeded on try #" acc)
+                       (reduced success))
+                     (catch java.net.BindException ex
+                       (log/warn "Web server attempt #" acc " failed.")
+                       ;; Q: Is there a good way to really and truly
+                       ;; indicate failure?
+                       (inc acc))))
+                 1
+                 [1 10 100])
+  #_(try
+
+           (catch java.net.BindException ex
+             (log/error ex "Sleeping: 1")
+             (try
+               (http/start service-map)
+               (catch java.net.BindException ex
+                 (log/error ex "Sleeping: 10")
+                 (try
+                   (http/start service-map)
+                   (catch java.net.BindException ex
+                     (log/error ex "Sleeping: 100")
+                     ))))))
   :stop (http/stop service-map))
+
+(comment
+  http-server)
