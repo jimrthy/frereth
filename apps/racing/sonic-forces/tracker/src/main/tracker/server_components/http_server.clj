@@ -20,27 +20,87 @@
     ;; TODO: convert this to frereth.weald
     [taoensso.timbre :as log]
     [tracker.server-components.config :refer [config]]
-    [tracker.server-components.middleware :refer [middleware]]))
+    [tracker.server-components.middleware :as middleware]))
 
 (def router
   (pedestal/routing-interceptor
    (reitit.http/router
-    [["/swagger.json" {:get {:no-doc true
+    [[;; Also want this to be the handler for index.html
+      ;; And probably all the similar variants.
+      ;; Q: How does reitit handle that?
+      "/" {:get {:no-doc true
+                 :handler (fn [{:keys [:muuntaja/request]
+                                {:keys [:anti-forgery-token]} :headers
+                                :as context}]
+                            (log/info "Request keys:" (keys request))
+                            (middleware/index anti-forgery-token)
+                            #_{:status 501
+                             :body {:among request
+                                    :errors [{:problem "Need the anti-forgery-token"}]}})}}]
+     ["/api" {}
+      ;; TODO: Look into
+      ;; https://github.com/metosin/reitit/blob/master/examples/pedestal-swagger/src/example/server.clj
+      ;; and really study what's going on here
+      ["/math"
+       {:swagger {:tags ["math"]}}
+       ["/plus"
+        {:get {:summary "plus with spec query parameters"
+               :parameters {:query {:x int? :y int?}}
+               :responses {200 {:body {:total int?}}}
+               :handler (fn [{{{:keys [x y]} :body} :parameters}]
+                          {:status 200
+                           :body {:total (+ x y)}})}}]]]
+     ["/echo" {:get {:swagger {:info {:title "Echo handler"
+                                      :description "To see what the REQUEST looks like"}}
+                     :handler (fn [{:keys [:body
+                                           :context-path
+                                           :form-params
+                                           :headers
+                                           :params
+                                           :path-info
+                                           :path-params
+                                           :query-params
+                                           :query-string
+                                           :muuntaja/request
+                                           :request-method
+                                           :scheme
+                                           :server-name
+                                           :servlet-request
+                                           :uri]
+                                    :as context}]
+                                (comment (log/info "Trying to echo" context
+                                                   "\nkeys:" (keys context)))
+                                (let [body (slurp body)
+                                      response
+                                      {:status 200
+                                       :body {:request (assoc (select-keys context [:context-path
+                                                                                    :form-params
+                                                                                    :headers
+                                                                                    :params
+                                                                                    :path-info
+                                                                                    :path-params
+                                                                                    :query-params
+                                                                                    :query-string
+                                                                                    :muuntaja/request
+                                                                                    :request-method
+                                                                                    :scheme
+                                                                                    :server-name
+                                                                                    :uri])
+                                                              :body body)}}]
+                                  (comment (log/debug "Trying to return\n"
+                                                      (with-out-str (pprint response))))
+                                  response))}}]
+     ["/swagger.json" {:get {:no-doc true
                              :swagger {:info {:title "my-api"
                                               :description "with pedestal & reitit-http"}}
                              :handler (swagger/create-swagger-handler)}}]
-     ;; TODO: Look into
-     ;; https://github.com/metosin/reitit/blob/master/examples/pedestal-swagger/src/example/server.clj
-     ;; and really study what's going on here
-     ["/math"
-      {:swagger {:tags ["math"]}}
-      ["/plus"
-       {:get {:summary "plus with spec query parameters"
-              :parameters {:query {:x int? :y int?}}
-              :responses {200 {:body {:total int?}}}
-              :handler (fn [{{{:keys [x y]} :body} :parameters}]
-                         {:status 200
-                          :body {:total (+ x y)}})}}]]]
+     ;; Q: Does the anti-forgery-token come from middleware/wrap-defaults?
+     ["/wslive.html" {:get {:swagger {:info {:title "w-s-live"
+                                             :description "for interacting with workspaces"}}
+                            :handler (fn [{{:keys [:anti-forgery-token]} :headers
+                                           :as context}]
+                                       {:status 200
+                                        :body (middleware/wslive anti-forgery-token)})}}]]
     {;;reitit.interceptor/transform dev/print-context-diffs  ;; pretty context diffs
      :validate spec/validate ;; enable spec validation for route data
      ;;reitit.spec/wrap spell/closed  ;; strict top-level validation
@@ -109,7 +169,7 @@
 (defstate ^{:on-reload :noop} http-server
   ;; Q: What's a good way to write this?
   :start (reduce (fn [acc delay-time]
-                   (log/debug "Delaying " delay-time " ms")
+                   (log/debug "Delaying" delay-time "ms before trying to start http server")
                    (Thread/sleep delay-time)
                    (try
                      (let [success
@@ -120,23 +180,23 @@
                        (log/warn "Web server attempt #" acc " failed.")
                        ;; Q: Is there a good way to really and truly
                        ;; indicate failure?
+                       (inc acc))
+                     (catch RuntimeException ex
+                       (log/warn ex "RuntimeException. Specifically" (type ex))
+                       (inc acc))
+                     (catch Exception ex
+                       (log/error ex "a" (type ex))
                        (inc acc))))
                  1
-                 [1 10 100])
-  #_(try
-
-           (catch java.net.BindException ex
-             (log/error ex "Sleeping: 1")
-             (try
-               (http/start service-map)
-               (catch java.net.BindException ex
-                 (log/error ex "Sleeping: 10")
-                 (try
-                   (http/start service-map)
-                   (catch java.net.BindException ex
-                     (log/error ex "Sleeping: 100")
-                     ))))))
-  :stop (http/stop service-map))
+                 [1 10 100 1000])
+  :stop (do
+          (log/warn "Web server stopping")
+          (let [stopped (http/stop service-map)]
+            ;; This looks correct.
+            ;; Q: Would it help to build in a delay here until we can no longer
+            ;; connect to (::http/port stopped)?
+            (log/debug "Calling http/stop returned" stopped)
+            stopped)))
 
 (comment
   http-server)
