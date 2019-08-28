@@ -19,6 +19,7 @@
            garden                              {:mvn/version "1.3.6"}
            hiccup                              {:mvn/version "1.0.5"}
            io.pedestal/pedestal.immutant       {:mvn/version "0.5.7"}
+           ;; Q: Would it make sense to switch to a local version?
            io.pedestal/pedestal.service        {:mvn/version "0.5.7"}
            ;; TODO: This is for "ns-watching; WAR tooling"
            ;; Presumably, we want to produce some sort of .war

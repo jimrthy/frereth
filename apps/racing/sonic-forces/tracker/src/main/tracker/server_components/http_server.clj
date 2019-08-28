@@ -2,6 +2,7 @@
   (:require
     [clojure.pprint :refer [pprint]]
     [io.pedestal.http :as http]
+    [io.pedestal.http.csrf :as csrf]
     [mount.core :refer [defstate]]
     [muuntaja.core :as m]
     [reitit.coercion.spec]
@@ -29,14 +30,13 @@
       ;; And probably all the similar variants.
       ;; Q: How does reitit handle that?
       "/" {:get {:no-doc true
-                 :handler (fn [{:keys [:muuntaja/request]
-                                {:keys [:anti-forgery-token]} :headers
+                 :handler (fn [{:keys [::csrf/anti-forgery-token]
                                 :as context}]
-                            (log/info "Request keys:" (keys request))
-                            (middleware/index anti-forgery-token)
-                            #_{:status 501
-                             :body {:among request
-                                    :errors [{:problem "Need the anti-forgery-token"}]}})}}]
+                            {:status 200
+                             ;; FIXME: This needs a content-type
+                             ;; Probably merged with the existing headers
+                             :body
+                             (middleware/index anti-forgery-token)})}}]
      ["/api" {}
       ;; TODO: Look into
       ;; https://github.com/metosin/reitit/blob/master/examples/pedestal-swagger/src/example/server.clj
@@ -137,10 +137,16 @@
     (ring/create-default-handler))))
 
 (defstate service-map
-  :start (let [{:keys [:io.pedestal/http]} config
-               {:keys [:port]} http  ; TODO: nested destructuring
-               ;; TODO: define a default :port value
+  :start (let [{{:keys [:port]
+                 :as http} :io.pedestal/http} config
                local-config {:env :dev   ; Q: ?
+                             ::http/enable-csrf {:cookie-token true
+                                                 :error-handler (fn [context]
+                                                                  (log/error "CSRF attack detected"
+                                                                             (with-out-str (pprint context)))
+                                                                  ;; Q: What's the proper response here?
+                                                                  {:status 401
+                                                                   :body "Authentication required"})}
                              ::http/join? false
                              ::http/port port
                              ;; Using reitit for routing
@@ -151,7 +157,7 @@
                                                                                        :style-src "'self' 'unsafe-inline'"
                                                                                        :script-src "'self' 'unsafe-inline'"}}
                              ::http/type :immutant}]
-           (log/info "Starting HTTP Server with config " (with-out-str (pprint local-config))
+           (log/info "Creatting HTTP Server with config " (with-out-str (pprint local-config))
                      " based on keys "
                      (keys config)
                      "\nin\n"

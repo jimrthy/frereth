@@ -1,4 +1,10 @@
 (ns tracker.server-components.middleware
+  "This was set up as the raw implementation.
+
+  Which is fine, but it includes the request handlers.
+
+  TODO: Move those into handlers.
+  TODO: Move the 'middleware' pieces into a hypothetical interceptor ns"
   (:require
     [tracker.server-components.config :refer [config]]
     [tracker.server-components.pathom :refer [parser]]
@@ -33,7 +39,7 @@
 ;; in a js var for use by the client.
 ;; ================================================================================
 (defn index [csrf-token]
-  (log/debug "Serving index.html")
+  (log/debug "Serving index.html around" csrf-token)
   (html5
     [:html {:lang "en"}
      [:head {:lang "en"}
