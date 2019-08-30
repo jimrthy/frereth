@@ -32,9 +32,19 @@
       "/" {:get {:no-doc true
                  :handler (fn [{:keys [::csrf/anti-forgery-token]
                                 :as context}]
+                            ;; Q: What about setting up a real Pedestal
+                            ;; interceptor?
+                            ;; One that gets the full context, including
+                            ;; the standard request map, and adds a response
+                            ;; to signal that it's been handled?
+                            ;; Based on that approach, io.pedestal.http/html-body
+                            ;; should set the headers appropriately
                             {:status 200
-                             ;; FIXME: This needs a content-type
-                             ;; Probably merged with the existing headers
+                             ;; Contrary to my expectations, this is
+                             ;; case-sensitive
+                             ;; Q: Should I try to match whatever handlers
+                             ;; came in with the request?
+                             :headers {"Content-Type" "text/html"}
                              :body
                              (middleware/index anti-forgery-token)})}}]
      ["/api" {}
