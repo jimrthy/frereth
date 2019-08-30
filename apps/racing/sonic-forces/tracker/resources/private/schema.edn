@@ -1,0 +1,91 @@
+[ {:db/doc "Partition for tracking races"
+  :db/id "race-tracker"
+  :db/ident :race-tracker}
+ [:db/add :db.part/db :db.install/partition "race-tracker"]
+ ;; Account Info
+ {:db/cardinality :db.cardinality/one
+  :db/doc "End-Users associated with this service"
+  :db/ident :account/id
+  :db/index true
+  :db/unique :db.unique/identity
+  :db/valueType :db.type/uuid}
+ {:db/cardinality :db.cardinality/one
+  :db/doc "How we identify a player"
+  :db/ident :account/email
+  :db/index true
+  ;; This screams for an attribute predicate
+  :db/valueType :db.type/string}
+ ;; FIXME: We shouldn't be in this business.
+ ;; Switch to a sane auth mechanism like buddy
+ {:db/cardinality :db.cardinality/one
+  :db/doc "Account's clear-text password"
+  :db/ident :account/proto-password-bad
+  :db/index false
+  :db/valueType :db.type/string}
+ {:db/cardinality :db.cardinality/one
+  :db/doc "Has this account *not* been deactivated?"
+  :db/ident :account/active?
+  :db/index true
+  :db/valueType :db.type/boolean}
+
+ ;; Player "type"
+ {:db/cardinality :db.cardinality/one
+  :db/doc "Player entities represent Sonic Forces accounts"
+  :db/ident :player/id
+  :db/index true
+  :db/unique :db.unique/identity
+  :db/valueType :db.type/uuid}
+ {:db/cardinality :db.cardinality/one  ; This really means many-to-oney
+  :db/doc "Account associated with this Player"
+  :db/ident :player/account
+  :db/index true
+  :db/valueType :db.type/ref}
+ {;; :db.attr/preds not available in datomic free.
+  ;; Sad.
+  ;; I wonder whether I could update the base schema to
+  ;; allow it?
+  ;; #_#_:db.attr/preds `not-neg?
+  :db/cardinality :db.cardinality/one
+  :db/doc "Player's current experience points"
+  :db/ident :player/exp
+  :db/index true
+  :db/valueType :db.type/long}
+ {:db/cardinality :db.cardinality/one
+  :db/doc "Public identifier currently associated with player's account"
+  :db/ident :player/name
+  :db/index true
+  :db/valueType db.type/string}
+ {:db/cardinality :db.cardinality/one
+  :db/doc "Player's account ID. Because the name isn't unique and can change"
+  :db/ident :player.sf/account-id
+  :db/index true
+  :db/unique :db.unique/identity
+  :db/valueType db.type/string}
+ {:db/cardinality :db.cardinality/one
+  :db/doc "Player's current level"
+  :db/ident :player/level
+  :db/index true
+  :db/valueType :db.type/long}
+ {:db/cardinality :db.cardinality/one
+  :db/doc "Player's wealth in rings"
+  :db/ident :player/rings
+  ;; Indexing on this seems dubious.
+  ;; When are we going to run queries based around this?
+  :db/index true
+  :db/valueType :db.type/long}
+ {:db/cardinality :db.cardinality/one
+  :db/doc "Player's wealth in red stars"
+  :db/ident :player/stars
+  ;; Indexing on this seems even more dubious than rings
+  :db/index true
+  :db/valueType :db.type/long}
+ {:db/cardinality :db.cardinality/one
+  :db/doc "Main score keeper"
+  :db/ident :player/trophies
+  :db/index true
+  :db/valueType :db.type/long}
+ {:db/cardinality :db.cardinality/one
+  :db/doc "Historical Ranking"
+  :db/ident :player/prestige
+  :db/index true
+  :db/valueType :db.type/long}]
