@@ -1,9 +1,16 @@
 (ns tracker.application
   (:require [com.fulcrologic.fulcro.networking.http-remote :as net]
-            [com.fulcrologic.fulcro.application :as app]))
+            [com.fulcrologic.fulcro.application :as app]
+            ;; Q: Is this a placeholder for planned future
+            ;; expansion?
+            ;; We established on Slack that Fulcro's author has the
+            ;; same trouble I do with starting on an idea and getting
+            ;; distracted.
+            [com.fulcrologic.fulcro.components :as comp]))
 
 (def secured-request-middleware
   ;; The CSRF token is embedded via server_components/html.clj
+  ;; Q: Does that embedding match what fulcro expects?
   (->
     (net/wrap-csrf-token (or js/fulcro_network_csrf_token "TOKEN-NOT-IN-HTML!"))
     (net/wrap-fulcro-request)))
