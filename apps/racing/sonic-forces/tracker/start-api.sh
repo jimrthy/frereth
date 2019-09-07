@@ -1,4 +1,4 @@
-#! /bin/bash
+#! /bin/sh
 
 # This script really isn't named all that well, due to the CIDER pieces
 
