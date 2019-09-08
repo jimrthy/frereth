@@ -1,15 +1,12 @@
-== FIXME: pull recent updates
+TODO:
 
-This version is based around fulcro-template commit b4ff8e0.
-
-There have been major, important changes over the course of the past 24
-hours.
-
-Those changes include (but probably aren't limited to)
-1. Moving F3 into beta
-2. Getting workspaces working
+* Get the basic web app working again under reitit and pedestal
+* Get workspaces working
 
 == The Project
+
+This is basically a clone of the fulcro-template that I've started
+tweaking for my own purposes.
 
 NOTE: This template is in progress. It should be working, but is intended to have a lot more features.
 
@@ -99,7 +96,7 @@ see [the Shadow-cljs User's Guide](https://shadow-cljs.github.io/docs/UsersGuide
 and the comments in `deps.edn` for more information.
 
 Short version:
-Don't try to run from the command line.
+Ignore all those previous instructions.
 
 - M-x cider-jack-in-cljs
 - Q: Which command should be used?
@@ -118,7 +115,7 @@ Later, once the API server is running, and you've browsed to your app
 
 === The API Server
 
-In order to work with your main application you'll want to
+In order to work with your main application you have to
 start your own server that can also serve your application's API.
 
 Start a LOCAL clj nREPL in IntelliJ (using IntelliJ's classpath with
@@ -141,6 +138,9 @@ of Clojure spec that makes instrumentation and production-time elision (for perf
 
 NOTE: For real development, please use an editor that has REPL integration, like Cursive (recommended) or
 Spacemacs.
+
+Or use the `start-api-with-cider.sh` script to start an nrepl server in
+one shell and connect to it from CIDER.
 
 The URL to work on your application is then
 [http://localhost:3000](http://localhost:3000).

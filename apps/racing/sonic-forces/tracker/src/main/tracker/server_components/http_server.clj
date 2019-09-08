@@ -23,6 +23,10 @@
     [tracker.server-components.config :refer [config]]
     [tracker.server-components.middleware :as middleware]))
 
+;; Q: If I convert this to defstate, will it correctly update
+;; the server on a recompile?
+;; alt: Set this up as a function that gets called each time
+;; to allow dynamic redefinition at dev time
 (def router
   (pedestal/routing-interceptor
    (reitit.http/router
@@ -100,6 +104,7 @@
                                   (comment (log/debug "Trying to return\n"
                                                       (with-out-str (pprint response))))
                                   response))}}]
+     ["/static/*" (ring/create-resource-handler)]
      ["/swagger.json" {:get {:no-doc true
                              :swagger {:info {:title "my-api"
                                               :description "with pedestal & reitit-http"}}
@@ -146,7 +151,7 @@
     (ring/create-resource-handler)
     (ring/create-default-handler))))
 
-(defstate service-map
+(defstate ^{:on-reload :noop} service-map
   :start (let [{{:keys [:port]
                  :as http} :io.pedestal/http} config
                local-config {:env :dev   ; Q: ?
@@ -163,8 +168,21 @@
                              ::http/routes []
                              ;; Allow serving the swagger-ui styles and scripts from self
                              ::http/secure-headers {:content-security-policy-settings {:default-src "'self'"
+                                                                                       ;; This is a weird conflameration that
+                                                                                       ;; probably only applies to dev mode
+                                                                                       :connect-src "http://localhost:3000 ws://localhost:9630"
+                                                                                       ;; "data:" is explicitly called out in the spec as
+                                                                                       ;; insecure.
+                                                                                       ;; TODO: track down better alternatives
+                                                                                       :font-src "https://fonts.gstatic.com http://localhost:3000 data:"
+                                                                                       ;; This is generally considered unsafe.
+                                                                                       ;; It's required for specifying the favicon
+                                                                                       ;; the way we aren't [quite] doing.
+                                                                                       ;; The specs make it clear that a blob: URI
+                                                                                       ;; would be much safer. Q: Is that an option?
+                                                                                       :img-src "data:"
                                                                                        ;; really?!
-                                                                                       :style-src "'self' 'unsafe-inline'"
+                                                                                       :style-src "'self' 'unsafe-inline' https://fonts.googleapis.com"
                                                                                        :script-src "'self' 'unsafe-inline'"}}
                              ::http/type :immutant}]
            (log/info "Creatting HTTP Server with config " (with-out-str (pprint local-config))
