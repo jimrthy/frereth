@@ -9,7 +9,7 @@
            ;; 2.2.23 was released on 2019-AUG-15.
            ;; Q: Is it backwards-compatible enough?
            com.wsscode/pathom                  {:mvn/version "2.2.15"}
-           com.fulcrologic/fulcro              {:mvn/version "3.0.0-beta-13"}
+           com.fulcrologic/fulcro              {:mvn/version "3.0.0-beta-14"}
            com.fulcrologic/fulcro-garden-css   {:mvn/version "3.0.6"}
            com.fulcrologic/semantic-ui-wrapper {:mvn/version "1.0.0"}
            ;; To simulate Datomic on the back-end

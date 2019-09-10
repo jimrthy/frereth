@@ -1,6 +1,7 @@
 (ns tracker.server-components.http-server
   (:require
-    [clojure.pprint :refer [pprint]]
+   [clojure.pprint :refer [pprint]]
+   [com.fulcrologic.fulcro.server.api-middleware :as fulcro-middleware]
     [io.pedestal.http :as http]
     [io.pedestal.http.csrf :as csrf]
     [mount.core :refer [defstate]]
@@ -21,7 +22,9 @@
     ;; TODO: convert this to frereth.weald
     [taoensso.timbre :as log]
     [tracker.server-components.config :refer [config]]
-    [tracker.server-components.middleware :as middleware]))
+    [tracker.server-components.interceptors :as interceptors]
+    [tracker.server-components.middleware :as middleware]
+    [tracker.server-components.pathom :as pathom]))
 
 ;; Q: If I convert this to defstate, will it correctly update
 ;; the server on a recompile?
@@ -51,7 +54,34 @@
                              :headers {"Content-Type" "text/html"}
                              :body
                              (middleware/index anti-forgery-token)})}}]
-     ["/api" {}
+     ["/api" {:post {:summary "Generic fulcro handler"
+                     :handler (fn [{:keys [:headers :params :session :transit-params]
+                                    session-key :session/key
+                                 :as context}]
+                             (log/debug "API handler:\n\tParameter Keys:"
+                                        (keys params)
+                                        "\nParameters:\n"
+                                        (with-out-str (pprint params))
+                                        "transit-params:\n"
+                                        (with-out-str (pprint transit-params))
+                                        "headers:\n"
+                                        (with-out-str (pprint headers))
+                                        "for session: "
+                                        session-key
+                                        "\ncontaining\n"
+                                        (with-out-str (pprint session))
+                                        "based on context-keys:\n"
+                                        (keys context))
+                                (let [response (fulcro-middleware/handle-api-request {:transit-params transit-params
+                                                                                      :parser pathom/parser})]
+                               #_{:status 200
+                                  :body response}
+                               (log/debug "API handler response:\n"
+                                          (with-out-str (pprint response)))
+                               response))
+                     ;; Q: Do I want to add anything extra in here?
+                     #_#_:interceptors []}}]
+     ["/rest"
       ;; TODO: Look into
       ;; https://github.com/metosin/reitit/blob/master/examples/pedestal-swagger/src/example/server.clj
       ;; and really study what's going on here
@@ -125,7 +155,9 @@
             ;; Fast format negotiation, encoding, and encoding
             ;; This is "the boring library everyone should use"
             :muuntaja m/instance
+            ;; TODO: Need a logging interceptor
             :interceptors [swagger/swagger-feature
+                           interceptors/logger!
                            ;; query-params and form-params
                            (parameters/parameters-interceptor)
                            ;; content-negotiation

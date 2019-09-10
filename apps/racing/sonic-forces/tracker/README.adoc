@@ -115,8 +115,10 @@ Later, once the API server is running, and you've browsed to your app
 
 === The API Server
 
-In order to work with your main application you have to
-start your own server that can also serve your application's API.
+In order to work with your main application you have to also
+start your own server that can serve your application's API.
+
+Note that this seems to be totally distinct from the shadow-cljs JVM.
 
 Start a LOCAL clj nREPL in IntelliJ (using IntelliJ's classpath with
 the `dev` alias selected in the Clojure Deps tab), or from the command line:
