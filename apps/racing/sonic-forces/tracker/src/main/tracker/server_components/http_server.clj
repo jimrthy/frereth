@@ -55,7 +55,7 @@
                              :body
                              (middleware/index anti-forgery-token)})}}]
      ["/api" {:post {:summary "Generic fulcro handler"
-                     :handler (fn [{:keys [:headers :params :session :transit-params]
+                     :handler (fn [{:keys [:headers :params :muuntaja/request :session :transit-params]
                                     session-key :session/key
                                  :as context}]
                              (log/debug "API handler:\n\tParameter Keys:"
@@ -72,13 +72,23 @@
                                         (with-out-str (pprint session))
                                         "based on context-keys:\n"
                                         (keys context))
-                                (let [response (fulcro-middleware/handle-api-request {:transit-params transit-params
-                                                                                      :parser pathom/parser})]
-                               #_{:status 200
-                                  :body response}
-                               (log/debug "API handler response:\n"
-                                          (with-out-str (pprint response)))
-                               response))
+                                (try
+                                  (let [response (fulcro-middleware/handle-api-request transit-params
+                                                                                       ;; This feels overly convoluted, since
+                                                                                       ;; tx is just the transit-params.
+                                                                                       ;; But it does add some useful functionality,
+                                                                                       ;; so don't mess with it.
+                                                                                       (fn [tx]
+                                                                                         (pathom/parser request tx)))]
+                                    #_{:status 200
+                                       :body response}
+                                    (log/debug "API handler response:\n"
+                                               (with-out-str (pprint response)))
+                                    response)
+                                  (catch Exception ex
+                                    (log/error ex "API handler failed")
+                                    {:status 500
+                                     :body "oops"})))
                      ;; Q: Do I want to add anything extra in here?
                      #_#_:interceptors []}}]
      ["/rest"
