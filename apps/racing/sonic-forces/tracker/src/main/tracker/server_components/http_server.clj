@@ -1,30 +1,34 @@
 (ns tracker.server-components.http-server
   (:require
    [clojure.pprint :refer [pprint]]
-   [com.fulcrologic.fulcro.server.api-middleware :as fulcro-middleware]
-    [io.pedestal.http :as http]
-    [io.pedestal.http.csrf :as csrf]
-    [mount.core :refer [defstate]]
-    [muuntaja.core :as m]
-    [reitit.coercion.spec]
-    [reitit.dev.pretty :as pretty]
-    [reitit.http.coercion :as coercion]
-    [reitit.http.interceptors.exception :as exception]
-    [reitit.http.interceptors.multipart :as multipart]
-    [reitit.http.interceptors.muuntaja :as muuntaja]
-    [reitit.http.interceptors.parameters :as parameters]
-    [reitit.http.spec :as spec]
-    [reitit.pedestal :as pedestal]
-    [reitit.ring :as ring]
-    [reitit.swagger :as swagger]
-    [reitit.swagger-ui :as swagger-ui]
+   [io.pedestal.http :as http]
+   [io.pedestal.http.csrf :as csrf]
+   [mount.core :refer [defstate]]
+   ;; FIXME: This really isn't worthy of a single
+   ;; character alias
+   [muuntaja.core :as m]
+   [reitit.coercion.spec]
+   [reitit.dev.pretty :as pretty]
+   [reitit.http.coercion :as coercion]
+   [reitit.http.interceptors.exception :as exception]
+   [reitit.http.interceptors.multipart :as multipart]
+   ;; FIXME: Change this alias to something like muuntaja-intc
+   ;; So I can change the muuntaja.core above to muuntaja
+   [reitit.http.interceptors.muuntaja :as muuntaja]
+   [reitit.http.interceptors.parameters :as parameters]
+   [reitit.http.spec :as spec]
+   [reitit.pedestal :as pedestal]
+   [reitit.ring :as ring]
+   [reitit.swagger :as swagger]
+   [reitit.swagger-ui :as swagger-ui]
 
-    ;; TODO: convert this to frereth.weald
-    [taoensso.timbre :as log]
-    [tracker.server-components.config :refer [config]]
-    [tracker.server-components.interceptors :as interceptors]
-    [tracker.server-components.middleware :as middleware]
-    [tracker.server-components.pathom :as pathom]))
+   ;; TODO: convert this to frereth.weald
+   [taoensso.timbre :as log]
+
+   [tracker.server-components.config :refer [config]]
+   [tracker.server-components.handlers :as handlers]
+   [tracker.server-components.interceptors :as interceptors]
+   [tracker.server-components.middleware :as middleware]))
 
 ;; Q: If I convert this to defstate, will it correctly update
 ;; the server on a recompile?
@@ -55,40 +59,7 @@
                              :body
                              (middleware/index anti-forgery-token)})}}]
      ["/api" {:post {:summary "Generic fulcro handler"
-                     :handler (fn [{:keys [:headers :params :muuntaja/request :session :transit-params]
-                                    session-key :session/key
-                                 :as context}]
-                             (log/debug "API handler:\n\tParameter Keys:"
-                                        (keys params)
-                                        "\nParameters:\n"
-                                        (with-out-str (pprint params))
-                                        "transit-params:\n"
-                                        (with-out-str (pprint transit-params))
-                                        "headers:\n"
-                                        (with-out-str (pprint headers))
-                                        "for session: "
-                                        session-key
-                                        "\ncontaining\n"
-                                        (with-out-str (pprint session))
-                                        "based on context-keys:\n"
-                                        (keys context))
-                                (try
-                                  (let [response (fulcro-middleware/handle-api-request transit-params
-                                                                                       ;; This feels overly convoluted, since
-                                                                                       ;; tx is just the transit-params.
-                                                                                       ;; But it does add some useful functionality,
-                                                                                       ;; so don't mess with it.
-                                                                                       (fn [tx]
-                                                                                         (pathom/parser request tx)))]
-                                    #_{:status 200
-                                       :body response}
-                                    (log/debug "API handler response:\n"
-                                               (with-out-str (pprint response)))
-                                    response)
-                                  (catch Exception ex
-                                    (log/error ex "API handler failed")
-                                    {:status 500
-                                     :body "oops"})))
+                     :handler handlers/api
                      ;; Q: Do I want to add anything extra in here?
                      #_#_:interceptors []}}]
      ["/rest"
@@ -106,44 +77,7 @@
                            :body {:total (+ x y)}})}}]]]
      ["/echo" {:get {:swagger {:info {:title "Echo handler"
                                       :description "To see what the REQUEST looks like"}}
-                     :handler (fn [{:keys [:body
-                                           :context-path
-                                           :form-params
-                                           :headers
-                                           :params
-                                           :path-info
-                                           :path-params
-                                           :query-params
-                                           :query-string
-                                           :muuntaja/request
-                                           :request-method
-                                           :scheme
-                                           :server-name
-                                           :servlet-request
-                                           :uri]
-                                    :as context}]
-                                (comment (log/info "Trying to echo" context
-                                                   "\nkeys:" (keys context)))
-                                (let [body (slurp body)
-                                      response
-                                      {:status 200
-                                       :body {:request (assoc (select-keys context [:context-path
-                                                                                    :form-params
-                                                                                    :headers
-                                                                                    :params
-                                                                                    :path-info
-                                                                                    :path-params
-                                                                                    :query-params
-                                                                                    :query-string
-                                                                                    :muuntaja/request
-                                                                                    :request-method
-                                                                                    :scheme
-                                                                                    :server-name
-                                                                                    :uri])
-                                                              :body body)}}]
-                                  (comment (log/debug "Trying to return\n"
-                                                      (with-out-str (pprint response))))
-                                  response))}}]
+                     :handler handlers/echo}}]
      ["/static/*" (ring/create-resource-handler)]
      ["/swagger.json" {:get {:no-doc true
                              :swagger {:info {:title "my-api"
