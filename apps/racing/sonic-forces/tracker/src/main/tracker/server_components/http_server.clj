@@ -99,7 +99,6 @@
             ;; Fast format negotiation, encoding, and encoding
             ;; This is "the boring library everyone should use"
             :muuntaja m/instance
-            ;; TODO: Need a logging interceptor
             :interceptors [swagger/swagger-feature
                            interceptors/logger!
                            ;; query-params and form-params
@@ -112,8 +111,18 @@
                            (exception/exception-interceptor)
                            ;; decoding request body
                            (muuntaja/format-request-interceptor)
+                           {:leave (fn [{:keys [:response]
+                                         :as ctx}]
+                                     (log/info "Coerced response:\n"
+                                                (with-out-str (pprint response)))
+                                     ctx)}
                            ;; coercing response bodies
                            (coercion/coerce-response-interceptor)
+                           {:leave (fn [{:keys [:response]
+                                         :as ctx}]
+                                     (log/info "Coercing response:\n"
+                                                (with-out-str (pprint response)))
+                                     ctx)}
                            ;; coercing request parameters
                            (coercion/coerce-request-interceptor)
                            ;; multipart
