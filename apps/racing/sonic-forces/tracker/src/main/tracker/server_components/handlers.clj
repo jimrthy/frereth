@@ -2,6 +2,7 @@
   ;; TODO: Move these out of middleware
   "Handle the actual requests"
   (:require
+   [clojure.data :as data]
    [clojure.pprint :refer (pprint)]
    [com.fulcrologic.fulcro.server.api-middleware :as fulcro-middleware]
    [taoensso.timbre :as log]
@@ -40,16 +41,28 @@
     ;; (generate-response) ensures it has both status and body
     ;; and at least the "application/transit+json" "Content-Type"
     ;; header.
-    (let [response (fulcro-middleware/handle-api-request body-params
+    (let [#_#_response (fulcro-middleware/handle-api-request body-params
                                                          ;; This feels overly convoluted, since
                                                          ;; tx is just the transit-params.
                                                          ;; But it does add some useful functionality,
                                                          ;; so don't mess with it.
                                                          (fn [tx]
-                                                           (pathom/parser request tx)))]
-      (log/debug "API handler response:\n"
-                 (with-out-str (pprint response)))
-      response)
+                                                           (pathom/parser request tx)))
+          parse-result (pathom/parser request body-params)]
+      (log/debug "Parser returned:\n"
+                 (with-out-str (pprint parse-result)))
+      (if (instance? Throwable parse-result)
+        {:status 500 :body "Internal server error. Parser threw an exception. See server logs for details."}
+        (let [augmented (fulcro-middleware/apply-response-augmentations parse-result)]
+          ;; The augmentation isn't doing anything.
+          ;; Q: Should it?
+          (log/debug "Augmentation:" (into []
+                                           (data/diff parse-result augmented)))
+          (let [response (merge {:status 200 :body parse-result}
+                                augmented)]
+            (log/debug "API handler response:\n"
+                       (with-out-str (pprint response)))
+            response))))
     (catch Exception ex
       (log/error ex "API handler failed")
       ;; Returning a 500 error indicates a pretty serious bug.
