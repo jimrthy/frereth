@@ -95,7 +95,10 @@
      ;;reitit.spec/wrap spell/closed  ;; strict top-level validation
      ;; Q: Should this be dev-time only? If so, how?
      :exception pretty/exception
-     :data {:coercion reitit.coercion.spec/coercion
+     :data {;; The coercion is used by reitit.http.coercion to...
+            ;; probably make sure that...what?
+            ;; It looks like it has something to do with swagger.
+            :coercion reitit.coercion.spec/coercion
             ;; Fast format negotiation, encoding, and encoding
             ;; This is "the boring library everyone should use"
             :muuntaja m/instance
@@ -114,14 +117,18 @@
                            {:leave (fn [{:keys [:response]
                                          :as ctx}]
                                      (log/info "Coerced response:\n"
-                                                (with-out-str (pprint response)))
+                                               (with-out-str (pprint response))
+                                               "Type of :body -- "
+                                               (-> response :body type))
                                      ctx)}
                            ;; coercing response bodies
                            (coercion/coerce-response-interceptor)
                            {:leave (fn [{:keys [:response]
                                          :as ctx}]
                                      (log/info "Coercing response:\n"
-                                                (with-out-str (pprint response)))
+                                               (with-out-str (pprint response))
+                                               "Type of :body -- "
+                                               (-> response :body type))
                                      ctx)}
                            ;; coercing request parameters
                            (coercion/coerce-request-interceptor)
@@ -133,6 +140,8 @@
      {:path "/swagger-ui"
       :config {:validatorUrl nil
                :operationsSorter "alpha"}})
+    ;; This basically adds a handler for index.html
+    ;; Q: Does it make any sense here?
     (ring/create-resource-handler)
     (ring/create-default-handler))))
 
@@ -140,7 +149,8 @@
   :start (let [{{:keys [:port]
                  :as http} :io.pedestal/http} config
                local-config {:env :dev   ; Q: ?
-                             ::http/enable-csrf {:cookie-token true
+                             ;; TODO: Re-enable this
+                             #_#_::http/enable-csrf {:cookie-token true
                                                  :error-handler (fn [context]
                                                                   (log/error "CSRF attack detected"
                                                                              (with-out-str (pprint context)))

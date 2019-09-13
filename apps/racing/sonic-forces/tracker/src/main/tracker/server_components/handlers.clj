@@ -8,15 +8,19 @@
    [tracker.server-components.pathom :as pathom]))
 
 (defn api
-  [{:keys [:headers :params :muuntaja/request :session :transit-params]
+  [{:keys [:body-params :headers :params :muuntaja/request :session :transit-params]
     session-key :session/key
     :as context}]
+  ;; Both params and transit-params are nil.
+  ;; This means parameter extraction middleware isn't working.
   (log/debug "API handler:\n\tParameter Keys:"
              (keys params)
              "\nParameters:\n"
              (with-out-str (pprint params))
              "transit-params:\n"
              (with-out-str (pprint transit-params))
+             "body-params:\n"
+             (with-out-str (pprint body-params))
              "headers:\n"
              (with-out-str (pprint headers))
              "for session: "
@@ -26,7 +30,17 @@
              "based on context-keys:\n"
              (keys context))
   (try
-    (let [response (fulcro-middleware/handle-api-request transit-params
+    ;; handle-api-request calls the fn on body-params.
+    ;; On success, it calls (fulcro-middleware/apply-response-augmentations)
+    ;; to call augmentation functions that were added by calls to
+    ;; fulcro-middleware/augment-response.
+    ;; It sets up a {:status 200} response map with the
+    ;; parse-result as the body and the augmentations merged in.
+    ;; *Then* it calls fulcro-middleware/generate-response on it.
+    ;; (generate-response) ensures it has both status and body
+    ;; and at least the "application/transit+json" "Content-Type"
+    ;; header.
+    (let [response (fulcro-middleware/handle-api-request body-params
                                                          ;; This feels overly convoluted, since
                                                          ;; tx is just the transit-params.
                                                          ;; But it does add some useful functionality,
