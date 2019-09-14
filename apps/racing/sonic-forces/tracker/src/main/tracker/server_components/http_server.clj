@@ -66,6 +66,11 @@
       ;; TODO: Look into
       ;; https://github.com/metosin/reitit/blob/master/examples/pedestal-swagger/src/example/server.clj
       ;; and really study what's going on here
+      ;; Advice from #fulcro on clojurians: just make any given RESTful
+      ;; endpoint a wrapper around a hard-coded pathom query.
+      ;; This sort of scenario *is* pretty common: your UI uses
+      ;; the /api fulcro interface while enterprise customers
+      ;; use a standard HTTP API.
       ["/math"
        {:swagger {:tags ["math"]}}
        ["/plus"
@@ -114,22 +119,8 @@
                            (exception/exception-interceptor)
                            ;; decoding request body
                            (muuntaja/format-request-interceptor)
-                           {:leave (fn [{:keys [:response]
-                                         :as ctx}]
-                                     (log/info "Coerced response:\n"
-                                               (with-out-str (pprint response))
-                                               "Type of :body -- "
-                                               (-> response :body type))
-                                     ctx)}
                            ;; coercing response bodies
                            (coercion/coerce-response-interceptor)
-                           {:leave (fn [{:keys [:response]
-                                         :as ctx}]
-                                     (log/info "Coercing response:\n"
-                                               (with-out-str (pprint response))
-                                               "Type of :body -- "
-                                               (-> response :body type))
-                                     ctx)}
                            ;; coercing request parameters
                            (coercion/coerce-request-interceptor)
                            ;; multipart
@@ -149,8 +140,9 @@
   :start (let [{{:keys [:port]
                  :as http} :io.pedestal/http} config
                local-config {:env :dev   ; Q: ?
-                             ;; TODO: Re-enable this
-                             #_#_::http/enable-csrf {:cookie-token true
+                             ;; Q: Is there a good way to disable this from
+                             ;; something like curl for debugging?
+                             ::http/enable-csrf {:cookie-token true
                                                  :error-handler (fn [context]
                                                                   (log/error "CSRF attack detected"
                                                                              (with-out-str (pprint context)))
@@ -196,7 +188,6 @@
                (http/create-server))))
 
 (defstate ^{:on-reload :noop} http-server
-  ;; Q: What's a good way to write this?
   :start (reduce (fn [acc delay-time]
                    (log/debug "Delaying" delay-time "ms before trying to start http server")
                    (Thread/sleep delay-time)

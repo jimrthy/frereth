@@ -1,12 +1,18 @@
-TODO:
-
-* Get the basic web app working again under reitit and pedestal
+.TODO:
 * Get workspaces working
+*  .Schema for
+   * racers
+   * races
+   * missions
+   * chests
+* Set up data import
 
 == The Project
 
-This is basically a clone of the fulcro-template that I've started
-tweaking for my own purposes.
+It started life as a copy/paste of the fulcro3 template. Have
+converted much of its underlying technology with the aim of bending it
+around to tech that I think I want to focus on for the web app
+interaction portions of frereth.
 
 NOTE: This template is in progress. It should be working, but is intended to have a lot more features.
 

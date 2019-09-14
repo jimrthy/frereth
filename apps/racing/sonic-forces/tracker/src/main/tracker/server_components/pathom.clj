@@ -44,8 +44,7 @@
 (defn build-parser [db-uri]
   (let [db-connection (d/connect db-uri)
         real-parser (p/parallel-parser
-                     {
-                      ::p/env     {::p/reader               [p/map-reader pc/parallel-reader
+                     {::p/env     {::p/reader               [p/map-reader pc/parallel-reader
                                                              pc/open-ident-reader p/env-placeholder-reader]
                                    ::p/placeholder-prefixes #{">"}}
                       ::p/mutate  pc/mutate-async
@@ -54,7 +53,7 @@
                                                         ;; Here is where you can dynamically add things to the resolver/mutation
                                                         ;; environment, like the server config, database connections, etc.
                                                         (assoc env
-                                                               :connection db-connection
+                                                               :connection db-connection  ; Q: why not just the uri?
                                                                :config config)))
                                    (preprocess-parser-plugin log-requests)
                                    p/error-handler-plugin

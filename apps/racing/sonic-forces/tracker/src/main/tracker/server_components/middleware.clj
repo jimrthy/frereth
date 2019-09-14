@@ -26,15 +26,6 @@
      :body    "NOPE"}))
 
 
-(comment
-  (defn wrap-api [handler uri]
-    (fn [request]
-      (if (= uri (:uri request))
-        (handle-api-request
-         (:transit-params request)
-         (fn [tx] (parser {:ring/request request} tx)))
-        (handler request)))))
-
 ;; ================================================================================
 ;; Dynamically generated HTML. We do this so we can safely embed the CSRF token
 ;; in a js var for use by the client.
@@ -91,20 +82,3 @@
 
       :else
       (ring-handler req))))
-
-(comment
-  (defstate middleware
-    :start
-    (let [defaults-config (:ring.middleware/defaults-config config)
-          legal-origins   (get config :legal-origins #{"localhost"})]
-      (-> not-found-handler
-          (wrap-api "/api")
-          wrap-transit-params
-          wrap-transit-response
-          (wrap-html-routes)
-          ;; If you want to set something like session store, you'd do it against
-          ;; the defaults-config here (which comes from an EDN file, so it can't have
-          ;; code initialized).
-          ;; E.g. (wrap-defaults (assoc-in defaults-config [:session :store] (my-store)))
-          (wrap-defaults defaults-config)
-          wrap-gzip))))

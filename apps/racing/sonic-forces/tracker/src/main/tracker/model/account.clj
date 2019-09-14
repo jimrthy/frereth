@@ -10,6 +10,7 @@
 (defn q-all-account-ids
   [db]
   ;; Q: What does the ... mean here?
+  ;; A: It returns a collection
   (d/q '[:find [?v ...]
          :where
          [?e :account/active? true]

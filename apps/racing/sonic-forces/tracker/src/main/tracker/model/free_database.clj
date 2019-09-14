@@ -80,11 +80,21 @@
 
   (let [conn (d/connect db-uri)
         db (d/db conn)
-        raw (d/q '[:find ?e #_?password
+        raw (d/q '[:find ?e ?password
                    :in $ ?email
                    :where [?e :account/email]
-                ;;   [?e :account/proto-password-bad ?password]
+                   [?e :account/proto-password-bad ?password]
                    ]
-                 db "jamesgatannah@gmail.com")]
+                 db "foo@bar.baz")]
+    raw)
+
+    (let [conn (d/connect db-uri)
+        db (d/db conn)
+        raw (d/q '[:find ?email ?password
+                   :in $
+                   :where [?e :account/email ?email]
+                   [?e :account/proto-password-bad ?password]
+                   ]
+                 db)]
     raw)
   )

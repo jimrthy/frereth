@@ -1,4 +1,4 @@
-[ {:db/doc "Partition for tracking races"
+[{:db/doc "Partition for tracking races"
   :db/id "race-tracker"
   :db/ident :race-tracker}
  [:db/add :db.part/db :db.install/partition "race-tracker"]

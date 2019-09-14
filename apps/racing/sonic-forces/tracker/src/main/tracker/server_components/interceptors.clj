@@ -1,9 +1,15 @@
 (ns tracker.server-components.interceptors
+  "Anything that's legit middleware belongs in here"
   (:require
    [clojure.pprint :refer (pprint)]
    [taoensso.timbre :as log]))
 
 (def logger!
+  ;; This really should be a function that returns the interceptors
+  ;; as a lexical closure with something like a UUID.
+  ;; I've already hit a point where I wanted this at several different
+  ;; layers. Couldn't do that because the ::internal-id would
+  ;; conflict
   {:name ::logger!
    :enter (fn [{:keys [:request]
                 :as ctx}]
