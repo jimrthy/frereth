@@ -9,7 +9,7 @@
            ;; 2.2.23 was released on 2019-AUG-15.
            ;; Q: Is it backwards-compatible enough?
            com.wsscode/pathom                  {:mvn/version "2.2.15"}
-           com.fulcrologic/fulcro              {:mvn/version "3.0.0-beta-13"}
+           com.fulcrologic/fulcro              {:mvn/version "3.0.0-beta-14"}
            com.fulcrologic/fulcro-garden-css   {:mvn/version "3.0.6"}
            com.fulcrologic/semantic-ui-wrapper {:mvn/version "1.0.0"}
            ;; To simulate Datomic on the back-end
@@ -25,6 +25,8 @@
            io.pedestal/pedestal.service-tools  {:mvn/version "0.5.7"}
            metosin/reitit-pedestal             {:mvn/version "0.3.9"}
            metosin/reitit                      {:mvn/version "0.3.9"}
+           ;; Q: Does this make any sense?
+           ;; Does it make more sense than metosin/spec-tools?
            metosin/reitit-swagger-ui           {:mvn/version "0.3.9"}
            mount                               {:mvn/version "0.1.12"}
            org.clojure/core.async              {:mvn/version "0.4.500"}

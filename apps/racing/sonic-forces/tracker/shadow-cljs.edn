@@ -2,7 +2,7 @@
  :nrepl  {:port 9000}
  :builds {:main     {:target     :browser
                      :output-dir "resources/public/js/main"
-                     :asset-path "/js/main"
+                     :asset-path "/static/js/main"
 
                      :modules    {:main {:init-fn tracker.client/init
                                          :entries [tracker.client]}}
@@ -32,7 +32,7 @@
           :workspaces {:target     nubank.workspaces.shadow-cljs.target
                            :ns-regexp  "-(test|ws)$"
                            :output-dir "resources/public/workspaces/js"
-                           :asset-path "/workspaces/js"
+                           :asset-path "/static/workspaces/js"
                            :devtools   {:preloads           [com.fulcrologic.fulcro.inspect.preload]
                                         :http-root          "resources/public"
                                         :http-port          8023

@@ -1,15 +1,18 @@
-== FIXME: pull recent updates
-
-This version is based around fulcro-template commit b4ff8e0.
-
-There have been major, important changes over the course of the past 24
-hours.
-
-Those changes include (but probably aren't limited to)
-1. Moving F3 into beta
-2. Getting workspaces working
+.TODO:
+* Get workspaces working
+*  .Schema for
+   * racers
+   * races
+   * missions
+   * chests
+* Set up data import
 
 == The Project
+
+It started life as a copy/paste of the fulcro3 template. Have
+converted much of its underlying technology with the aim of bending it
+around to tech that I think I want to focus on for the web app
+interaction portions of frereth.
 
 NOTE: This template is in progress. It should be working, but is intended to have a lot more features.
 
@@ -99,7 +102,7 @@ see [the Shadow-cljs User's Guide](https://shadow-cljs.github.io/docs/UsersGuide
 and the comments in `deps.edn` for more information.
 
 Short version:
-Don't try to run from the command line.
+Ignore all those previous instructions.
 
 - M-x cider-jack-in-cljs
 - Q: Which command should be used?
@@ -118,8 +121,10 @@ Later, once the API server is running, and you've browsed to your app
 
 === The API Server
 
-In order to work with your main application you'll want to
-start your own server that can also serve your application's API.
+In order to work with your main application you have to also
+start your own server that can serve your application's API.
+
+Note that this seems to be totally distinct from the shadow-cljs JVM.
 
 Start a LOCAL clj nREPL in IntelliJ (using IntelliJ's classpath with
 the `dev` alias selected in the Clojure Deps tab), or from the command line:
@@ -141,6 +146,9 @@ of Clojure spec that makes instrumentation and production-time elision (for perf
 
 NOTE: For real development, please use an editor that has REPL integration, like Cursive (recommended) or
 Spacemacs.
+
+Or use the `start-api-with-cider.sh` script to start an nrepl server in
+one shell and connect to it from CIDER.
 
 The URL to work on your application is then
 [http://localhost:3000](http://localhost:3000).

@@ -26,14 +26,6 @@
      :body    "NOPE"}))
 
 
-(defn wrap-api [handler uri]
-  (fn [request]
-    (if (= uri (:uri request))
-      (handle-api-request
-        (:transit-params request)
-        (fn [tx] (parser {:ring/request request} tx)))
-      (handler request))))
-
 ;; ================================================================================
 ;; Dynamically generated HTML. We do this so we can safely embed the CSRF token
 ;; in a js var for use by the client.
@@ -46,13 +38,14 @@
       [:title "Application"]
       [:meta {:charset "utf-8"}]
       [:meta {:name "viewport" :content "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"}]
-      [:link {:href "https://cdnjs.cloudflare.com/ajax/libs/semantic-ui/2.4.1/semantic.min.css"
+      [:link {:href "/static/css/semantic.min.css"
               :rel  "stylesheet"}]
+      ;; TODO: add a favicon
       [:link {:rel "shortcut icon" :href "data:image/x-icon;," :type "image/x-icon"}]
       [:script (str "var fulcro_network_csrf_token = '" csrf-token "';")]]
      [:body
       [:div#app]
-      [:script {:src "js/main/main.js"}]]]))
+      [:script {:src "/static/js/main/main.js"}]]]))
 
 ;; ================================================================================
 ;; Workspaces can be accessed via shadow's http server on http://localhost:8023/workspaces.html
@@ -67,7 +60,7 @@
       [:title "devcards"]
       [:meta {:charset "utf-8"}]
       [:meta {:name "viewport" :content "width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no"}]
-      [:link {:href "https://cdnjs.cloudflare.com/ajax/libs/semantic-ui/2.4.1/semantic.min.css"
+      [:link {:href "/static/css/semantic.min.css"
               :rel  "stylesheet"}]
       [:link {:rel "shortcut icon" :href "data:image/x-icon;," :type "image/x-icon"}]
       [:script (str "var fulcro_network_csrf_token = '" csrf-token "';")]]
@@ -89,19 +82,3 @@
 
       :else
       (ring-handler req))))
-
-(defstate middleware
-  :start
-  (let [defaults-config (:ring.middleware/defaults-config config)
-        legal-origins   (get config :legal-origins #{"localhost"})]
-    (-> not-found-handler
-      (wrap-api "/api")
-      wrap-transit-params
-      wrap-transit-response
-      (wrap-html-routes)
-      ;; If you want to set something like session store, you'd do it against
-      ;; the defaults-config here (which comes from an EDN file, so it can't have
-      ;; code initialized).
-      ;; E.g. (wrap-defaults (assoc-in defaults-config [:session :store] (my-store)))
-      (wrap-defaults defaults-config)
-      wrap-gzip)))
