@@ -88,4 +88,53 @@
   :db/doc "Historical Ranking"
   :db/ident :player/prestige
   :db/index true
-  :db/valueType :db.type/long}]
+  :db/valueType :db.type/long}
+
+ ;; Characters
+ ;; These are the generic templates that define who your Racers are
+
+ {:db/cardinality :db.cardinality/one
+  :db/doc "Character frequency"
+  :db/ident :character/class
+  :db/index true
+  :db/valueType :db.type/ref}
+ ;; These aren't actually schema.
+ ;; They're entities for others to ref.
+ {:db/ident :character.class/common
+  :db/doc "You'll unlock and max these first"}
+ {:db/ident :character.class/rare
+  :db/doc "You don't get as many of theses as the Commons"}
+ {:db/ident :character.class/super-rare
+  :db/doc "Few and far between"}
+ {:db/ident :character.class/special
+  :db/doc "Only available at very limited times of year"}
+
+ {:db/cardinality :db.cardinality/one
+  :db/doc "Character name"
+  :db/ident :character/name
+  :db/index true
+  :db/valueType :db.type/string}
+
+ {:db/cardinality :db.cardinality/one
+  :db/doc "Item a character can equip"
+  :db/ident :character.item/name
+  :db/index true
+  :db/valueType :db.type/string}
+ {db/cardinality :db.cardinality/one
+  :db/doc "Describe an item's effects"
+  :db/ident :character.item/fx
+  :db/index true
+  :db/valueType :db.type/string}
+
+ ;; Q: what's a good way to define these?
+ ;; A: Define them in a migration file of
+ ;; their own with a map of class =>
+ ;; name/items.
+ ;; Q: Do item kinds all advance in the
+ ;; same sequence?
+ ;; (I think I've already verified this, but
+ ;; that isn't a guarantee they always will)
+ {:character.item/name "Lightning"
+  :character.item/fx "Hits your leading opponent with a short, sharp shock, making them drop an item."}
+ {:racer/name "Sonic"
+  :racer/class :racer.class/common}]

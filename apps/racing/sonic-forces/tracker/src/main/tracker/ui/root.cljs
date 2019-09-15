@@ -1,19 +1,20 @@
 (ns tracker.ui.root
   (:require
-   [tracker.model.session :as session]
    [clojure.string :as str]
-    [com.fulcrologic.fulcro.dom :as dom :refer [div ul li p h3 button]]
-    [com.fulcrologic.fulcro.dom.html-entities :as ent]
-    [com.fulcrologic.fulcro.dom.events :as evt]
-    [com.fulcrologic.fulcro.application :as app]
-    [com.fulcrologic.fulcro.components :as comp :refer [defsc]]
-    [com.fulcrologic.fulcro.routing.dynamic-routing :as dr]
-    [com.fulcrologic.fulcro.ui-state-machines :as uism :refer [defstatemachine]]
-    [com.fulcrologic.fulcro.mutations :as m :refer [defmutation]]
-    [com.fulcrologic.fulcro.algorithms.merge :as merge]
-    [com.fulcrologic.fulcro-css.css :as css]
-    [com.fulcrologic.fulcro.algorithms.form-state :as fs]
-    [taoensso.timbre :as log]))
+   [com.fulcrologic.fulcro.dom :as dom :refer [div ul li p h3 button]]
+   [com.fulcrologic.fulcro.dom.html-entities :as ent]
+   [com.fulcrologic.fulcro.dom.events :as evt]
+   [com.fulcrologic.fulcro.application :as app]
+   [com.fulcrologic.fulcro.components :as comp :refer [defsc]]
+   [com.fulcrologic.fulcro.routing.dynamic-routing :as dr]
+   [com.fulcrologic.fulcro.ui-state-machines :as uism :refer [defstatemachine]]
+   [com.fulcrologic.fulcro.mutations :as m :refer [defmutation]]
+   [com.fulcrologic.fulcro.algorithms.merge :as merge]
+   [com.fulcrologic.fulcro-css.css :as css]
+   [com.fulcrologic.fulcro.algorithms.form-state :as fs]
+   [taoensso.timbre :as log]
+   [tracker.model.session :as session]
+   [tracker.ui.player :as player]))
 
 (defn field [{:keys [label valid? error-message] :as props}]
   (let [input-props (-> props (assoc :name label) (dissoc :label :valid? :error-message))]
@@ -142,7 +143,7 @@
    :ident         (fn [] [:component/id :main])
    :route-segment ["main"]}
   (div :.ui.container.segment
-       (h3 "Main")
+       (h3 "Main (original)")
        (p welcome-message)))
 
 (defsc Settings [this {:keys [:account/time-zone :account/real-name] :as props}]
@@ -155,7 +156,7 @@
     (h3 "Settings")))
 
 (dr/defrouter TopRouter [this props]
-  {:router-targets [Main Signup SignupSuccess Settings]})
+  {:router-targets [player/Root Signup SignupSuccess Settings]})
 
 (def ui-top-router (comp/factory TopRouter))
 
