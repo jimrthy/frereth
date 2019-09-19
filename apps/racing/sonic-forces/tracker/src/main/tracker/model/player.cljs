@@ -1,5 +1,6 @@
 (ns tracker.model.player
   (:require
+   [com.fulcrologic.fulcro.algorithms.data-targeting :as targeting]
    [com.fulcrologic.fulcro.mutations :as m :refer [declare-mutation defmutation]]))
 
 (defn player-path
@@ -25,5 +26,5 @@
     (swap! state (fn [s]
                    (-> s
                      (insert-player* params)
-                     (m/integrate-ident* [:player/id id] :append [:all-players])))))
+                     (targeting/integrate-ident* [:player/id id] :append [:all-players])))))
   (remote [env] true))

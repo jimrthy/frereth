@@ -157,7 +157,7 @@
                              ::http/secure-headers {:content-security-policy-settings {:default-src "'self'"
                                                                                        ;; This is a weird conflameration that
                                                                                        ;; probably only applies to dev mode
-                                                                                       :connect-src "http://localhost:3000 ws://localhost:9630"
+                                                                                       :connect-src "http://localhost:3000 http://localhost:9630 ws://localhost:9630"
                                                                                        ;; "data:" is explicitly called out in the spec as
                                                                                        ;; insecure.
                                                                                        ;; TODO: track down better alternatives
@@ -173,9 +173,10 @@
                                                                                        ;; TODO: unsafe-eval should only be in debug mode
                                                                                        :script-src "'self' 'unsafe-inline' 'unsafe-eval'"}}
                              ::http/type :immutant}]
-           (log/info "Creatting HTTP Server with config " (with-out-str (pprint local-config))
+           (log/info "Creating HTTP Server with config " (with-out-str (pprint local-config))
                      " based on keys "
-                     (keys config)
+                     ;; This causes all sorts of issues
+                     (keys @config)
                      "\nin\n"
                      (with-out-str (pprint config))
                      "\nbased on\n"
