@@ -1,13 +1,13 @@
 (ns tracker.model.user
   ;; Q: Should this all be refactored into tracker.model.player?
   (:require
-    [com.wsscode.pathom.connect :as pc :refer [defmutation defresolver]]
-    [taoensso.timbre :as log]))
+   [com.wsscode.pathom.connect :as pc :refer [defmutation defresolver]]
+   [taoensso.timbre :as log]))
 
 (def user-database (atom {}))
 
 (defresolver all-users-resolver
-  "Resolve queries for :all-users."
+  ;; Resolve queries for :all-users.
   [env input]
   {;;GIVEN nothing
    ::pc/output [{:all-users [:user/id]}]}                   ;; I can output all users. NOTE: only ID is needed...other resolvers resolve the rest
@@ -17,7 +17,7 @@
                 (keys @user-database))})
 
 (defresolver user-resolver
-  "Resolve details of a single user.  (See pathom docs for adding batching)"
+  ;; Resolve details of a single user.  (See pathom docs for adding batching)
   [env {:user/keys [id]}]
   {::pc/input  #{:user/id}                                  ; GIVEN a user ID
    ::pc/output [:user/name]}                                ; I can produce a user's details
@@ -26,7 +26,7 @@
     (get @user-database id)))
 
 (defresolver user-address-resolver
-  "Resolve address details for a user.  Note the address data could be stored on the user in the database or elsewhere."
+  ;; Resolve address details for a user.  Note the address data could be stored on the user in the database or elsewhere.
   [env {:user/keys [id]}]
   {::pc/input  #{:user/id}                                  ; GIVEN a user ID
    ::pc/output [:address/id :address/street :address/city :address/state :address/postal-code]} ; I can produce address details
@@ -38,13 +38,12 @@
    :address/postal-code "99999"})
 
 (defmutation upsert-user
-  "Add/save a user. Required parameters are:
+  ;; Add/save a user. Required parameters are:
 
-  :user/id - The ID of the user
-  :user/name - The name of the user
+  ;; :user/id - The ID of the user
+  ;; :user/name - The name of the user
 
-  Returns a User (e.g. :user/id) which can resolve to a mutation join return graph.
-  "
+  ;; Returns a User (e.g. :user/id) which can resolve to a mutation join return graph.
   [{:keys [config ring/request]} {:player/keys [id level name rings]}]
   {::pc/params #{:player/id :player/level :player/name :player/rings}
    ::pc/output [:player/id]}

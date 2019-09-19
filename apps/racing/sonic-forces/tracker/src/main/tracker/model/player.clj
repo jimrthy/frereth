@@ -1,8 +1,7 @@
 (ns tracker.model.player
   (:require
-    [com.wsscode.pathom.connect :as pc]
-    [tracker.server-components.pathom-wrappers :refer [defmutation defresolver]]
-    [taoensso.timbre :as log]))
+   [com.wsscode.pathom.connect :as pc :refer [defmutation defresolver]]
+   [taoensso.timbre :as log]))
 
 (let [player-1-id #uuid "197e0b56-88be-4040-b4d2-ab6ebc91f6ac"
       player-1 {:player/id player-1-id
@@ -15,17 +14,17 @@
   )
 
 (defresolver all-players-resolver
-  "Resolve queries for :all-players."
+  ;; Resolve queries for :all-players.
   [env input]
   {;;GIVEN nothing
-   ::pc/output [{:all-players [:player/id]}]}                   ;; I can output all players. NOTE: only ID is needed...other resolvers resolve the rest
+   ::pc/output [{:all-players [:player/id]}]} ; I can output all players. NOTE: only ID is needed...other resolvers resolve the rest
   (log/info "All players. Database contains: " @player-database)
   {:all-players (mapv
                  (fn [id] {:player/id id})
                  (keys @player-database))})
 
 (defresolver player-resolver
-  "Resolve details of a single player.  (See pathom docs for adding batching)"
+  ;; Resolve details of a single player.  (See pathom docs for adding batching)
   [env {:player/keys [id]}]
   {::pc/input  #{:player/id}                                  ; GIVEN a player ID
    ::pc/output [:player/level
@@ -39,13 +38,12 @@
   )
 
 (defmutation upsert-player
-  "Add/save a player. Required parameters are:
+  ;; Add/save a player. Required parameters are:
 
-  :player/id - The ID of the user
-  :player/name - The name of the user
+  ;; :player/id - The ID of the user
+  ;; :player/name - The name of the user
 
-  Returns a Player (e.g. :player/id) which can resolve to a mutation join return graph.
-  "
+  ;; Returns a Player (e.g. :player/id) which can resolve to a mutation join return graph.
   [{:keys [config ring/request]} {:player/keys [exp id level name rings stars]}]
   {::pc/params #{:player/exp :player/id :player/level :player/name :player/rings :player/stars}
    ::pc/output [:player/id]}
