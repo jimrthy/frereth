@@ -1,6 +1,7 @@
 (ns tracker.ui.player
   (:require
    [clojure.edn :as edn]
+   [com.fulcrologic.fulcro.data-fetch :as df]
    [com.fulcrologic.fulcro.dom :as dom :refer [div ul li p h3]]
    [com.fulcrologic.fulcro.mutations :as m]
    [com.fulcrologic.fulcro.components :as comp :refer [defsc]]
@@ -140,7 +141,13 @@
    :route-segment ["main"]
    :will-enter (fn [app route-params]
                  (log/info "Will enter with route-params " route-params)
-                 (dr/route-defer []))}
+                 (dr/route-deferred []
+                                    (fn []
+                                      (df/load app
+                                               ["main"]
+                                               Root
+                                               {:post-mutation `dr/target-ready
+                                                :post-mutation-params {:target "main"}}))))}
   (div :.ui.segments
     (div :.ui.top.attached.segment
       (h3 :.ui.header

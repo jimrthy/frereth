@@ -108,6 +108,13 @@ Ignore all those previous instructions.
 - Q: Which command should be used?
   A: shadow-cljs
   Wait for the server to start
+
+The rest of these instructions seem obsolete.
+Or possibly just broken for new projects.
+It just opened a REPL.
+
+Went to localhost:9630 to enable my main build.
+
 - Q: Select ClojureScript REPL type:
   A: shadow
 - Q: Select shadow-cljs build (e.g. dev):
