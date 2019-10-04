@@ -136,16 +136,6 @@
 
 (def ui-login (comp/factory Login))
 
-(defsc Main [this {:keys [:main/welcome-message]
-                   :as props}]
-  {:query         [:main/welcome-message]
-   :initial-state {:main/welcome-message "Hi!"}
-   :ident         (fn [] [:component/id :main])
-   :route-segment ["main"]}
-  (div :.ui.container.segment
-       (h3 "Main (original)")
-       (p welcome-message)))
-
 (defsc Settings [this {:keys [:account/time-zone :account/real-name] :as props}]
   {:query         [:account/time-zone :account/real-name]
    :ident         (fn [] [:component/id :settings])
@@ -156,7 +146,11 @@
     (h3 "Settings")))
 
 (dr/defrouter TopRouter [this props]
-  {:router-targets [player/Root Signup SignupSuccess Settings]})
+  {:router-targets [player/Root Signup SignupSuccess Settings]}
+  (case current-state
+    :pending (dom/div "Loading...")
+    :failed (dom/div "Failed!")
+    (dom/div "No route selected.")))
 
 (def ui-top-router (comp/factory TopRouter))
 
@@ -182,17 +176,22 @@
                    :root/login           {}
                    :root/current-session {}}}
   (let [current-tab (some-> (dr/current-route this this) first keyword)]
+    (log/debug "Rendering current-tab:" current-tab)
     (div :.ui.container
-      (div :.ui.secondary.pointing.menu
-        (dom/a :.item {:classes [(when (= :main current-tab) "active")]
-                       :onClick (fn [] (dr/change-route this ["main"]))} "Main")
-        (dom/a :.item {:classes [(when (= :settings current-tab) "active")]
-                       :onClick (fn [] (dr/change-route this ["settings"]))} "Settings")
-        (div :.right.menu
-          (ui-login login)))
-      (div :.ui.grid
-        (div :.ui.row
-          (ui-top-router router))))))
+         (div :.ui.secondary.pointing.menu
+              ;; I can't click from the settings tab back to main.
+              ;; When I try, I get errors about "get-ident called with
+              ;; something that is either not a class or does not
+              ;; implement ident:
+              (dom/a :.item {:classes [(when (= :main current-tab) "active")]
+                             :onClick (fn [] (dr/change-route this ["main"]))} "Main")
+              (dom/a :.item {:classes [(when (= :settings current-tab) "active")]
+                             :onClick (fn [] (dr/change-route this ["settings"]))} "Settings")
+              (div :.right.menu
+                   (ui-login login)))
+         (div :.ui.grid
+              (div :.ui.row
+                   (ui-top-router router))))))
 
 (def ui-top-chrome (comp/factory TopChrome))
 

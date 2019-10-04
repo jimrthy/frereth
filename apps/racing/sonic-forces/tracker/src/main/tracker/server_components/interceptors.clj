@@ -27,7 +27,7 @@
             (log/debug "Outgoing response ("
                        internal-id
                        ")\n"
-                       (with-out-str (pprint response))
+                       #_(with-out-str (pprint response))
                        (if-let [{:keys [:body]} response]
                          (str "Body Type:" (type body))
                          "Body: nil"))
