@@ -4,6 +4,7 @@
    [com.fulcrologic.fulcro.dom :as dom :refer [div ul li p h3]]
    [com.fulcrologic.fulcro.mutations :as m]
    [com.fulcrologic.fulcro.components :as comp :refer [defsc]]
+   [com.fulcrologic.fulcro.routing.dynamic-routing :as dr]
    [taoensso.timbre :as log]
    [tracker.model.player :as player]
    [tracker.ui.components :as components]))
@@ -45,7 +46,7 @@
                                  (m/set-string! this :player/level :event evt))
                      :type "number"
                      :min 1
-                     :max 16
+                     :max 15
                      :value (str level)}))))
 (def ui-player-level (comp/factory PlayerLevel))
 
@@ -135,7 +136,11 @@
                    {:player-adder (comp/get-query PlayerAdder)}]
    :initial-state (fn [_]
                     {:all-players []
-                     :player-adder (comp/get-initial-state PlayerAdder {:ui/react-key 1})})}
+                     :player-adder (comp/get-initial-state PlayerAdder {:ui/react-key 1})})
+   :route-segment ["main"]
+   :will-enter (fn [app route-params]
+                 (log/info "Will enter with route-params " route-params)
+                 (dr/route-defer []))}
   (div :.ui.segments
     (div :.ui.top.attached.segment
       (h3 :.ui.header
