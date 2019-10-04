@@ -32,7 +32,7 @@
     ;; There's a bunch of copy/paste from fulcro-middleware/wrap-api.
     ;; I want most of what it does, but the call to generate-response
     ;; breaks the content-negotiation interceptor.
-    (let [parse-result (pathom/parser request body-params)]
+    (let [parse-result (pathom/parser request transit-params)]
       (log/debug "Parser returned:\n"
                  (with-out-str (pprint parse-result)))
       (if (instance? Throwable parse-result)
