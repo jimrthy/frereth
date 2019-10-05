@@ -35,7 +35,7 @@
            ring/ring-core                      {:mvn/version "1.7.1"}
            ring/ring-defaults                  {:mvn/version "0.3.2"}}
 
- :aliases {:cider {:extra-deps {cider/cider-nrepl {:mvn/version "0.21.1"}
+ :aliases {:cider {:extra-deps {cider/cider-nrepl {:mvn/version "0.22.1"}
                                 refactor-nrepl {:mvn/version "2.4.0"}}}
            :clj-tests {:extra-paths ["src/test"]
                        :main-opts   ["-m" "kaocha.runner"]
