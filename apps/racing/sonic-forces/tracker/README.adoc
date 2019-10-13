@@ -102,7 +102,7 @@ see [the Shadow-cljs User's Guide](https://shadow-cljs.github.io/docs/UsersGuide
 and the comments in `deps.edn` for more information.
 
 Short version:
-Ignore all those previous instructions.
+Ignore all those previous instructions. Open one of the .cljs buffers.
 
 - M-x cider-jack-in-cljs
 - Q: Which command should be used?
@@ -125,6 +125,25 @@ Went to localhost:9630 to enable my main build.
 
 Later, once the API server is running, and you've browsed to your app
 (in this case, localhost:3000), the cljs REPL will connect.
+
+=== Starting Datomic
+
+==== Free
+
+Have to download this anyway. So might as well use the latest/greatest.
+
+After extraction, in the datomic root directory:
+
+```bin/maven-install```
+
+to make the client library available.
+
+Then
+
+```bin/transactor config/samples/free-transactor-template.properties```
+
+That should start storing datoms in the data/ folder and listening on
+datomic:free://localhost:4334/<DB_NAME>
 
 === The API Server
 
@@ -245,22 +264,3 @@ IMPORTANT: Any namespace ending in `-ws` will be auto-detected and added to you 
 
 See tools deps projects like Depstar. You'll need to make a release js build, optionally
 pre-compile your CLJ, and package it. We will likely add a demo of this process soon.
-
-== Switching to Datomic
-
-=== Free
-
-Have to download this anyway. So might as well use the latest/greatest.
-
-After extraction, in the datomic root directory:
-
-```bin/maven-install```
-
-to make the client library available.
-
-Then
-
-```bin/transactor config/samples/free-transactor-template.properties```
-
-That should start storing datoms in the data/ folder and listening on
-datomic:free://localhost:4334/<DB_NAME>
