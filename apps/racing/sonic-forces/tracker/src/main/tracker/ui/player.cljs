@@ -132,22 +132,27 @@
 (def ui-player-adder (comp/factory PlayerAdder))
 
 (defsc Root [this {:keys [:all-players
-                          :player-adder]}]
-  {:query         [{:all-players (comp/get-query Player)}
-                   {:player-adder (comp/get-query PlayerAdder)}]
+                          :player-adder]
+                   account-id :account/id
+                   :as props}]
+  {:ident [:account/id :account/id]
    :initial-state (fn [_]
                     {:all-players []
                      :player-adder (comp/get-initial-state PlayerAdder {:ui/react-key 1})})
-   :route-segment ["main"]
-   :will-enter (fn [app route-params]
+   :query         [{:all-players (comp/get-query Player)}
+                   {:player-adder (comp/get-query PlayerAdder)}
+                   :account/id]
+   :route-segment ["main" :account-id]
+   :will-enter (fn [app {:keys [:account-id]
+                         :as route-params}]
                  (log/info "Will enter with route-params " route-params)
-                 (dr/route-deferred []
+                 (dr/route-deferred [:account/id account-id]
                                     (fn []
                                       (df/load app
-                                               ["main"]
+                                               ::root
                                                Root
                                                {:post-mutation `dr/target-ready
-                                                :post-mutation-params {:target "main"}}))))}
+                                                :post-mutation-params {:target [:account/id account-id]}}))))}
   (div :.ui.segments
     (div :.ui.top.attached.segment
       (h3 :.ui.header
@@ -165,7 +170,9 @@
         of the running tracker!"))
     (div :.ui.attached.segment
       (div :.content
-        (div "Your system has the following players in the database:")
+           (div (str "Your account ("
+                     account-id
+                     ") has the following players in the database:"))
         (ul :.ui.list#player-list
             (map ui-player all-players))))
     (div :.ui.attached.segment
