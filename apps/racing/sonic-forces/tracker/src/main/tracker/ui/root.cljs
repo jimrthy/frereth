@@ -147,9 +147,11 @@
 
 (dr/defrouter TopRouter [this props]
   {:router-targets [player/Root Signup SignupSuccess Settings]}
+  ;; Q: How did this get defined?
+  ;; A: It's anamorphic, from dr/defrouter*
   (case current-state
-    :pending (dom/div "Loading...")
-    :failed (dom/div "Failed!")
+    :pending (dom/div "Loading Top Root...")
+    :failed (dom/div "Routing Failed!")
     (dom/div "No route selected.")))
 
 (def ui-top-router (comp/factory TopRouter))
@@ -172,11 +174,14 @@
                    [::uism/asm-id ::TopRouter]
                    {:root/login (comp/get-query Login)}]
    :ident         (fn [] [:component/id :top-chrome])
-   :initial-state {:root/router          {}
-                   :root/login           {}
-                   :root/current-session {}}}
-  (let [current-tab (some-> (dr/current-route this this) first keyword)]
-    (log/debug "Rendering current-tab:" current-tab)
+   :initial-state (fn [params]
+                    {:root/router          {}
+                     :root/login           {}
+                     :root/current-session (comp/get-initial-state Session)})}
+  (let [current-tab (some-> (dr/current-route this this) first keyword)
+        {account-name :account/name} current-session]
+    (log/info "Rendering current-tab:" current-tab
+              "based on " (dr/current-route this this))
     (div :.ui.container
          (div :.ui.secondary.pointing.menu
               ;; I can't click from the settings tab back to main.
@@ -184,7 +189,7 @@
               ;; something that is either not a class or does not
               ;; implement ident:
               (dom/a :.item {:classes [(when (= :main current-tab) "active")]
-                             :onClick (fn [] (dr/change-route this ["main"]))} "Main")
+                             :onClick (fn [] (dr/change-route this ["main" account-name]))} "Main")
               (dom/a :.item {:classes [(when (= :settings current-tab) "active")]
                              :onClick (fn [] (dr/change-route this ["settings"]))} "Settings")
               (div :.right.menu
