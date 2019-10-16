@@ -170,7 +170,8 @@
                                                                                        :img-src "data:"
                                                                                        ;; really?!
                                                                                        :style-src "'self' 'unsafe-inline' https://fonts.googleapis.com"
-                                                                                       :script-src "'self' 'unsafe-inline'"}}
+                                                                                       ;; TODO: unsafe-eval should only be in debug mode
+                                                                                       :script-src "'self' 'unsafe-inline' 'unsafe-eval'"}}
                              ::http/type :immutant}]
            (log/info "Creatting HTTP Server with config " (with-out-str (pprint local-config))
                      " based on keys "
