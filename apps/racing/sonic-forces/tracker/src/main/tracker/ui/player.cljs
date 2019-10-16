@@ -40,7 +40,7 @@
                                  (m/set-string! this :player/level :event evt))
                      :type "range"
                      :min 1
-                     :max 16
+                     :max 15
                      :value (str level)})
      (dom/input #js {:id starting-level-spinner-id
                      :onChange (fn [evt]
@@ -137,13 +137,14 @@
                    :as props}]
   {:ident [:account/id :account/id]
    :initial-state (fn [_]
-                    {:all-players []
+                    {:account/id 1
+                     :all-players []
                      :player-adder (comp/get-initial-state PlayerAdder {:ui/react-key 1})})
    :query         [{:all-players (comp/get-query Player)}
                    {:player-adder (comp/get-query PlayerAdder)}
                    :account/id]
-   :route-segment ["main" :account-id]
-   :will-enter (fn [app {:keys [:account-id]
+   :route-segment ["main"]
+   :will-enter (fn [app {account-id :account/id
                          :as route-params}]
                  (log/info "Will enter with route-params " route-params)
                  (dr/route-deferred [:account/id account-id]

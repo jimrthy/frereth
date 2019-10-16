@@ -147,7 +147,7 @@
 
 (dr/defrouter TopRouter [this props]
   {:router-targets [player/Root Signup SignupSuccess Settings]}
-  ;; Q: How did this get defined?
+  ;; Q: How did current-state get defined?
   ;; A: It's anamorphic, from dr/defrouter*
   (case current-state
     :pending (dom/div "Loading Top Root...")
@@ -189,7 +189,7 @@
               ;; something that is either not a class or does not
               ;; implement ident:
               (dom/a :.item {:classes [(when (= :main current-tab) "active")]
-                             :onClick (fn [] (dr/change-route this ["main" account-name]))} "Main")
+                             :onClick (fn [] (dr/change-route this ["main"]))} "Main")
               (dom/a :.item {:classes [(when (= :settings current-tab) "active")]
                              :onClick (fn [] (dr/change-route this ["settings"]))} "Settings")
               (div :.right.menu
