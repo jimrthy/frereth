@@ -88,4 +88,114 @@
   :db/doc "Historical Ranking"
   :db/ident :player/prestige
   :db/index true
-  :db/valueType :db.type/long}]
+  :db/valueType :db.type/long}
+ {:db/cardinality :db.cardinality/many
+  :db/doc "Player's Racer"
+  :db/ident :player/racer
+  :db/valueType :db.type/ref}
+
+ ;; Classes of Racers
+ {:db/cardinality :db.cardinality/one
+  :db/doc "General category into which a racer falls"
+  :db/ident :archetype/class
+  :db/index true
+  :db/valueType :db.type/ref}
+ {:db/ident :archetype.class/common}
+ {:db/ident :archetype.class/rare}
+ {:db/ident :archetype.class/super-rare}
+ {:db/ident :archetype.class/special}
+
+ ;; Racer Abilities
+ {:db.cardinality :db.cardinality/one
+  :db/doc "Ability's category"
+  :db/ident :ability/category
+  :db/index true
+  :db/valueType :db.type/ref}
+ ;; Q: How does starting rings fit into this?
+ {:db/ident :ability/offense
+  :db/doc "Attack your opponents directly"}
+ {:db/ident :ability/boost
+  :db/doc "Go faster/safer"}
+ {:db/ident :ability/mine
+  :db/doc "Set traps for other racers"}
+ {:db/cardinality :db.cardinality/one
+  :db/doc "Name of the ability"
+  :db/ident :ability/name
+  :db/index true
+  :db/valueType :db.type/string}
+ {:db/cardinality :db.cardinality/one
+  :db/doc "Ability's description"
+  :db/ident :ability/description
+  :db/index true
+  :db/valueType :db.type/string}
+
+ ;; Upgrade cost, by class
+ ;; Note that these entities really should include
+ ;; an :archetype/class attribute
+ {:db/cardinality :db.cardinality/one
+  :db/doc "Target Level for Upgrade"
+  :db/ident :upgrade/level
+  :db/index true
+  :db/valueType :db.type/long}
+ {:db/cardinality :db.cardinality/one
+  :db/doc "Ring cost for this level"
+  :db/ident :upgrade/rings
+  :db/index true
+  :db/valueType :db.type/long}
+ {:db/cardinality :db.cardinality/one
+  :db/doc "Cards required for this level"
+  :db/index true
+  :db/valueType :db.type/long}
+ {:db/cardinality :db.cardinality/one
+  :db/doc "Experience points gained from upgrade"
+  :db/ident :upgrade/xp
+  :db/index true
+  :db/valueType :db.type/long}
+ ;; TODO: also want to attach details about abilities
+ ;; and what happens at each level-up
+
+ ;; Archetypes
+ ;; These are the constant values that define the shared
+ ;; characteristics of any given Racer
+ {:db/cardinality :db.cardinality/one
+  :db/doc "Archetype name"
+  :db/ident :archetype/name
+  :db/index true
+  :db/valueType :db.type/string}
+ ;; Note that the stats really run from 1-10
+ {:db/cardinality :db.cardinality/one
+  :db/doc "How fast this archetype accelerates"
+  :db/ident :archetype/acceleration
+  :db/index true
+  :db/valueType :db.type/long}
+ {:db/cardinality :db.cardinality/one
+  :db/doc "How fast this archetype can run"
+  :db/ident :archetype/speed
+  :db/index true
+  :db/valueType :db.type/long}
+ {:db/cardinality :db.cardinality/one
+  :db/doc "How well this archetype handles damage"
+  :db/ident :archetype/strength
+  :db/index true
+  :db/valueType :db.type/long}
+
+ ;; A Player's instances of each archetype
+ {:db/cardinality :db.cardinality/one
+  :db/doc "Racer's Archetype"
+  :db/ident :racer/archetype
+  :db/valueType :db.type/ref}
+ {:db/cardinality :db.cardinality/one
+  :db/doc "How many cards has this racer accumulated toward the next level?"
+  :db/ident :racer/cards
+  :db/index true
+  :db/valueType :db.type/long}
+ {:db/cardinality :db.cardinality/one
+  :db/doc "Racer's current level"
+  :db/ident :racer/level
+  :db/index true
+  :db/valueType :db.type/long}
+ {:db/cardinality :db.cardinality/one
+  :db/doc "Is this Racer locked?"
+  :db/ident :racer/locked?
+  :db/index true
+  :db/valueType :db.type/boolean}]
