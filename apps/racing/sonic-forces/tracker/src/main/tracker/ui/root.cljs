@@ -13,8 +13,9 @@
    [com.fulcrologic.fulcro-css.css :as css]
    [com.fulcrologic.fulcro.algorithms.form-state :as fs]
    [taoensso.timbre :as log]
-   [tracker.model.session :as session]
-   [tracker.ui.player :as player]))
+   [tracker.model.session :as session-model]
+   [tracker.ui.player :as player]
+   [tracker.ui.session :as session-ui]))
 
 (defn field [{:keys [label valid? error-message] :as props}]
   (let [input-props (-> props (assoc :name label) (dissoc :label :valid? :error-message))]
@@ -41,13 +42,13 @@
                            :account/password       ""
                            :account/password-again ""}))
    :form-fields       #{:account/email :account/password :account/password-again}
-   :ident             (fn [] session/signup-ident)
+   :ident             (fn [] session-model/signup-ident)
    :route-segment     ["signup"]
    :componentDidMount (fn [this]
-                        (comp/transact! this [(session/clear-signup-form)]))}
+                        (comp/transact! this [(session-model/clear-signup-form)]))}
   (let [submit!  (fn [evt]
                    (when (or (identical? true evt) (evt/enter-key? evt))
-                     (comp/transact! this [(session/signup! {:email email :password password})])
+                     (comp/transact! this [(session-model/signup! {:email email :password password})])
                      (log/info "Sign up")))
         checked? (fs/checked? props)]
     (div
@@ -55,7 +56,7 @@
       (div :.ui.form {:classes [(when checked? "error")]}
         (field {:label         "Email"
                 :value         (or email "")
-                :valid?        (session/valid-email? email)
+                :valid?        (session-model/valid-email? email)
                 :error-message "Must be an email address"
                 :autoComplete  "off"
                 :onKeyDown     submit!
@@ -63,7 +64,7 @@
         (field {:label         "Password"
                 :type          "password"
                 :value         (or password "")
-                :valid?        (session/valid-password? password)
+                :valid?        (session-model/valid-password? password)
                 :error-message "Password must be at least 8 characters."
                 :onKeyDown     submit!
                 :autoComplete  "off"
@@ -76,13 +77,11 @@
         (dom/button :.ui.primary.button {:onClick #(submit! true)}
           "Sign Up")))))
 
-(declare Session)
-
 (defsc Login [this {:account/keys [email]
                     :ui/keys      [error open?] :as props}]
   {:query         [:ui/open? :ui/error :account/email
-                   {[:component/id :session] (comp/get-query Session)}
-                   [::uism/asm-id ::session/session]]
+                   {[:component/id :session] (comp/get-query session-ui/Session)}
+                   [::uism/asm-id ::session-model/session]]
    :css           [[:.floating-menu {:position "absolute !important"
                                      :z-index  1000
                                      :width    "300px"
@@ -90,7 +89,7 @@
                                      :top      "50px"}]]
    :initial-state {:account/email "" :ui/error ""}
    :ident         (fn [] [:component/id :login])}
-  (let [current-state (uism/get-active-state this ::session/session)
+  (let [current-state (uism/get-active-state this ::session-model/session)
         {current-user :account/name} (get props [:component/id :session])
         initial?      (= :initial current-state)
         loading?      (= :state/checking-session current-state)
@@ -102,10 +101,10 @@
         (dom/div :.right.menu
           (if logged-in?
             (dom/button :.item
-              {:onClick #(uism/trigger! this ::session/session :event/logout)}
+              {:onClick #(uism/trigger! this ::session-model/session :event/logout)}
               (dom/span current-user) ent/nbsp "Log out")
             (dom/div :.item {:style   {:position "relative"}
-                             :onClick #(uism/trigger! this ::session/session :event/toggle-modal)}
+                             :onClick #(uism/trigger! this ::session-model/session :event/toggle-modal)}
               "Login"
               (when open?
                 (dom/div :.four.wide.ui.raised.teal.segment {:onClick (fn [e]
@@ -124,13 +123,13 @@
                     (div :.ui.error.message error)
                     (div :.ui.field
                       (dom/button :.ui.button
-                        {:onClick (fn [] (uism/trigger! this ::session/session :event/login {:username email
-                                                                                             :password password}))
+                        {:onClick (fn [] (uism/trigger! this ::session-model/session :event/login {:username email
+                                                                                                   :password password}))
                          :classes [(when loading? "loading")]} "Login"))
                     (div :.ui.message
                       (dom/p "Don't have an account?")
                       (dom/a {:onClick (fn []
-                                         (uism/trigger! this ::session/session :event/toggle-modal {})
+                                         (uism/trigger! this ::session-model/session :event/toggle-modal {})
                                          (dr/change-route this ["signup"]))}
                         "Please sign up!"))))))))))))
 
@@ -151,33 +150,21 @@
   ;; A: It's anamorphic, from dr/defrouter*
   (case current-state
     :pending (dom/div "Loading Top Root...")
-    :failed (dom/div "Routing Failed!")
+    :failed (dom/div "Routing Failed at the top level!")
     (dom/div "No route selected.")))
 
 (def ui-top-router (comp/factory TopRouter))
 
-(defsc Session
-  "Session representation. Used primarily for server queries. On-screen representation happens in Login component."
-  [this {:keys [:session/valid? :account/name] :as props}]
-  {:query         [:session/valid? :account/name]
-   :ident         (fn [] [:component/id :session])
-   :pre-merge     (fn [{:keys [data-tree]}]
-                    (merge {:session/valid? false :account/name ""}
-                      data-tree))
-   :initial-state {:session/valid? false :account/name ""}})
-
-(def ui-session (comp/factory Session))
-
 (defsc TopChrome [this {:root/keys [router current-session login]}]
   {:query         [{:root/router (comp/get-query TopRouter)}
-                   {:root/current-session (comp/get-query Session)}
+                   {:root/current-session (comp/get-query session-ui/Session)}
                    [::uism/asm-id ::TopRouter]
                    {:root/login (comp/get-query Login)}]
    :ident         (fn [] [:component/id :top-chrome])
    :initial-state (fn [params]
                     {:root/router          {}
                      :root/login           {}
-                     :root/current-session (comp/get-initial-state Session)})}
+                     :root/current-session (comp/get-initial-state session-ui/Session)})}
   (let [current-tab (some-> (dr/current-route this this) first keyword)
         {account-name :account/name} current-session]
     (log/info "Rendering current-tab:" current-tab
