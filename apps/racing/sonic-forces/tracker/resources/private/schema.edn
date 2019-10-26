@@ -2,7 +2,8 @@
   :db/id "race-tracker"
   :db/ident :race-tracker}
  [:db/add :db.part/db :db.install/partition "race-tracker"]
- ;; Account Info
+
+ ;;; Account Info
  {:db/cardinality :db.cardinality/one
   :db/doc "End-Users associated with this service"
   :db/ident :account/id
@@ -28,7 +29,7 @@
   :db/index true
   :db/valueType :db.type/boolean}
 
- ;; Player "type"
+ ;;; Player "type"
  {:db/cardinality :db.cardinality/one
   :db/doc "Player entities represent Sonic Forces accounts"
   :db/ident :player/id
@@ -94,7 +95,7 @@
   :db/ident :player/racer
   :db/valueType :db.type/ref}
 
- ;; Classes of Racers
+ ;;; Classes of Racers
  {:db/cardinality :db.cardinality/one
   :db/doc "General category into which a racer falls"
   :db/ident :archetype/class
@@ -105,7 +106,7 @@
  {:db/ident :archetype.class/super-rare}
  {:db/ident :archetype.class/special}
 
- ;; Racer Abilities
+ ;;; Racer Abilities
  {:db.cardinality :db.cardinality/one
   :db/doc "Ability's category"
   :db/ident :ability/category
@@ -129,7 +130,7 @@
   :db/index true
   :db/valueType :db.type/string}
 
- ;; Upgrade cost, by class
+ ;;; Upgrade cost, by class
  ;; Note that these entities really should include
  ;; an :archetype/class attribute
  {:db/cardinality :db.cardinality/one
@@ -154,7 +155,7 @@
  ;; TODO: also want to attach details about abilities
  ;; and what happens at each level-up
 
- ;; Archetypes
+ ;;; Archetypes
  ;; These are the constant values that define the shared
  ;; characteristics of any given Racer
  {:db/cardinality :db.cardinality/one
@@ -179,7 +180,7 @@
   :db/index true
   :db/valueType :db.type/long}
 
- ;; A Player's instances of each archetype
+ ;;; A Player's instances of each archetype
  {:db/cardinality :db.cardinality/one
   :db/doc "Racer's Archetype"
   :db/ident :racer/archetype
