@@ -7,9 +7,10 @@
    [com.fulcrologic.fulcro.components :as comp :refer [defsc]]
    [com.fulcrologic.fulcro.routing.dynamic-routing :as dr]
    [taoensso.timbre :as log]
+   [tracker.application :as app]
    [tracker.model.player :as player]
    [tracker.ui.components :as components]
-   [tracker.ui.session :as session]))
+   [tracker.ui.session :as session-ui]))
 
 (defsc Player [this {:player/keys [id exp name level rings stars]
                      :as props}]
@@ -139,31 +140,32 @@
 ;;; This is why my routing wasn't matching earlier:
 ;;; The logged-in version *does* need to match an :account/id
 (defsc Root [this {:keys [:all-players
-                          :player-adder]
-                   account-id :account/id
+                          :player-adder
+                          :session-ui/current-session]
+                   player-id :player/id
                    :as props}]
-  {:ident [:account/id :account/id]
+  {:ident [:component/id :player/id]
    :initial-state (fn [_]
-                    {:account/id 1
-                     :all-players []
-                     :player-adder (comp/get-initial-state PlayerAdder {:ui/react-key 1})})
+                    {:all-players (comp/get-initial-state Player)
+                     :player-adder (comp/get-initial-state PlayerAdder {:ui/react-key 1})
+                     :player/id ::unknown
+                     :session-ui/current-session (comp/get-initial-state session-ui/Session)})
    :query         [{:all-players (comp/get-query Player)}
                    {:player-adder (comp/get-query PlayerAdder)}
-                   :account/id]
+                   :player/id
+                   ::root-id
+                   {:session-ui/current-session (comp/get-query session-ui/Session)}]
    :route-segment ["main"]  ; this needs to be ["main" :account/id] for how I want it to work
-   :will-enter (fn [app {account-id :account/id
-                         :as route-params}]
-                 ;; route-params is a map keyed by keywords in the route-segment.
-                 ;; There is no Current Player in this route-segment.
-                 (log/info "Will enter Player Account " account-id "with route-params " route-params)
-                 (dr/route-deferred [:account/id account-id]
+   :will-enter (fn [_]
+                 (log/info "Will enter Player Root")
+                 (dr/route-deferred [:component/id :player/id]
                                     (fn []
-                                      (df/load app
-                                               ::root
+                                      (df/load app/SPA
+                                               ::all
                                                Root
                                                {:post-mutation `dr/target-ready
                                                 ;; The account-id needs to be something that was loaded.
-                                                :post-mutation-params {:target [:account/id account-id]}}))))}
+                                                :post-mutation-params {:target [:component/id :player/id]}}))))}
   (div :.ui.segments
     (div :.ui.top.attached.segment
       (h3 :.ui.header
@@ -182,19 +184,19 @@
     (div :.ui.attached.segment
       (div :.content
            (div (str "Your account ("
-                     account-id
+                     (-> current-session :account/name)
                      ") has the following players in the database:"))
         (ul :.ui.list#player-list
             (map ui-player all-players))))
     (div :.ui.attached.segment
          (ui-player-adder player-adder))))
 
-(defsc Loader [this {:keys [::current-session]
+(defsc Loader [this {:keys [::session-ui/current-session]
                      :as props}]
   {:ident (fn [] [:component/id ::LOADER])
-   :query [{::current-session (comp/get-query session/Session)}]
+   :query [{::session-ui/current-session (comp/get-query session-ui/Session)}]
    :initial-state (fn [_]
-                    {::current-session (comp/get-initial-state session/Session)})}
+                    {::current-session (comp/get-initial-state session-ui/Session)})}
   (div
    (p "Show the currently logged-in user's stat's, if any")
    (p "Or just show whatever's public")

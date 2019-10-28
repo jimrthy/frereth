@@ -37,7 +37,7 @@
   (inspect/app-started! SPA)
   (app/mounted? SPA)
   (app/set-root! SPA root/Root {:initialize-state? true})
-  (uism/begin! SPA session-model/session-machine ::session/session
+  (uism/begin! SPA session-model/session-machine ::session-model/session
                {:actor/login-form root/Login
                 :actor/current-session session-ui/Session})
 
