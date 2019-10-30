@@ -69,7 +69,7 @@
                      :player/rings "0"
                      :player/stars "0"
                      :ui/react-key react-key
-                     :player/level (comp/get-initial-state PlayerLevel initial-state-props)})
+                     :player/level (comp/get-initial-state PlayerLevel {:player/level "1"})})
    :query [:player/exp :player/name :player/rings :player/stars :ui/react-key
            {:player/level (comp/get-query PlayerLevel)}]}
   (let [new-exp-id (str "new-player-exp-" react-key)
@@ -86,7 +86,7 @@
                       :onChange (fn [evt]
                                   (m/set-string! this :player/name :event evt))
                       :type "text"
-                      :value player-name}))
+                      :value (or player-name "")}))
      (div
       (ui-player-level level))
      (div
@@ -156,7 +156,8 @@
                    ::root-id
                    {:session-ui/current-session (comp/get-query session-ui/Session)}]
    :route-segment ["main"]  ; this needs to be ["main" :account/id] for how I want it to work
-   :will-enter (fn [_]
+   ;; For now, punt on this.
+   #_#_:will-enter (fn [_]
                  (log/info "Will enter Player Root")
                  (dr/route-deferred [:component/id :player/id]
                                     (fn []
@@ -164,7 +165,16 @@
                                                ::all
                                                Root
                                                {:post-mutation `dr/target-ready
-                                                ;; The account-id needs to be something that was loaded.
+                                                ;; Q: How should this work?
+                                                ;; A: player-id really needs to be a parameter of the route segment
+                                                ;; This gets into the distinction between users (who are really
+                                                ;; principals) and players (which are accounts owned by a
+                                                ;; principal).
+                                                ;; I've gotten ahead of myself.
+                                                ;; We shouldn't show a Settings tab until a user is logged
+                                                ;; in.
+                                                ;; Though browsing anonymous players under the Main should
+                                                ;; probably be allowed anonymously.
                                                 :post-mutation-params {:target [:component/id :player/id]}}))))}
   (div :.ui.segments
     (div :.ui.top.attached.segment

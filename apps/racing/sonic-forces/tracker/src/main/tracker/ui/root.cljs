@@ -155,6 +155,10 @@
 
 (def ui-top-router (comp/factory TopRouter))
 
+;;; This may make sense after a user/principal logged in/authenticated.
+;;; But anonymous principals shouldn't see the settings tab.
+;;; Arguably, they shouldn't see anything except a list/tree of Players,
+;;; and possibly some analytics.
 (defsc TopChrome [this {:root/keys [router current-session login]}]
   {:query         [{:root/router (comp/get-query TopRouter)}
                    {:root/current-session (comp/get-query session-ui/Session)}
@@ -165,7 +169,8 @@
                     {:root/router          {}
                      :root/login           {}
                      :root/current-session (comp/get-initial-state session-ui/Session)})}
-  (let [current-tab (some-> (dr/current-route this this) first keyword)
+  (let [current-tab (or (some-> (dr/current-route this this) first keyword)
+                        :main)
         {account-name :account/name} current-session]
     (log/info "Rendering current-tab:" current-tab
               "based on " (dr/current-route this this))
