@@ -148,11 +148,11 @@
   {:router-targets [player/Root Signup SignupSuccess Settings]}
   ;; Q: How did current-state get defined?
   ;; A: It's anamorphic, from dr/defrouter*
+  ;; There are other useful properties available here.
   (case current-state
     :pending (dom/div "Loading Top Root...")
     :failed (dom/div "Routing Failed at the top level!")
     (dom/div "No route selected.")))
-
 (def ui-top-router (comp/factory TopRouter))
 
 ;;; This may make sense after a user/principal logged in/authenticated.

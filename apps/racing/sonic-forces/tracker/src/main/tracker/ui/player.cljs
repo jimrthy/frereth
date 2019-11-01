@@ -24,7 +24,8 @@
 (def ui-player (comp/factory Player {:keyfn :player/id}))
 
 (defsc PlayerLevel [this {:keys [:player/level
-                                 :ui/react-key]}]
+                                 :ui/react-key]
+                          :as props}]
   {:ident [:ui/player-level :ui/react-key]
    :initial-state (fn [{:keys [:ui/react-key
                                :player/level]
@@ -35,6 +36,7 @@
    :query [:player/level :ui/react-key]}
   (let [starting-level-slider-id (str "new-player-starting-level-slider-" react-key)
         starting-level-spinner-id (str "new-player-starting-level-spinner-" react-key)]
+    (log/info "Rendering Player Level component. Props:" props)
     (dom/span
      (dom/label {:htmlFor starting-level-slider-id} "Initial Player Level: ")
      (dom/input #js {:id starting-level-slider-id
@@ -69,7 +71,9 @@
                      :player/rings "0"
                      :player/stars "0"
                      :ui/react-key react-key
-                     :player/level (comp/get-initial-state PlayerLevel {:player/level "1"})})
+                     :player/level (comp/get-initial-state PlayerLevel {:player/level "1"
+                                                                        ;; Q: Should this get its own react-key?
+                                                                        :ui/react-key react-key})})
    :query [:player/exp :player/name :player/rings :player/stars :ui/react-key
            {:player/level (comp/get-query PlayerLevel)}]}
   (let [new-exp-id (str "new-player-exp-" react-key)
@@ -88,6 +92,7 @@
                       :type "text"
                       :value (or player-name "")}))
      (div
+      (log/info "Rendering a player-level based on" level)
       (ui-player-level level))
      (div
       (dom/label {:htmlFor new-ring-id} "Starting Rings: ")
@@ -140,18 +145,18 @@
 ;;; This is why my routing wasn't matching earlier:
 ;;; The logged-in version *does* need to match an :account/id
 (defsc Root [this {:keys [:all-players
-                          :player-adder
+                          :player/adder
                           :session-ui/current-session]
                    player-id :player/id
                    :as props}]
   {:ident [:component/id :player/id]
    :initial-state (fn [_]
                     {:all-players (comp/get-initial-state Player)
-                     :player-adder (comp/get-initial-state PlayerAdder {:ui/react-key 1})
+                     :player/adder (comp/get-initial-state PlayerAdder {:ui/react-key 1})
                      :player/id ::unknown
                      :session-ui/current-session (comp/get-initial-state session-ui/Session)})
    :query         [{:all-players (comp/get-query Player)}
-                   {:player-adder (comp/get-query PlayerAdder)}
+                   {:player/adder (comp/get-query PlayerAdder)}
                    :player/id
                    ::root-id
                    {:session-ui/current-session (comp/get-query session-ui/Session)}]
@@ -199,15 +204,14 @@
         (ul :.ui.list#player-list
             (map ui-player all-players))))
     (div :.ui.attached.segment
-         (ui-player-adder player-adder))))
-
-(defsc Loader [this {:keys [::session-ui/current-session]
-                     :as props}]
-  {:ident (fn [] [:component/id ::LOADER])
-   :query [{::session-ui/current-session (comp/get-query session-ui/Session)}]
-   :initial-state (fn [_]
-                    {::current-session (comp/get-initial-state session-ui/Session)})}
-  (div
-   (p "Show the currently logged-in user's stat's, if any")
-   (p "Or just show whatever's public")
-   (p "Q: Are there any legal ramifications about just making everything public?")))
+         ;; Props is nil here.
+         ;; It seems very likely that a parent Component needs to
+         ;; add this query to its own.
+         ;; That seems to mean root/TopChrome.
+         ;; But the child it shows is ui-top-router.
+         ;; Can't override TopRouter's :query, and its render only
+         ;; shows when the route that should be showed is either pending
+         ;; or failed (or there isn't one).
+         ;; Q: Is this what dynamic routing is really for?
+         (log/info "Rendering player-adder:" adder "based on props" props)
+         (ui-player-adder adder))))
