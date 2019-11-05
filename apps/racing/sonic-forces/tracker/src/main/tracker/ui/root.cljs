@@ -159,21 +159,23 @@
 ;;; But anonymous principals shouldn't see the settings tab.
 ;;; Arguably, they shouldn't see anything except a list/tree of Players,
 ;;; and possibly some analytics.
-(defsc TopChrome [this {:root/keys [router current-session login]}]
+(defsc TopChrome [this {:root/keys [router current-session login]
+                        :as props}]
   {:query         [{:root/router (comp/get-query TopRouter)}
                    {:root/current-session (comp/get-query session-ui/Session)}
                    [::uism/asm-id ::TopRouter]
                    {:root/login (comp/get-query Login)}]
    :ident         (fn [] [:component/id :top-chrome])
    :initial-state (fn [params]
-                    {:root/router          {}
-                     :root/login           {}
+                    {:root/router          (comp/get-initial-state TopRouter {})
+                     :root/login           (comp/get-initial-state Login {})
                      :root/current-session (comp/get-initial-state session-ui/Session)})}
   (let [current-tab (or (some-> (dr/current-route this this) first keyword)
                         :main)
         {account-name :account/name} current-session]
     (log/info "Rendering current-tab:" current-tab
-              "based on " (dr/current-route this this))
+              "based on route " (dr/current-route this this)
+              "and props" props "(a " (type props) ")")
     (div :.ui.container
          (div :.ui.secondary.pointing.menu
               ;; I can't click from the settings tab back to main.
@@ -185,6 +187,9 @@
               (dom/a :.item {:classes [(when (= :settings current-tab) "active")]
                              :onClick (fn [] (dr/change-route this ["settings"]))} "Settings")
               (div :.right.menu
+                   ;; If we're already logged in, this should really just be
+                   ;; a ui-logout button
+                   ;; TODO: that^
                    (ui-login login)))
          (div :.ui.grid
               (div :.ui.row
@@ -192,8 +197,10 @@
 
 (def ui-top-chrome (comp/factory TopChrome))
 
-(defsc Root [this {:root/keys [top-chrome]}]
+(defsc Root [this {:root/keys [top-chrome]
+                   :as props}]
   {:query         [{:root/top-chrome (comp/get-query TopChrome)}]
    :ident         (fn [] [:component/id :ROOT])
-   :initial-state {:root/top-chrome {}}}
+   :initial-state (fn [_] {:root/top-chrome (comp/get-initial-state TopChrome {})})}
+  (log/info "Building top-chrome based on props:" props)
   (ui-top-chrome top-chrome))

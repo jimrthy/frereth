@@ -147,6 +147,8 @@
 (defsc Root [this {:keys [:all-players
                           :player/adder
                           :session-ui/current-session]
+                   ;; This needs to be part of the current session.
+                   ;; Q: How do I make that work?
                    player-id :player/id
                    :as props}]
   {:ident [:component/id :player/id]
@@ -162,6 +164,12 @@
                    {:session-ui/current-session (comp/get-query session-ui/Session)}]
    :route-segment ["main"]  ; this needs to be ["main" :account/id] for how I want it to work
    ;; For now, punt on this.
+   ;; Actually, that doesn't really work for these purposes.
+   ;; If I don't define :will-enter, then the default is to route-immediately
+   ;; based on ident.
+   ;; And I don't have a :player-id.
+   ;; Actually, that's an interesting conundrum, since that is part
+   ;; of the session (if any)
    #_#_:will-enter (fn [_]
                  (log/info "Will enter Player Root")
                  (dr/route-deferred [:component/id :player/id]
