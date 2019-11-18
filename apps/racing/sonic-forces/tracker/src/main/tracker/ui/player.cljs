@@ -146,31 +146,23 @@
 ;;; The logged-in version *does* need to match an :account/id
 (defsc Root [this {:keys [:all-players
                           :player/adder
+                          ;; Caller has to extract this from current-session
+                          ;; Q: Is there a way to avoid doing this?
+                          :player/id
                           :session-ui/current-session]
-                   ;; This needs to be part of the current session.
-                   ;; Q: How do I make that work?
-                   player-id :player/id
                    :as props}]
   {:ident [:component/id :player/id]
    :initial-state (fn [_]
                     {:all-players (comp/get-initial-state Player)
                      :player/adder (comp/get-initial-state PlayerAdder {:ui/react-key 1})
-                     :player/id ::unknown
                      :session-ui/current-session (comp/get-initial-state session-ui/Session)})
    :query         [{:all-players (comp/get-query Player)}
                    {:player/adder (comp/get-query PlayerAdder)}
                    :player/id
                    ::root-id
                    {:session-ui/current-session (comp/get-query session-ui/Session)}]
-   :route-segment ["main"]  ; this needs to be ["main" :account/id] for how I want it to work
-   ;; For now, punt on this.
-   ;; Actually, that doesn't really work for these purposes.
-   ;; If I don't define :will-enter, then the default is to route-immediately
-   ;; based on ident.
-   ;; And I don't have a :player-id.
-   ;; Actually, that's an interesting conundrum, since that is part
-   ;; of the session (if any)
-   #_#_:will-enter (fn [_]
+   :route-segment ["main"]
+   :will-enter (fn [_]
                  (log/info "Will enter Player Root")
                  (dr/route-deferred [:component/id :player/id]
                                     (fn []
@@ -178,8 +170,6 @@
                                                ::all
                                                Root
                                                {:post-mutation `dr/target-ready
-                                                ;; Q: How should this work?
-                                                ;; A: player-id really needs to be a parameter of the route segment
                                                 ;; This gets into the distinction between users (who are really
                                                 ;; principals) and players (which are accounts owned by a
                                                 ;; principal).
@@ -204,22 +194,17 @@
       (p
         "Make sure you've installed Fulcro Inspect, and your Chrome devtools will let you examine all of the details
         of the running tracker!"))
-    (div :.ui.attached.segment
-      (div :.content
-           (div (str "Your account ("
-                     (-> current-session :account/name)
-                     ") has the following players in the database:"))
-        (ul :.ui.list#player-list
-            (map ui-player all-players))))
-    (div :.ui.attached.segment
-         ;; Props is nil here.
-         ;; It seems very likely that a parent Component needs to
-         ;; add this query to its own.
-         ;; That seems to mean root/TopChrome.
-         ;; But the child it shows is ui-top-router.
-         ;; Can't override TopRouter's :query, and its render only
-         ;; shows when the route that should be showed is either pending
-         ;; or failed (or there isn't one).
-         ;; Q: Is this what dynamic routing is really for?
-         (log/info "Rendering player-adder:" adder "based on props" props)
-         (ui-player-adder adder))))
+    (when-let [account-name (-> current-session :account/name)]
+      (div
+       (div :.ui.attached.segment
+            (div :.content
+                 (div (str "Your account ("
+                           account-name
+                           ") has the following players in the database:"))
+                 (ul :.ui.list#player-list
+                     (map ui-player all-players))))
+       (div :.ui.attached.segment
+            (log/info "Rendering player-adder:" adder "based on props" props)
+            (ui-player-adder adder))))
+    ;; Possible future enhancement: treat the current Player's racers special
+    (div :.content "TODO: Sortable read-only view of everybody")))

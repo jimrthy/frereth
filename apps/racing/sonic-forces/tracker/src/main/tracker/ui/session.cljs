@@ -4,8 +4,12 @@
 
 (defsc Session
   "Session representation. Used primarily for server queries. On-screen representation happens in Login component."
-  [this {:keys [:session/valid? :account/name] :as props}]
-  {:query         [:session/valid? :account/name]
+  [this
+   {:keys [:account/name
+           :player/id
+           :session/valid?]
+    :as props}]
+  {:query         [:account/name :player/id :session/valid?]
    :ident         (fn [] [:component/id :session])
    ;; Q: What does this do?
    :pre-merge     (fn [{:keys [data-tree]}]
