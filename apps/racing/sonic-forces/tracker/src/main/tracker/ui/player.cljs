@@ -145,11 +145,9 @@
 ;;; This is why my routing wasn't matching earlier:
 ;;; The logged-in version *does* need to match an :account/id
 (defsc Root [this {:keys [:all-players
-                          :player/adder
-                          ;; Caller has to extract this from current-session
-                          ;; Q: Is there a way to avoid doing this?
-                          :player/id
-                          :session-ui/current-session]
+                          :player/adder]
+                   {player-id :player/id
+                    :as current-session} :session-ui/current-session
                    :as props}]
   {:ident [:component/id :player/id]
    :initial-state (fn [_]
@@ -179,6 +177,7 @@
                                                 ;; Though browsing anonymous players under the Main should
                                                 ;; probably be allowed anonymously.
                                                 :post-mutation-params {:target [:component/id :player/id]}}))))}
+  (.log js/console "Rendering player/Root. current-session:" current-session)
   (div :.ui.segments
     (div :.ui.top.attached.segment
       (h3 :.ui.header
