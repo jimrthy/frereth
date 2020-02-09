@@ -14,8 +14,10 @@
   :e2e {:ns-regexp "e2e.*"
         :output-to "out/e2e.js"
         :target :node-test}}
- :dependencies [[reagent "0.8.1"]
-                [devcards "0.2.6"]]
+ :dependencies [[cider/cider-nrepl "0.22.0"]
+                [cljsjs/three "0.1.01-1"]
+                [devcards "0.2.6"]
+                [reagent "0.8.1"]]
  :dev-http {3000 "public"}
  :nrepl {:port 3333}
  :source-paths ["src"]}
