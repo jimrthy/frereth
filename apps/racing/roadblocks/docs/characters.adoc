@@ -1,0 +1,92 @@
+= Roadblocks Characters
+:author: James Gatannah
+:email: jamesgatannah@gmail.com
+:initials: jrg
+:revnumber: v0.1
+:revdate: 07.02.2020
+:revremark: First draft
+
+This may make a lot more sense as a spreadsheet, at least initially.
+
+== Main/Common
+
+Q: Just start with the rainbow?
+
+=== Red
+
+Red's a fire-cracker.
+She works hard, plays harder, and don't take no crap from no one.
+
+Her theme song is "I Can't Drive 55."
+
+Her motto is "It's better to burn out than to fade away."
+
+Offense: fire ball (tornado?)
+Speed boost: afterburner (fries racers behind you)
+Booby trap: don't want to be too much like Blaze
+
+=== Yellow
+
+Texture: sponge
+
+Yellow's a gleeful, stupid, nearly indestructible sponge.
+
+His theme song is the derivative of Sponge Bob Square Pants'.
+The one where he lives in a pineapple/hot pepper/chicken parmesan hero/under the pineapple (serious recursion) that Mal loves.
+
+His motto:
+
+Offense: ??
+Speed boost: invulnerability bubble
+Booby trap: jellyfish tentacles
+
+=== Green
+
+This one seems like it should be the hippy
+
+=== Blue
+
+Tempting to think of this one as the cop
+
+== Rare
+
+If we start with the rainbow above, brown seems like an obvious choice here.
+
+I think other shapes are interesting possibilities.
+Multi-colored tetrahedron.
+
+== Super-Rare
+
+=== Black
+
+The absorber.
+
+Theme song: "Thus Spake Zarathustra" seems likely.
+Or maybe the theme from Jaws.
+
+Offense: give some zap to the racer behind your nearest competitor
+Speed boost: mirror (show off rendering and bounce attacks back at source)
+Booby trap:
+
+==== Notes
+
+When speed boosted, switch texture to mirror surroundings.
+Probably shouldn't actually go faster.
+
+Doesn't need to be fast. Ultimately, everyone else comes here.
+
+== Special
+
+=== Robot
+
+Texture map should be something like spinning wheels
+
+=== Storm
+
+Theme song: AC/DC "Thunderstruck"
+
+Texture: swirling clouds w/ lightning
+
+Offense: tornado
+Speed boost: what happens to other racers as you blow past?
+Booby trap: ice patch that makes you lose control

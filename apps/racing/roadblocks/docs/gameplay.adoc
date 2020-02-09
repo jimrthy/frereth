@@ -1,0 +1,114 @@
+= Roadblocks Gameplay
+:author: James Gatannah
+:email: jamesgatannah@gmail.com
+:initials: jrg
+:revnumber: v0.1
+:revdate: 07.02.2020
+:revremark: First draft
+
+== Basic Idea
+
+Authenticate
+
+Pick a runner
+
+Race
+
+=== Single vs. multi-player
+
+Single-player seems like an easier starting point.
+
+Just build an infinite track.
+
+Except...it should have check points so you don't always have to start back at the beginning.
+And it should have stages.
+Clear one stage to unlock the next.
+
+Maybe you clear a stage by getting a "high enough" score?
+
+=== Physics
+
+==== Camera
+
+Want this to hover slightly behind the racer.
+
+Q: Where, exactly?
+
+==== Mirrors
+
+Some kind of indication about what's behind you is vital.
+
+Too much on a phone screen is useless.
+
+=== Scoring
+
+==== Top Speed
+
+==== Subjective racing performance
+
+Really only makes sense in multi-player.
+
+==== Cards(?) to unlock other racers
+
+==== Hearts to add health while running
+
+==== Leveling Up
+
+===== Extra Hearts?
+
+===== Stats to upgrade
+
+== Controls
+
+Needs to be something simple enough to just swipe on your phone.
+
+=== Lane split
+
+Do you have a specific lane?
+
+Or can you weave around in between?
+
+=== Obvious approach
+
+Left/right to change lanes.
+
+Up to jump. Down to squat.
+
+== Character Presentation Screen
+
+How much of any character's theme song could we play under fair use?
+
+What would licensing fees look like?
+
+== Animations
+
+They're cubes.
+How much animation can/should there be?
+
+They should probably have stick arms/legs. And faces.
+I'm really torn about the arms/legs.
+They don't make sense for v1.
+
+And the faces don't need to be animated.
+
+And Red really should have an animated texture that suggests flames.
+
+Maybe swipe up/down to show off jump/squat animations?
+
+=== Jumping
+
+Most should spin. Red, at least, needs particle effects.
+
+=== Squatting
+
+Mal will be terribly disappointed if Blue doesn't roll.
+
+== Racer Management
+
+=== Start out w/ 1 or 2
+
+=== For Mal's sake, a major theme has to be unlocking others
+
+How do you collect cards to do this?
+
+Woman suggested that you can earn these by using offensive powers.
