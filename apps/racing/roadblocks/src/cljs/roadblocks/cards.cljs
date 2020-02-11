@@ -1,4 +1,4 @@
-(ns app.cards
+(ns roadblocks.cards
   "This namespace contains devcards and tests, and is the entrypoint for 
   both 'yarn cards' and 'yarn test'."
   (:require [cljsjs.react]

@@ -1,12 +1,14 @@
-(ns app.core
+(ns roadblocks.core
   "This namespace contains your application and is the entrypoint for 'yarn start'."
-  (:require [reagent.core :as r]
-            [app.hello :refer [hello]]))
+  (:require
+   [frereth.apps.shared.worker :as worker]
+   ["three" :as THREE]))
 
 (defn ^:dev/after-load render
   "Render the toplevel component for this app."
   []
-  (r/render [hello] (.getElementById js/document "app")))
+  (let [canvas (.querySelector "root")
+        renderer (THREE/WebGLRenderer. #js {"antialias" true})]))
 
 (defn ^:export main
   "Run application startup logic."
