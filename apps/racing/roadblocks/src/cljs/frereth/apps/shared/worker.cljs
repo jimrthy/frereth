@@ -51,6 +51,8 @@
 
 (defn event-forwarder
   "Sanitize event and post it to Worker"
+  ;; For an alternate, probably better, approach, see
+  ;; https://threejsfundamentals.org/threejs/lessons/threejs-offscreencanvas.html
   [worker ctrl-id tag]
   ;; Q: Is it worth keeping these around long-term?
   ;; Or better to just create/discard them on the fly as needed?

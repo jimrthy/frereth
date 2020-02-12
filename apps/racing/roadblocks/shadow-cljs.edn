@@ -18,6 +18,7 @@
                 [devcards "0.2.6"]
                 [integrant "0.8.0"]
                 [integrant/repl "0.3.1"]
+                [org.clojure/clojure "1.10.1"]
                 [reagent "0.8.1"]]
  :dev-http {3000 "public"}
  :nrepl {:port 3333}
