@@ -45,12 +45,12 @@
   [{:keys [::lamport/clock
            ::session/manager]
     :as this} event]
-  (console.log (str "Incoming at "
-                    (.now js/Date)
-                    " clock tick "
-                    @clock
-                    ": "
-                    (js->clj event)))
+  (.log js/console (str "Incoming at "
+                        (.now js/Date)
+                        " clock tick "
+                        @clock
+                        ": "
+                        (js->clj event)))
   (let [raw-bytes (.-data event)
         raw-envelope (serial/array-buffer->string raw-bytes)
         envelope (serial/deserialize raw-envelope)
@@ -61,7 +61,7 @@
          :or {remote-lamport 0}} envelope
         {:keys [::session/world-atom]} manager
         worlds @world-atom]
-    (console.log "Read:" envelope)
+    (.log js/console "Read:" envelope)
     (lamport/do-tick clock remote-lamport)
 
     ;; Using condp for this is weak. Should probably use a defmethod,
@@ -93,83 +93,83 @@
                        (try
                          (world/activate-forked worlds world-key browser->worker)
                          (catch :default ex
-                           (console.error "Forked ACK failed to adjust world state:" ex
-                                          "TODO: Transition the offender to an error state")
+                           (.error js/console "Forked ACK failed to adjust world state:" ex
+                                   "TODO: Transition the offender to an error state")
                            ;; FIXME: This is wrong.
                            ;; Need to transition the offending world into an error state
                            worlds)))))
 
-            (console.error "Missing forked worker"
-                           {::problem envelope
-                            ::world world
-                            ;; Q: Why is this an empty dict?
-                            ;; I can see the log-viewer world in the
-                            ;; ::world/forked ::world/connection-state
-                            ;; This gets stranger because I just established
-                            ;; that I have a :world that matches.
-                            ::world/forked (world/get-by-state worlds ::world/forked)
-                            ::world-id world-key
-                            :frereth/worlds worlds})))
-        (console.error "::forked ACKed for missing world"
-                       {::problem envelope
-                        ::world/forked (world/get-by-state worlds ::world/forked)
-                        ::world-id world-key
-                        :frereth/worlds worlds}))
+            (.error js/console "Missing forked worker"
+                    {::problem envelope
+                     ::world world
+                     ;; Q: Why is this an empty dict?
+                     ;; I can see the log-viewer world in the
+                     ;; ::world/forked ::world/connection-state
+                     ;; This gets stranger because I just established
+                     ;; that I have a :world that matches.
+                     ::world/forked (world/get-by-state worlds ::world/forked)
+                     ::world-id world-key
+                     :frereth/worlds worlds})))
+        (.error js/console "::forked ACKed for missing world"
+                {::problem envelope
+                 ::world/forked (world/get-by-state worlds ::world/forked)
+                 ::world-id world-key
+                 :frereth/worlds worlds}))
 
       :frereth/ack-forking
       (try
-        (console.log "Calling get-world-in-state")
+        (.log js/console "Calling get-world-in-state")
         (if-let [world (world/get-world-in-state worlds
                                                  world-key
                                                  ::world/pending)]
           (if-let [ack-chan (::world/notification-channel world)]
             (let [success (async/put! ack-chan body)]
-              (console.log "forking-ack Message put onto "
-                           (js->clj ack-chan)
-                           ": " success))
-            (console.error "Missing ACK channel among\n"
-                           (keys world)
-                           "\nin\n"
-                           world))
-          (console.error "ACK about non-pending world"
-                         {::count (count worlds)
-                          ::world/world-map worlds
-                          ::problem envelope
-                          ::world/pending (world/get-by-state worlds ::world/pending)
-                          ::world-id world-key}))
+              (.log js/console "forking-ack Message put onto "
+                    (js->clj ack-chan)
+                    ": " success))
+            (.error js/console "Missing ACK channel among\n"
+                    (keys world)
+                    "\nin\n"
+                    world))
+          (.error js/console "ACK about non-pending world"
+                  {::count (count worlds)
+                   ::world/world-map worlds
+                   ::problem envelope
+                   ::world/pending (world/get-by-state worlds ::world/pending)
+                   ::world-id world-key}))
         (catch :default ex
-          (console.error "Failed to handle :frereth/ack-forking" ex body)))
+          (.error js/console "Failed to handle :frereth/ack-forking" ex body)))
 
       :frereth/disconnect
       (if-let [world (world/get-world worlds world-key)]
         (if-let [worker (:frereth/worker world)]
           (.postMessage worker raw-envelope)
-          (console.error "Disconnect message for"
-                         world-key
-                         "in"
-                         envelope
-                         ".\nNo matching worker in\n"
-                         world))
-        (console.error "Disconnect message for"
-                       world-key
-                       "in"
-                       envelope
-                       ".\nNo matching world in\n"
-                       worlds))
+          (.error js/console "Disconnect message for"
+                  world-key
+                  "in"
+                  envelope
+                  ".\nNo matching worker in\n"
+                  world))
+        (.error js/console "Disconnect message for"
+                world-key
+                "in"
+                envelope
+                ".\nNo matching world in\n"
+                worlds))
 
       :frereth/forward
       (if-let [world (world/get-world-in-state worlds world-key ::world/active)]
         (if-let [worker (:frereth/worker world)]
           (.postMessage worker (serial/serialize body))
-          (console.error "Message for\n"
-                         world-key
-                         "in"
-                         envelope
-                         "\nMissing worker\n"
-                         (keys world)
-                         "\namong\n" world))
+          (.error js/console "Message for\n"
+                  world-key
+                  "in"
+                  envelope
+                  "\nMissing worker\n"
+                  (keys world)
+                  "\namong\n" world))
         ;; This should be impossible: it will throw an exception
-        (console.error "Missing world" world-key "inside" worlds)))))
+        (.error js/console "Missing world" world-key "inside" worlds)))))
 
 (s/fdef notify-logged-in!
   :args (s/cat :this ::connection
@@ -227,10 +227,10 @@
              ::web-socket/wrapper]
       session-manager ::session/manager
       :as this}]
-  (console.log "init:" ::connection
-               "session-manager:" session-manager
-               "\namong:" (keys this)
-               "\nin:" this)
+  (.log js/console "init:" ::connection
+        "session-manager:" session-manager
+        "\namong:" (keys this)
+        "\nin:" this)
   (when-let [{:keys [::web-socket/socket]} wrapper]
     (let [worker-manager (worker/manager clock session-manager wrapper)
           this (assoc this ::worker/manager worker-manager)
@@ -240,7 +240,7 @@
       ;; TODO: Move these into session-socket
       (set! (.-onopen socket)
             (fn [event]
-              (console.log "Websocket opened:" event socket)
+              (.log js/console "Websocket opened:" event socket)
               ;; This is really just a
               ;; placeholder until I add real auth.
               (notify-logged-in! this session-id)
@@ -257,9 +257,9 @@
               ;; Right now, this updates the manager's world-map atom.
               ;; But we should really be tracking the manager's internal
               ;; state also.
-              (console.warn "This should really update the manager value")
+              (.warn js/console "This should really update the manager value")
               (session/do-disconnect-all session-manager)))
       (set! (.-onerror socket)
             (fn [event]
-              (console.error "Frereth Connection error:" event)))
+              (.error js/console "Frereth Connection error:" event)))
       this)))

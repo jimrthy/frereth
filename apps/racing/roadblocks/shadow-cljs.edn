@@ -1,10 +1,10 @@
 {:builds
  {:app {:asset-path "/js"
-        :modules {:main {:init-fn roadblocks.core/main}}
+        :modules {:main {:init-fn frereth.apps.roadblocks.core/main}}
         :output-dir "public/js"
         :target :browser}
   :cards {:asset-path "/js"
-          :modules {:main {:init-fn roadblocks.cards/main}}
+          :modules {:main {:init-fn frereth.apps.roadblocks.cards/main}}
           :compiler-options {:devcards true}
           :output-dir "public/js"
           :target :browser}
@@ -18,6 +18,8 @@
                 [devcards "0.2.6"]
                 [integrant "0.8.0"]
                 [integrant/repl "0.3.1"]
+                ;; Get a warning that I cannot override this.
+                ;; Apparently, I can if I switch to deps.edn mode.
                 [org.clojure/clojure "1.10.1"]
                 [reagent "0.8.1"]]
  :dev-http {3000 "public"}

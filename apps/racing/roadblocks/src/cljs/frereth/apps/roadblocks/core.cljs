@@ -1,4 +1,4 @@
-(ns roadblocks.core
+(ns frereth.apps.roadblocks.core
   "This namespace contains your application and is the entrypoint for 'yarn start'."
   (:require
    [clojure.spec.alpha :as s]
@@ -49,7 +49,7 @@
   :args (s/cat :window-location #(= (type %) js/window.Location))
   :ret ::socket/wrapper)
 (defn build-socket-wrapper
-  [window-location]
+  [location]
   (let [origin-protocol (.-protocol location)
         protocol-length (count origin-protocol)
         ;; https: vs. http:
@@ -59,7 +59,7 @@
                    "wss:"
                    "ws:")
         local-base-suffix (str "//" (.-host location))
-        base-url (url/url (str origin-protocol local-base-suffix))
+        base-url (str origin-protocol local-base-suffix)
         ws-url (str protocol local-base-suffix  "/ws")]
     {::socket/base-url base-url
      ::socket/ws-url ws-url}))
@@ -74,7 +74,7 @@
   (let [socket-wrapper (build-socket-wrapper (.-location js/window))
         initial-path "/api/attract"  ; start in attract/demo mode
         manager-config {::session/path-to-fork initial-path
-                        ::frereth/session-id session-id-from-server}]
+                        :frereth/session-id session-id-from-server}]
     (.log js/console "Configuring system, starting with socket-wrapper:"
           socket-wrapper)
     ;; Contrary to comments in the original log-viewer, want to start

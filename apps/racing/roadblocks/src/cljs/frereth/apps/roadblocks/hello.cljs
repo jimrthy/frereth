@@ -1,4 +1,4 @@
-(ns roadblocks.hello
+(ns frereth.apps.roadblocks.hello
   (:require [reagent.core :as r]))
 
 (defn click-counter [click-count]

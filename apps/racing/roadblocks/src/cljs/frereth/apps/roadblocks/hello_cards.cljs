@@ -1,4 +1,4 @@
-(ns roadblocks.hello-cards
+(ns frereth.apps.roadblocks.hello-cards
   (:require [reagent.core :as r]
             [devcards.core :as dc :refer [defcard deftest]]
             [cljs.test :include-macros true :refer [is]]
@@ -16,7 +16,7 @@
 (defcard
   "This is a live interactive development environment using [Devcards](https://github.com/bhauman/devcards).
    You can use it to design, test, and think about parts of your app in isolation.
-   
+
    The two 'cards' below show the two components in this app.")
 
 (defcard hello-card
@@ -30,9 +30,9 @@
    :history true})
 
 (defcard
-  "You can also add tests here and see their results. 
+  "You can also add tests here and see their results.
    Below are some tests using [React Testing Library](https://testing-library.com/docs/react-testing-library/intro).
-   
+
    Tests will be ran outside the browser when you run the test command.")
 
 (deftest hello-tests-card
