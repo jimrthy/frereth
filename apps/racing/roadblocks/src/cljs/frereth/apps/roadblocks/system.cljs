@@ -13,7 +13,7 @@
    [frereth.apps.shared.socket :as web-socket]
    [integrant.core :as ig]
    ;; Q: Does it make any sense to tie to something as specific as weasel?
-   [weasel.repl :as repl]))
+   #_[weasel.repl :as repl]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Specs
@@ -40,7 +40,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Internal Implementation
 
-(defmethod ig/init-key ::repl
+#_(defmethod ig/init-key ::repl
   [_ opts]
   ;; Q: Is this worth its own ns?
   (when-not (repl/alive?)
