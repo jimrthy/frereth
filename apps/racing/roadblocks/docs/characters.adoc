@@ -42,7 +42,11 @@ Booby trap: jellyfish tentacles
 
 === Green
 
-This one seems like it should be the hippy
+This one seems like it should be the hippy.
+
+Offense:
+Speed boost: leave a rainbow trail that steals speed from others
+Booby trap: flower power -- slow down. Smell the roses.
 
 === Blue
 
@@ -90,3 +94,17 @@ Texture: swirling clouds w/ lightning
 Offense: tornado
 Speed boost: what happens to other racers as you blow past?
 Booby trap: ice patch that makes you lose control
+
+== alt
+
+Initial plan was to have a limited set of named characters. This is
+the easier approach.
+
+It would be much more immersive to have generic character "types"
+(think D&D races/classes) that players could customize instead.
+
+That ties in to a lot of the ideas I'm having about swag in the
+gameplay.adoc (Q: howto link?).
+
+It doesn't seem worthwhile for v1. But it does seem vital for the
+bigger frereth picture.
