@@ -13,7 +13,11 @@
          :target :node-test}
   :e2e {:ns-regexp "e2e.*"
         :output-to "out/e2e.js"
-        :target :node-test}}
+        :target :node-test}
+  :worker {:asset-path "/js"
+           :modules {:main {:init-fn frereth.apps.roadblocks.worker/main}}
+           :output-dir "public/js"
+           :target :browser}}
  :dependencies [[cider/cider-nrepl "0.22.0"]
                 [devcards "0.2.6"]
                 [integrant "0.8.0"]
