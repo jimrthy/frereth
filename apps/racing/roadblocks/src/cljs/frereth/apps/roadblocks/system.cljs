@@ -66,7 +66,7 @@
                                         ::web-socket/wrapper (ig/ref ::web-socket/wrapper)}
                                   connection)
    ::session/manager manager
-   ::repl repl
+   #_#_::repl repl
    ::web-socket/wrapper (into {::lamport/clock (ig/ref ::lamport/clock)}
                               wrapper)})
 

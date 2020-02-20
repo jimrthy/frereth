@@ -87,6 +87,11 @@
     (.setRenderTarget renderer render-target)
     (.render renderer scene camera)
     (.setRenderTarget renderer nil)
+
+    ;; FIXME: core needs to render this.
+    ;; Actually, it's missing a layer of indirection:
+    ;; core should render the root window, which is responsible for
+    ;; rendering this.
     (.postMessage js/self #js {:frereth/action :frereth/render
                                :frereth/texture render-target}))
 
@@ -95,6 +100,12 @@
   (when has-animator (js/requestAnimationFrame render!)))
 (when has-animator
   (js/requestAnimationFrame render!))
+
+(throw (ex-info "Missing"
+                {:need ["Handlers for messages from core"
+                        "Animation-frame is obvious"
+                        "Resize is also"
+                        "Proxy events for orbit controls"]}))
 
 ;; It seems like this should include the cookie that arrived with ::forking
 ;; It should not. We don't have any reason to know about that sort of

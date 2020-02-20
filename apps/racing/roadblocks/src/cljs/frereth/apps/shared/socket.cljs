@@ -19,8 +19,10 @@
 (defmethod ig/init-key ::wrapper
   [_ {:keys [::ws-url ::shell-forker ::session-id ::lamport/clock]
       :as opts}]
-  (.log js/console "Connecting WebSocket for world interaction based on"
-        opts)
+  (.log js/console "Connecting WebSocket to"
+        ws-url
+        "for world interaction based on"
+        (clj->js opts))
   (try
     (let [ws (js/WebSocket. ws-url)]
       ;; A blob is really just a file handle. Have to jump through an

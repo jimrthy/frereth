@@ -38,12 +38,41 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Internal Helpers
 
-(defn ^:dev/after-load render
+(defn render
+  [renderer]
+  )
+
+;; The :after-load metadata seems to inject this into the shadow-cljs
+;; lifecycle.
+;; That may or may not make sense.
+(defn ^:dev/after-load begin
   "Render the toplevel component for this app."
   []
-  (let [canvas (.querySelector "root")
-        renderer (THREE/WebGLRenderer. #js {"antialias" true})]
-    (throw (ex-info "Finish this" {}))))
+  (let [canvas (.querySelector js/document "root")
+        renderer (THREE/WebGLRenderer. #js {:antialias true
+                                            :canvas canvas})
+        scene (THREE/Scene.)
+
+        ;; Render onto our own spinning cube
+        cheeseDim 1
+        geometry (THREE/BoxGeometry. cheeseDim cheeseDim cheeseDim)
+
+        fov 75
+        aspect 2
+        near 0.1
+        far 5
+        camera (THREE/PerspectiveCamera. fov aspect near far)]
+    (set! (.-z (.-position camera)) 2)
+    (let [color 0xffffff
+          intensity 1
+          light (THREE/DirectionalLight. color intensity)]
+      (.set! (.-position light) -1 2 4)
+      (.add scene light))  ; side-effect
+
+    ;; This isn't going to compile. Need a texture to blt the render-target
+    ;; onto when we get a `render` message.
+    (let [material (THREE/MeshPhongMaterial. #js {:map (.-texture render-target)})]
+      (throw (ex-info "Finish this" {})))))
 
 (s/fdef build-socket-wrapper
   :args (s/cat :window-location #(= (type %) js/window.Location))
@@ -67,10 +96,10 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Public
 
-(defn ^:export main
+(defn ^:export main  ; Q: Does the ^:export make sense under shadow-cljs?
   "Run application startup logic."
   []
-  (assert js/window)
+  (assert js/window)  ; leftover from mixing everything up w/ Web Worker
   (let [socket-wrapper (build-socket-wrapper (.-location js/window))
         initial-path "/api/attract"  ; start in attract/demo mode
         manager-config {::session/path-to-fork initial-path
@@ -82,6 +111,7 @@
     ;; The obvious way to handle this is to inject the session-id
     ;; into the initial html.
     ;; Q: How badly does that go wrong?
+    ;; A: It goes into a header. Duh.
     (sys/do-begin sys/state
                   {::session/manager manager-config
                    ::socket/wrapper socket-wrapper})))
