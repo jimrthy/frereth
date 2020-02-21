@@ -7,10 +7,12 @@
   integrant."
   (:require
    [clojure.spec.alpha :as s]
+   [frereth.apps.roadblocks.window-manager :as window-manager]
    [frereth.apps.shared.lamport :as lamport]
    [frereth.apps.shared.session :as session]
    [frereth.apps.shared.session-socket :as session<->socket]
    [frereth.apps.shared.socket :as web-socket]
+   [frereth.apps.shared.worker :as worker]
    [integrant.core :as ig]
    ;; Q: Does it make any sense to tie to something as specific as weasel?
    #_[weasel.repl :as repl]))
@@ -63,12 +65,18 @@
   {::lamport/clock clock
    ::session<->socket/connection (into {::lamport/clock (ig/ref ::lamport/clock)
                                         ::session/manager (ig/ref ::session/manager)
-                                        ::web-socket/wrapper (ig/ref ::web-socket/wrapper)}
+                                        ::web-socket/wrapper (ig/ref ::web-socket/wrapper)
+                                        ::worker/manager (ig/ref ::worker/manager)}
                                   connection)
    ::session/manager manager
    #_#_::repl repl
    ::web-socket/wrapper (into {::lamport/clock (ig/ref ::lamport/clock)}
-                              wrapper)})
+                              wrapper)
+   ::window-manager/root {::lamport/clock (ig/ref ::lamport/clock)}
+   ::worker/manager {::lamport/clock (ig/ref ::lamport/clock)
+                     ::session/manager (ig/ref ::session/manager)
+                     ::web-socket/wrapper (ig/ref ::web-socket/wrapper)}
+   })
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Public

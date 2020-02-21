@@ -12,6 +12,7 @@
    [frereth.apps.shared.socket :as web-socket]
    [frereth.apps.shared.specs :as specs]
    [frereth.apps.shared.world :as world]
+   [integrant.core :as ig]
    ;; Start by at least partially supporting this, since it's
    ;; so popular
    [reagent.core :as r]))
@@ -24,6 +25,10 @@
 (s/def ::worker-instance (s/keys :req [:frereth/cookie
                                        ::web-worker]))
 
+(s/def ::need-dom-animation? (s/and
+                              #(instance? Atom %)
+                              #(boolean? (deref %))))
+
 ;; Q: What is this really?
 (s/def ::exported-public-key any?)
 
@@ -35,7 +40,8 @@
 (s/def ::manager (s/keys :req [::lamport/clock
                                ::session/manager
                                ::web-socket/wrapper
-                               ::workers]))
+                               ::workers
+                               ::workers-need-dom-animation?]))
 
 (defmulti handle-worker-message
   "Cope with message from Worker"
@@ -185,9 +191,14 @@
 
 (defmethod handle-worker-message :frereth/forked
   [{:keys [::web-socket/wrapper
-           ::session/manager]
+           ::session/manager
+           ::need-dom-animation?]
     :as this}
-   action world-key worker event raw-message]
+   action world-key worker event
+   {:keys [:frereth/needs-dom-animation?]
+    :as raw-message}]
+  (when needs-dom-animation?
+    (reset! need-dom-animation? needs-dom-animation?))
   (let [worlds (session/get-worlds manager)
         {:keys [::world/cookie]
          :as world-state} (world/get-world worlds
@@ -213,7 +224,11 @@
               "\nin" worlds
               "\nfrom" this))))
 
-(defmethod handle-worker-message :frereth/render
+;; Defer this to actual classes
+;; It seems like it would be handy to have this call a
+;; PureVirtualMethod exception to force concrete instances
+;; to override.
+#_(defmethod handle-worker-message :frereth/render
   [this action world-key worker event raw-message]
   (let [dom (sanitize-scripts worker
                               (:frereth/body raw-message))]
@@ -520,15 +535,12 @@
                                   @key-pair-atom
                                   clj-exported))))))
 
-(s/fdef manager
-  :args (s/cat :clock ::lamport/clock
-               :session-manager ::session/manager
-               :web-sock-wrapper ::web-socket/wrapper)
-  :ret ::manager)
-(defn manager
-  [clock session-manager web-sock-wrapper]
+(defmethod ig/init-key ::manager
+  [_ {:keys [::lamport/clock]
+      session-manager ::session/manager
+      web-sock-wrapper ::web-socket/wrapper
+      :as this}]
   {:pre [clock session-manager web-sock-wrapper]}
-  {::lamport/clock clock
-   ::session/manager session-manager
-   ::web-socket/wrapper web-sock-wrapper
-   ::workers (atom {})})
+  (assoc this
+         ::workers (atom {})
+         ::workers-need-dom-animation? (atom false)))

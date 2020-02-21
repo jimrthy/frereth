@@ -1,5 +1,5 @@
 (ns frereth.apps.shared.lamport
-  "Think about splitting a singleton clock into a Component"
+  "Coordinate distributed components"
   (:require [clojure.spec.alpha :as s]
             [integrant.core :as ig]))
 
@@ -12,7 +12,7 @@
 (s/def :frereth/lamport integer?)
 
 (s/def ::clock (s/and #?(:clj #(instance? clojure.lang.Atom %))
-                      #?(:cljs #(= (type %) Atom))
+                      #?(:cljs #(instance? Atom (type %)))
                       ;; Q: Is s/conform more appropriate than s/valid?
                       ;; here?
                       #(s/conform :frereth/lamport (deref %))))

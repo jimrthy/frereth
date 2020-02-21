@@ -173,11 +173,10 @@
 
 (comment
   (String. (serialize "12345" {:a 1 :b 2 :c 3}))
-  (try
-    (let [result (ByteArrayOutputStream. 4096)
-          writer (transit/writer result :json)]
-      (transit/write writer {::ch (async/chan)})
-      (.toByteArray result))
-    (catch RuntimeException ex
-      (println "Caught" ex)))
-  )
+  #?(:clj (try
+            (let [result (ByteArrayOutputStream. 4096)
+                  writer (transit/writer result :json)]
+              (transit/write writer {::ch (async/chan)})
+              (.toByteArray result))
+            (catch RuntimeException ex
+              (println "Caught" ex)))))

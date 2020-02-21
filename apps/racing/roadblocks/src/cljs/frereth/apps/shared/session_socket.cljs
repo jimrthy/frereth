@@ -226,23 +226,22 @@
   [_ {:keys [::lamport/clock
              ::web-socket/wrapper]
       session-manager ::session/manager
+      worker-manager ::worker/manager
       :as this}]
   (.log js/console "init:" ::connection
         "session-manager:" session-manager
         "\namong:" (keys this)
         "\nin:" this)
-  (when-let [{:keys [::web-socket/socket]} wrapper]
-    (let [worker-manager (worker/manager clock session-manager wrapper)
-          this (assoc this ::worker/manager worker-manager)
-          {:keys [:frereth/session-id]} session-manager]
+  (if-let [{:keys [::web-socket/socket]} wrapper]
+    (let [{:keys [:frereth/session-id]} session-manager]
       ;; Q: Worth using a library like sente or haslett to wrap the
       ;; details?
-      ;; TODO: Move these into session-socket
       (set! (.-onopen socket)
             (fn [event]
               (.log js/console "Websocket opened:" event socket)
               ;; This is really just a
               ;; placeholder until I add real auth.
+              ;; And it falls apart in terms of anonymous sessions.
               (notify-logged-in! this session-id)
               ;; TODO: This needs to wait for something like a
               ;; ::login-complete-ack message.
@@ -262,4 +261,5 @@
       (set! (.-onerror socket)
             (fn [event]
               (.error js/console "Frereth Connection error:" event)))
-      this)))
+      this)
+    (.error js/console "Missing web-socket")))
