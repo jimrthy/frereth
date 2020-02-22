@@ -63,20 +63,20 @@
         "\namong\n"
         (clj->js current))
   {::lamport/clock clock
-   ::session<->socket/connection (into {::lamport/clock (ig/ref ::lamport/clock)
+   #_#_::session<->socket/connection (into {::lamport/clock (ig/ref ::lamport/clock)
                                         ::session/manager (ig/ref ::session/manager)
                                         ::web-socket/wrapper (ig/ref ::web-socket/wrapper)
                                         ::worker/manager (ig/ref ::worker/manager)}
                                   connection)
    ::session/manager manager
    #_#_::repl repl
-   ::web-socket/wrapper (into {::lamport/clock (ig/ref ::lamport/clock)}
+   #_#_::web-socket/wrapper (into {::lamport/clock (ig/ref ::lamport/clock)}
                               wrapper)
    ::window-manager/root {::lamport/clock (ig/ref ::lamport/clock)
                           ::worker/manager (ig/ref ::worker/manager)}
    ::worker/manager {::lamport/clock (ig/ref ::lamport/clock)
                      ::session/manager (ig/ref ::session/manager)
-                     ::web-socket/wrapper (ig/ref ::web-socket/wrapper)}
+                     #_#_::web-socket/wrapper (ig/ref ::web-socket/wrapper)}
    })
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;

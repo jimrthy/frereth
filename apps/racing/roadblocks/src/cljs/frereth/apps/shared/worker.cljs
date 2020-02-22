@@ -540,7 +540,7 @@
       session-manager ::session/manager
       web-sock-wrapper ::web-socket/wrapper
       :as this}]
-  {:pre [clock session-manager web-sock-wrapper]}
+  {:pre [clock session-manager #_web-sock-wrapper]}
   (assoc this
          ::workers (atom {})
          ::workers-need-dom-animation? (atom false)))
