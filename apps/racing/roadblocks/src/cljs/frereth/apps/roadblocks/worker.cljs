@@ -22,7 +22,7 @@
   "Can this animate itself?
   Currently, in Firefox, at least, the main thread has to trigger each
   frame."
-  (bool js/requestAnimationFrame))
+  (boolean js/requestAnimationFrame))
 
 (defmulti handle-incoming-message!
   "Cope with incoming messages"
@@ -39,7 +39,7 @@
         far 0.5
         camera (THREE/PerspectiveCamera. fov aspect near far)]
     ;; icck
-    (set! (.-z (.-position camera) 2))
+    (set! (.-z (.-position camera)) 2)
 
     (let [scene (THREE/Scene.)
 
@@ -81,6 +81,9 @@
                                           ::ui/renderer (THREE/WebGLRenderTarget. w h)}
                            ::scene scene
                            ::world cubes})))))
+;; It's important that this gets called before
+;; render-and-animate!
+;; It configures global state that the latter uses
 (define-world!)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -88,7 +91,7 @@
 
 (defn render-and-animate!
   "This triggers all the interesting pieces"
-  [time-stamp]
+  [renderer time-stamp]
   (let [time (/ time-stamp 1000)
         {:keys [::camera
                 ::destination
@@ -117,9 +120,10 @@
   ;; This seems like a check to optimize away. Then again, it also seems
   ;; like something branch prediction should handle, and premature
   ;; optimization etc.
-  (when has-animator (js/requestAnimationFrame render-and-animate!)))
+  (when has-animator (js/requestAnimationFrame (partial render-and-animate! renderer))))
 (when has-animator
-  (js/requestAnimationFrame render-and-animate!))
+  (let [renderer (-> state deref ::destination ::ui/renderer)]
+    (js/requestAnimationFrame (partial render-and-animate! ))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Event handlers
@@ -127,7 +131,7 @@
 (set! (.-onerror js/self)
       (fn
         [error]
-        (console.error error)
+        (.error js/console error)
         ;; We can call .preventDefault on error to "prevent the default
         ;; action from taking place."
         ;; Q: Do we want to?
@@ -137,7 +141,7 @@
   [_ _]
   ;; Q: This really should cope with connection drops. Need
   ;; to be able to gracefully recover from those
-  (console.log "World disconnected. Exiting.")
+  (.log js/console "World disconnected. Exiting.")
   (.close js/self))
 
 (defmethod handle-incoming-message!   :frereth/event
@@ -147,7 +151,7 @@
   (try
     (.error js/console "What does this mean in this context?")
     (catch :default ex
-      (console.error ex))))
+      (.error js/console ex))))
 (throw (ex-info "Missing"
                 {:need ["Handlers for messages from core"
                         "Animation-frame is obvious"
@@ -156,7 +160,7 @@
 (defmethod handle-incoming-message! :frereth/forward
   ;; Data passed-through from server
   [_ data]
-  (console.warn "Worker should handle" data))
+  (.warn js/console "Worker should handle" data))
 
 (defmethod handle-incoming-message! :frereth/resize
   [_ {:keys [::ui/width
@@ -184,13 +188,13 @@
 
 (defn message-handler
   "Unwrap and dispatch incoming messages"
-  (fn [message-wrapper]
-    (console.log "Worker received event" message-wrapper)
-    (let [{:keys [:frereth/action]
-           remote-clock ::lamport/clock
-           :as data} (serial/deserialize (.-data wrapper))]
-      (lamport/do-tick clock remote-clock)
-      (handle-incoming-message! action data))))
+  [message-wrapper]
+  (.log js/console "Worker received event" message-wrapper)
+  (let [{:keys [:frereth/action]
+         remote-clock ::lamport/clock
+         :as data} (serial/deserialize (.-data message-wrapper))]
+    (lamport/do-tick clock remote-clock)
+    (handle-incoming-message! action data)))
 
 (set! (.-onmessage js/self) message-handler)
 

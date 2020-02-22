@@ -83,11 +83,11 @@ Need to restart it when you update `shadow-cljs.edn`
 
 `$ shadow-cljs server`
 
-Optionally, allow the REPL to control the server process:
+Optionally:
 
-`$ shadow-cljs cljs-repl`
+`$ shadow-cljs cljs-repl` puts you into a REPL that allows you to
+control the server directly from clojure.
 
-Q: What does that really mean?
 
 You can also run the server in the background:
 
@@ -101,28 +101,20 @@ much faster.
 
 ### Build/REPL and Hot Code Reload
 
-#### node.js, raw
-
-You may get some use out of opening a minimal Node REPL:
-
-`shadow-cljs node-repl`
-
-Byte-code does not get updated when your source files change. There is
-no hot code reload. But you have access to all your code.
-
-#### Browser, raw
-
-It may be more useful to set up code for this project running in a
-browser:
-
-`shadow-cljs browser-repl`
-
-That has most of the same capabilities and limitations as the Node REPL,
-but at least it's running in a browser.
-
 #### Specific Build Targets
 
 Mostly, you'll want to run builds for specific target.
+
+##### Short Version
+
+`$ shadow-cljs shadow-repl`
+
+`[2:0]~shadow.user=> (shadow/watch :app)
+...
+[2:1]~shadow.user=> (shadow/watch :worker)
+...`
+
+Read on for more generic details that probably don't belong in here.
 
 ##### CLI
 
@@ -132,7 +124,7 @@ Then, in a different terminal:
 
 `$ shadow-cljs cljs-repl ${build-id}`
 
-Or connect over CIDER, which is way out of scope
+Or connect over CIDER, which is way out of scope.
 
 ##### Integrated REPL
 
@@ -167,6 +159,25 @@ map directly to the CLI. By default, it is aliased as `shadow`.
 
 `;; shadow-cljs browser-repl
 (shadow/browser-repl)`
+
+#### node.js, raw
+
+You may get some use out of opening a minimal Node REPL:
+
+`shadow-cljs node-repl`
+
+Byte-code does not get updated when your source files change. There is
+no hot code reload. But you have access to all your code.
+
+#### Browser, raw
+
+It may be more useful to set up code for this project running in a
+browser:
+
+`shadow-cljs browser-repl`
+
+That has most of the same capabilities and limitations as the Node REPL,
+but at least it's running in a browser.
 
 ## Available Scripts
 
