@@ -59,9 +59,9 @@
            ::web-socket/wrapper]
     :as current}]
   (.log js/console "Configuring system based on\n"
-        (keys current)
+        (clj->js (keys current))
         "\namong\n"
-        current)
+        (clj->js current))
   {::lamport/clock clock
    ::session<->socket/connection (into {::lamport/clock (ig/ref ::lamport/clock)
                                         ::session/manager (ig/ref ::session/manager)
@@ -72,7 +72,8 @@
    #_#_::repl repl
    ::web-socket/wrapper (into {::lamport/clock (ig/ref ::lamport/clock)}
                               wrapper)
-   ::window-manager/root {::lamport/clock (ig/ref ::lamport/clock)}
+   ::window-manager/root {::lamport/clock (ig/ref ::lamport/clock)
+                          ::worker/manager (ig/ref ::worker/manager)}
    ::worker/manager {::lamport/clock (ig/ref ::lamport/clock)
                      ::session/manager (ig/ref ::session/manager)
                      ::web-socket/wrapper (ig/ref ::web-socket/wrapper)}

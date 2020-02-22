@@ -63,22 +63,25 @@
   :ret any?)
 (defn send-resize!
   [{worker-manager ::worker/manager
-    :keys [::lamport/clock]}
+    :keys [::lamport/clock]
+    :as this}
    new-dims]
+  {:pre [worker-manager]}
   "Notify the workers that the rendering size has changed"
-  (doseq [worker (-> worker-manager
-                     ::worker/workers
-                     deref
-                     vals)]
-    (lamport/do-tick clock)
-    ;; This is wrong.
-    ;; It's going to cause the cube to resize. Need to figure out
-    ;; how much space each face takes up an screen and resize "each"
-    ;; worker appropriately.
-    ;; But it's a start.
-    (.postMessage worker (serial/serialize (assoc new-dims
-                                                  :frereth/action :frereth/resize
-                                                  ::lamport/clock @clock)))))
+  (if-let [workers-atom (::worker/workers worker-manager)]
+    (let [workers @workers-atom]
+      (doseq [worker
+              (vals workers)]
+        (lamport/do-tick clock)
+        ;; This is wrong.
+        ;; It's going to cause the cube to resize. Need to figure out
+        ;; how much space each face takes up an screen and resize "each"
+        ;; worker appropriately.
+        ;; But it's a start.
+        (.postMessage worker (serial/serialize (assoc new-dims
+                                                      :frereth/action :frereth/resize
+                                                      ::lamport/clock @clock)))))
+    (throw (ex-info "Missing workers among manager" (clj->js this)))))
 
 (s/def resize-handler ::resize-handler)
 (defn resize-handler
@@ -92,8 +95,12 @@
         height (.-clientHeight canvas)
         new-dims {::ui/width width
                   ::ui/height height}]
+    (assert canvas)
+    (assert canvas-dimensions)
     (when (ui/should-resize-renderer? @canvas-dimensions
                                       new-dims)
+      ;; (send-resize is getting a nil ::worker/manager.
+      ;; Odds are, it comes from here.
       (send-resize! (select-keys this [::worker/manager ::lamport/clock])
                     new-dims)
 
@@ -105,6 +112,7 @@
   :ret ::graphics)
 (defn build-scene
   [canvas]
+  {:pre [canvas]}
   (let [renderer (THREE/WebGLRenderer. #js {:antialias true
                                             :canvas canvas})
         scene (THREE/Scene.)
@@ -122,7 +130,7 @@
     (let [color 0xffffff
           intensity 1
           light (THREE/DirectionalLight. color intensity)]
-      (.set! (.-position light) -1 2 4)
+      (.set (.-position light) -1 2 4)  ; distinct from set!
       (.add scene light)  ; side-effect
 
       ;; TODO: Need a placeholder texture until the worker is
@@ -134,6 +142,13 @@
         (.add scene cube)
         {::animating (atom true)
          ::camera camera
+         ;; Should probably just return the Canvas
+         ;; instead.
+         ;; Especially since this is stateful.
+         ;; Or maybe not...there's a lot of dubiousness
+         ;; floating around.
+         ::canvas-dimensions (atom {::ui/width -1
+                                    ::ui/height -1})
          ::cube cube
          ::renderer renderer
          ::scene scene}))))
@@ -145,7 +160,7 @@
   [_ {:keys [::lamport/clock]
       worker-manager ::worker/manager
       :as this}]
-  (let [canvas (.querySelector js/document "root")
+  (let [canvas (.querySelector js/document "#root")
         {:keys [::cube]
          :as graphics} (build-scene canvas)
         this (into this graphics)

@@ -72,7 +72,7 @@
         manager-config {::session/path-to-fork initial-path
                         :frereth/session-id session-id-from-server}]
     (.log js/console "Configuring system, starting with socket-wrapper:"
-          socket-wrapper)
+          (clj->js socket-wrapper))
     ;; Contrary to comments in the original log-viewer, want to start
     ;; with an initial anonymous session.
     ;; The obvious way to handle this is to inject the session-id
