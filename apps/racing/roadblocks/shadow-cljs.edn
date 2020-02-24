@@ -1,6 +1,16 @@
 {:builds
  {:app {:asset-path "/js"
-        :modules {:main {:init-fn frereth.apps.roadblocks.core/main}}
+        :devtools {:browser-inject :main}
+        ;; TODO: Add add a license :prepend to each
+        :modules {:main {:init-fn frereth.apps.roadblocks.core/main
+                         :depends-on #{:shared}}
+                  ;; Empty :entries forces the compiler to collect all
+                  ;; the code shared between :main and :worker.
+                  ;; Q: Why would you ever do anything else?
+                  :shared {:entries []}
+                  :worker {:init-fn frereth.apps.roadblocks.worker/main
+                           :depends-on #{:shared}
+                           :web-worker true}}
         :output-dir "public/js"
         :target :browser}
   :cards {:asset-path "/js"
@@ -13,11 +23,7 @@
          :target :node-test}
   :e2e {:ns-regexp "e2e.*"
         :output-to "out/e2e.js"
-        :target :node-test}
-  :worker {:asset-path "/js"
-           :modules {:main {:init-fn frereth.apps.roadblocks.worker/main}}
-           :output-dir "public/js"
-           :target :browser}}
+        :target :node-test}}
  :dependencies [[cider/cider-nrepl "0.22.0"]
                 [devcards "0.2.6"]
                 [integrant "0.8.0"]

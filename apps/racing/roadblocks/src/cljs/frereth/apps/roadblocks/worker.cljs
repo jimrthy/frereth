@@ -3,10 +3,37 @@
   ;; Kicker about this: it probably needs a System more
   ;; than core does
   (:require
+   [clojure.spec.alpha :as s]
    [frereth.apps.shared.lamport :as lamport]
    [frereth.apps.shared.serialization :as serial]
    [frereth.apps.shared.ui :as ui]
    ["three" :as THREE]))
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; Specs
+
+;; This feels suspiciously like it would make more
+;; sense in the ui ns
+(s/def ::fov number?)
+(s/def ::aspect number?)
+(s/def ::near (s/and number?
+                     (complement neg?)))
+(s/def ::far (s/and number?
+                    (complement neg?)))
+(s/def ::camera (s/keys :req [::fov
+                              ::aspect
+                              ::near
+                              ::far
+                              ::ui/camera]))
+
+(s/def ::destination (s/merge ::ui/dimensions-2
+                              (s/keys :req [::ui/renderer])))
+(s/def ::world (s/coll-of ::ui/mesh))
+
+(s/def ::state (s/keys :req [::camera
+                             ::destination
+                             ::ui/scene
+                             ::world]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Globals
@@ -14,9 +41,22 @@
 (enable-console-print!)
 (js/console.log "Worker top")
 
+(defn create-initial-state
+  []
+  {::camera {::fov nil
+             ::aspect nil
+             ::near nil
+             ::far nil
+             ::ui/camera nil}
+   ::destination {::ui/width nil
+                  ::ui/height nil
+                  ::ui/renderer nil}
+   ::ui/scene nil
+   ::world []})
+
 ;; feels wrong to make these "global."
 ;; But it also doesn't seem worth defining its own system, yet.
-(def state (atom {}))
+(def state (atom (create-initial-state)))
 (def clock (atom 0))
 (def has-animator
   "Can this animate itself?
@@ -79,7 +119,7 @@
                                           ;; on my current desktop, I'm limited to 16 contexts.
                                           ;; (Yes, I have an ancient video card)
                                           ::ui/renderer (THREE/WebGLRenderTarget. w h)}
-                           ::scene scene
+                           ::ui/scene scene
                            ::world cubes})))))
 ;; It's important that this gets called before
 ;; render-and-animate!
@@ -93,9 +133,9 @@
   "This triggers all the interesting pieces"
   [renderer time-stamp]
   (let [time (/ time-stamp 1000)
-        {:keys [::camera
+        {:keys [::ui/camera
                 ::destination
-                ::scene
+                ::ui/scene
                 :world]
          :as state} @state
         camera (::ui/camera camera)
@@ -114,6 +154,9 @@
     (.render renderer scene camera)
     (.setRenderTarget renderer nil)
 
+    ;; FIXME: Need a wrapper for this.
+    ;; Don't send raw messages willy-nilly.
+    ;; Need to update the Lamport clock.
     (.postMessage js/self (serial/serialize {:frereth/action :frereth/render
                                              :frereth/texture (.-texture render-target)})))
 
@@ -131,7 +174,7 @@
 (set! (.-onerror js/self)
       (fn
         [error]
-        (.error js/console error)
+        (.error js/console "[WORKER]" error)
         ;; We can call .preventDefault on error to "prevent the default
         ;; action from taking place."
         ;; Q: Do we want to?
@@ -141,8 +184,36 @@
   [_ _]
   ;; Q: This really should cope with connection drops. Need
   ;; to be able to gracefully recover from those
-  (.log js/console "World disconnected. Exiting.")
-  (.close js/self))
+  (throw (js/Error. "Not Implemented")))
+
+(defmethod handle-incoming-message! :frereth/halt
+  [_ _]
+  (.log js/console "World halted. Exiting.")
+  ;; This method has been deprecated.
+  ;; Q: What is there anything to do instead?
+  (when-let [close (.-close js/self)]
+    (close))
+  ;; A: Well, this is a bare minimum
+
+  ;; Q: Does/should this get called when there's a
+  ;; hot code reload due to code changes?
+  ;; That seems like a mistake, but the docs claim
+  ;; that the worst downside is that the related resources have to be
+  ;; set back up on the graphics hardware.
+  ;; So a little extra delay.
+  ;; And, really, it would be worse to leave old garbage just sitting
+  ;; on there.
+  (let [{:keys [::destination
+                ::ui/scene
+                ::world]
+         :as current} @state]
+    (let [{:keys [::ui/renderer]} destination]
+      (.dispose destination))
+    (doseq [mesh world]
+      (.dispose (.-geometry mesh))
+      (.dispose (.-map (.-material mesh))))
+    (.dispose scene))
+  (reset! state (create-initial-state)))
 
 (defmethod handle-incoming-message!   :frereth/event
   ;; UI event
@@ -166,6 +237,7 @@
   [_ {:keys [::ui/width
              ::ui/height]
       :as new-dims}]
+  (throw (js/Error. "This should be a :frereth/event"))
   (let [render-dst (-> state deref ::destination)
         current-dims (select-keys render-dst [::ui/width
                                               ::ui/height])]
@@ -188,27 +260,36 @@
 
 (defn message-handler
   "Unwrap and dispatch incoming messages"
-  [message-wrapper]
+  ;; Q: What does the ^js metadata do?
+  [^js message-wrapper]
   (.log js/console "Worker received event" message-wrapper)
   (let [{:keys [:frereth/action]
          remote-clock ::lamport/clock
          :as data} (serial/deserialize (.-data message-wrapper))]
-    (lamport/do-tick clock remote-clock)
+    (if remote-clock
+      (lamport/do-tick clock remote-clock)
+      (do
+        (.warn js/console "Incoming payload missing clock tick")
+        (lamport/do-tick clock)))
     (handle-incoming-message! action data)))
 
-(set! (.-onmessage js/self) message-handler)
+(defn init
+  []
+  ;; The shadow-cljs example shows this as
+  (js/self.addEventListener "message" message-handler)
+  (set! (.-onmessage js/self) message-handler)
 
-;; It seems like this should include the cookie that arrived with ::forking
-;; It should not. We don't have any reason to know about that sort of
-;; implementation detail here.
-;; It would be nice to not even need to do this much.
-;; On the other hand, it would also be really nice to have some sort of
-;; verification that this is what we expected.
-;; Then again, that *is* one of the main points behind TLS.
-(let [message {:frereth/action :frereth/forked
-               :frereth/needs-dom-animation? (if has-animator
-                                               false  ; Probably no real need to tell it I can animate myself
-                                               :frereth/immediate  ; trigger next frame as fast as possible
-                                               )}]
-  (.postMessage js/self (serial/serialize message)))
-(js/console.log "Worker bottom")
+  ;; It seems like this should include the cookie that arrived with ::forking
+  ;; It should not. We don't have any reason to know about that sort of
+  ;; implementation detail here.
+  ;; It would be nice to not even need to do this much.
+  ;; On the other hand, it would also be really nice to have some sort of
+  ;; verification that this is what we expected.
+  ;; Then again, that *is* one of the main points behind TLS.
+  (let [message {:frereth/action :frereth/forked
+                 :frereth/needs-dom-animation? (if has-animator
+                                                 false  ; Probably no real need to tell it I can animate myself
+                                                 :frereth/immediate  ; trigger next frame as fast as possible
+                                                 )}]
+    (.postMessage js/self (serial/serialize message)))
+  (js/console.log "Worker bottom"))
