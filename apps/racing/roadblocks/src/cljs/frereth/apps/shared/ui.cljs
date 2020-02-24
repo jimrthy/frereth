@@ -13,8 +13,18 @@
 
 (s/def ::dimensions-2 (s/keys :req [::width ::height]))
 
+;; It would probably make a lot more sense for this to
+;; be a wrapper around the low-level camera, like what
+;; I have in worker.cljs
 (s/def ::camera #(instance? THREE/Camera %))
+(s/def ::mesh #(instance? THREE/Mesh %))
 (s/def ::renderer #(instance? THREE/WebGLRenderTarget %))
+(s/def ::scene #(instance? THREE/Scene %))
+;; Probably shouldn't use this directly: want to be
+;; able to swap out loading styles seamlessly.
+;; This gets problematic in terms of async handling.
+;; The current approach is bad, but simple.
+(s/def ::texture-loader #(instance? THREE/TextureLoader %))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Public
@@ -37,6 +47,7 @@
   :ret any?)
 (defn resize-renderer-to-display-size!
   [renderer {:keys [::width ::height]}]
+  {:pre [renderer]}
   (.setSize renderer width height false))
 
 (s/fdef should-resize-renderer?

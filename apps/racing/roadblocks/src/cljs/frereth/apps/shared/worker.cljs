@@ -20,7 +20,8 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Specs
 
-(s/def ::web-worker #(= js/Worker (type %)))
+(s/def ::web-worker #(instance? js/Worker %))
+(s/def ::dom-event #(instance? js/Event %))
 
 (s/def ::worker-instance (s/keys :req [:frereth/cookie
                                        ::web-worker]))
@@ -55,11 +56,21 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Internal Implementation
 
+(declare send-to-worker!)
+
+(s/fdef event-forwarder
+  :args (s/cat :clock ::lamport/clock
+               :worker ::web-worker
+               :control-id keyword?
+               :tag keyword?)
+  :ret (s/fspec :args (s/cat :event ::dom-event)
+                ;; Event handler called for side-effects
+                :ret any?))
 (defn event-forwarder
   "Sanitize event and post it to Worker"
   ;; For an alternate, probably better, approach, see
   ;; https://threejsfundamentals.org/threejs/lessons/threejs-offscreencanvas.html
-  [worker ctrl-id tag]
+  [clock worker ctrl-id tag]
   ;; Q: Is it worth keeping these around long-term?
   ;; Or better to just create/discard them on the fly as needed?
   (fn [event]
@@ -95,22 +106,21 @@
       ;; handled the event, so this can do whatever's appropriate with
       ;; it (whether that's cancelling it, stopping the bubbling, or
       ;; whatever).
-      (.postMessage worker (serial/serialize
-                                          {:frereth/action :frereth/event
-                                           :frereth/body [tag ctrl-id clone]})))))
+      (send-to-worker! worker :frereth/event [tag ctrl-id clone]))))
 
 (defn on-*-replace
-  [worker ctrl-id acc [k v]]
+  [clock worker ctrl-id acc [k v]]
   (let [s (name k)
         prefix (subs s 0 3)]
     (assoc acc k
            (if (= "on-" prefix)
-             (event-forwarder worker ctrl-id v)
+             (event-forwarder clock worker ctrl-id v)
              v))))
 
 (defn sanitize-scripts
   "Convert scripting events to messages that get posted back to worker"
-  [worker
+  [clock
+   worker
    [ctrl-id attributes & body :as raw-dom]]
   ;; Need to walk the tree to find any/all scripting components
   ;; This is fine for plain "Form-1" components (as defined in
@@ -126,7 +136,7 @@
     (let [prefix (into [ctrl-id]
                        (when (map? attributes)
                          [(reduce
-                           (partial on-*-replace worker ctrl-id)
+                           (partial on-*-replace clock worker ctrl-id)
                             {}
                             attributes)]))]
       ;; TODO: Also have to block iframes
@@ -139,7 +149,7 @@
                     (into [attributes] body))]
               (map (fn [content]
                      (if (vector? content)
-                       (sanitize-scripts worker content)
+                       (sanitize-scripts clock worker content)
                        content))
                    body))))))
 
@@ -159,6 +169,7 @@
                ;; methods?
                :request any?))
 (defn send-message!
+  ;; FIXME: Rename this to something like send-to-server!
   "Send `body` over `socket` for `world-id`"
   [{{:keys [::web-socket/socket]} ::web-socket/wrapper
     :keys [::lamport/clock]
@@ -181,6 +192,18 @@
       (.log js/console request "sent successfully")
       (catch :default ex
         (.error js/console "Sending message failed:" ex)))))
+
+(s/fdef send-to-worker!
+  :args (s/cat :clock ::lamport/clock
+               :worker ::web-worker
+               :action :frereth/action
+               :payload :frereth/body))
+(defn send-to-worker!
+  [clock worker action payload]
+  (.postMessage worker (serial/serialize
+                        {:frereth/action action
+                         :frereth/body payload
+                         ::lamport/clock @clock})))
 
 (defmethod handle-worker-message :default
   [{:keys [:web-socket/wrapper]
@@ -230,7 +253,8 @@
 ;; to override.
 #_(defmethod handle-worker-message :frereth/render
   [this action world-key worker event raw-message]
-  (let [dom (sanitize-scripts worker
+    (let [dom (sanitize-scripts clock
+                                worker
                               (:frereth/body raw-message))]
     (r/render-component [(constantly dom)]
                         (js/document.getElementById "app"))))
@@ -544,3 +568,10 @@
   (assoc this
          ::workers (atom {})
          ::workers-need-dom-animation? (atom false)))
+
+(defmethod ig/halt-key! ::manager
+  [_ {:keys [::lamport/clock
+             ::workers]}]
+  (doseq [worker workers]
+    (lamport/do-tick clock)
+    (send-to-worker! clock worker :frereth/halt {})))
