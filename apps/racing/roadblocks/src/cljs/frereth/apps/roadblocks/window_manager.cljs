@@ -119,7 +119,7 @@
         camera (THREE/PerspectiveCamera. fov aspect near far)]
     ;; This is obviously extremely limited and inflexible
     #_(set! (.-z (.-position camera)) 2)
-    (.set (.-position camera) 0 0 2)
+    (.set (.-position camera) 0 1 2)
     camera))
 
 (s/fdef create-floor
@@ -128,7 +128,7 @@
 (defn create-floor
   [texture-loader]
   (let [plane-size 40
-        repeats (/ 2 plane-size)
+        repeats (/ plane-size 2)
         texture (.load texture-loader "/static/floor-check.png")]
     (set! (.-wrapS texture) THREE/RepeatWrapping)
     (set! (.-wrapT texture) THREE/RepeatWrapping)
@@ -138,11 +138,7 @@
           mat (THREE/MeshPhongMaterial. #js {:map texture
                                              :side THREE/DoubleSide})
           mesh (THREE/Mesh. geo mat)]
-      ;; This is what I think I want, but it disappears at this
-      ;; angle
-      #_(set! (.-x (.-rotation mesh)) (* (.-PI js/Math) -0.5))
-      ;; FIXME: While I figure out why that disappears
-      (set! (.-x (.-rotation mesh)) (* (.-PI js/Math) -0.25))
+      (set! (.-x (.-rotation mesh)) (* (.-PI js/Math) -0.5))
       (.log js/console "Floor:" mesh)
       mesh)))
 
@@ -152,7 +148,6 @@
         intensity 1
         light (THREE/DirectionalLight. color intensity)]
     (.set (.-position light) -1 2 4)  ; distinct from set!
-    #_(.set (.-position (.-target light)) -5 0 0)
     light))
 
 (s/fdef build-scene
@@ -182,7 +177,7 @@
     ;; It isn't a huge resource sink, and it's probably a lot
     ;; less wasteful than a lot of the options I'm choosing, but
     ;; tidiness for its own sake isn't a bad thing.
-    (let [texture (.load texture-loader "static/place-holder.png")
+    (let [texture (.load texture-loader "/static/place-holder.png")
           ;; Q: Do we want this to respond to lighting?
           material (THREE/MeshPhongMaterial. #js {:map texture})
           cube (THREE/Mesh. geometry material)]
