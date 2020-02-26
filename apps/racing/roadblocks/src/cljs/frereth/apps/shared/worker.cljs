@@ -177,6 +177,7 @@
     :as this}
    world-id
    request]
+  {:pre [socket]}
   (when-not clock
     (throw (ex-info "Missing clock"
                     {::problem this})))
@@ -573,7 +574,8 @@
         (assoc this
                ::workers (atom {})
                ::workers-need-dom-animation? (atom false))]
-    (fork-shell! result session-id)))
+    (fork-shell! result session-id)
+    result))
 
 (defmethod ig/halt-key! ::manager
   [_ {:keys [::lamport/clock

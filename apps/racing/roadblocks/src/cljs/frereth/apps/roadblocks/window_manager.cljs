@@ -62,6 +62,9 @@
    new-dims]
   {:pre [worker-manager]}
   "Notify the workers that the rendering size has changed"
+  (.log js/console "Trying to find workers-atom among"
+        (clj->js (keys worker-manager))
+        "from" worker-manager )
   (if-let [workers-atom (::worker/workers worker-manager)]
     (let [workers @workers-atom]
       (doseq [worker
@@ -78,7 +81,7 @@
                                 ;; :frereth/event
                                 :frereth/resize
                                 new-dims)))
-    (throw (ex-info "Missing workers among manager" (clj->js this)))))
+    (throw (ex-info "Missing workers among manager" this))))
 
 (s/def resize-handler ::resize-handler)
 (defn resize-handler
