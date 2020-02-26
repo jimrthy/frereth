@@ -275,6 +275,7 @@
 
 (defn init
   []
+  (.log js/console "Background worker: init")
   ;; The shadow-cljs example shows this as
   (js/self.addEventListener "message" message-handler)
   (set! (.-onmessage js/self) message-handler)

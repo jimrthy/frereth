@@ -6,6 +6,7 @@
    #_[cemerick.url :as url]
    [cljs.core.async :as async]
    [clojure.spec.alpha :as s]
+   [frereth.apps.shared.connection]  ; for specs
    [frereth.apps.shared.lamport :as lamport]
    [frereth.apps.shared.serialization :as serial]
    [frereth.apps.shared.session :as session]
@@ -284,7 +285,7 @@
 (s/fdef spawn-worker!
   :args (s/cat :crypto ::subtle-crypto
                :this ::connection
-               :session-id ::session-id
+               :session-id :frereth/session-id
                :key-pair ::internal-key-pair
                ;; Actually, this is anything that transit can serialize
                :public ::jwk
@@ -490,7 +491,7 @@
 
 (s/fdef export-public-key!
   :args (s/cat :this ::manager
-               :session-id ::session-id
+               :session-id :frereth/session-id
                ;; FIXME: Spec this
                :crypto any?
                :key-pair ::key-pair)
@@ -507,11 +508,11 @@
 ;;;; Public
 
 (s/fdef fork-shell!
-  :args (s/cat :this ::manager)
+  :args (s/cat :this ::manager
+               :session-id :frereth/session-id)
   :ret any?)
 (defn fork-shell!
-  [this
-   session-id]
+  [this session-id]
   (.log js/console "Setting up shell fork request")
   ;; TODO: Look into using something like
   ;; https://tweetnacl.js.org/#/
@@ -565,9 +566,14 @@
       web-sock-wrapper ::web-socket/wrapper
       :as this}]
   {:pre [clock session-manager #_web-sock-wrapper]}
-  (assoc this
-         ::workers (atom {})
-         ::workers-need-dom-animation? (atom false)))
+  ;; FIXME: session-id should come from the server as a header.
+  ;; Or possibly in (.-cookie js/document)
+  (let [session-id (random-uuid)
+        result
+        (assoc this
+               ::workers (atom {})
+               ::workers-need-dom-animation? (atom false))]
+    (fork-shell! result session-id)))
 
 (defmethod ig/halt-key! ::manager
   [_ {:keys [::lamport/clock

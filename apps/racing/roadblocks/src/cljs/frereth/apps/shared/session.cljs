@@ -24,7 +24,7 @@
 
 ;;; TODO: ::session-state
 (s/def ::manager (s/keys :req [::path-to-fork
-                               ::session-id
+                               :frereth/session-id
                                ;; TODO: Try to move anything that refers
                                ;; to this into session-socket
                                ::web-socket/sock
@@ -42,7 +42,7 @@
 
 (declare do-disconnect-all)
 (defmethod ig/halt-key! ::manager
-  [_ {:keys [::session-id
+  [_ {:keys [:frereth/session-id
              ::world-atom]
       :as this}]
   (do-disconnect-all this))
