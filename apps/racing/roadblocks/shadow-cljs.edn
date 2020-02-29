@@ -1,6 +1,11 @@
 {:builds
  {:app {:asset-path "/js"
-        :devtools {:browser-inject :main}
+        :devtools {#_#_:after-load (fn []
+                                     ;; Would need to call ig/halt! on @system/state
+                                     ;; And then...what?
+                                     ;; The current implementation seems to work OK for now.
+                                     (throw (js/Error. "What would make sense?")))
+                   :browser-inject :main}
         ;; TODO: Add add a license :prepend to each
         :modules {:main {:init-fn frereth.apps.roadblocks.core/main
                          :depends-on #{:shared}}

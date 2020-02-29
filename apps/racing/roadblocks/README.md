@@ -30,15 +30,16 @@ This adds the package to your devDependencies:
 
 ### As a library
 
+TODO:
+
 Could also just add `[thheller/shadow-cljs "2.8.83"]` (or whatever
 version is recent) to any other clojure JVM tool, such as `lein`,
 `boot`, or `deps.edn`.
 
-The
-[Shadow CLJS User Guide](https://shadow-cljs.github.io/docs/UsersGuide.html#_installation)
-highly recommends installing it using NPM.
+That will let me combine the server components. It looks like fulcro may
+have set things up the way I want.
 
-My personal jury's still out on this one.
+TODO: look into the sft folder to see how they set up deps.edn.
 
 ## Shadow CLJS usage
 
@@ -107,12 +108,9 @@ Mostly, you'll want to run builds for specific target.
 
 ##### Short Version
 
-`$ shadow-cljs shadow-repl`
+`$ shadow-cljs clj-repl`
 
 `[2:0]~shadow.user=> (shadow/watch :app)
-...
-[2:1]~shadow.user=> (shadow/watch :worker)
-...`
 
 Read on for more generic details that probably don't belong in here.
 

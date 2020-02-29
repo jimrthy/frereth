@@ -50,12 +50,12 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Public
 
-(s/fdef add-pending-world
+(s/fdef add-pending-world!
   :args (s/cat :this ::manager
                :full-pk :frereth/world-key
                :chan ::specs/async-chan
                :initial-state ::world/internal-state))
-(defn add-pending-world
+(defn add-pending-world!
   [{:keys [::world-atom]
     :as this}
    full-pk ch initial-state]

@@ -56,12 +56,15 @@
 
 ;; feels wrong to make these "global."
 ;; But it also doesn't seem worth defining its own system, yet.
-(def state (atom (create-initial-state)))
+(defonce state (atom (create-initial-state)))
+;; Q: How much sense does it make for this to be a def vs. defonce?
+;; A: Since this implementation is purely a throw-away PoC, who cares
+;; either way?
 (def clock (atom 0))
-(def has-animator
-  "Can this animate itself?
-  Currently, in Firefox, at least, the main thread has to trigger each
-  frame."
+;; Can this animate itself?
+;; Currently, in Firefox, at least, the main thread has to trigger each
+;; frame.
+(defonce has-animator
   (boolean js/requestAnimationFrame))
 
 (defmulti handle-incoming-message!

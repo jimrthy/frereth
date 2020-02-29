@@ -27,7 +27,13 @@
 (s/def ::worker-instance (s/keys :req [:frereth/cookie
                                        ::web-worker]))
 
-(s/def ::need-dom-animation? (s/and
+;; This tracks whether we need to call rAF to forward
+;; frame increments to each worker.
+;; My initial approach seems broken. I ought to be able
+;; to tell whether the Web Worker has a requestAnimationFrame member,
+;; at least after I create the original.
+;; Q: Right?
+(s/def ::workers-need-dom-animation? (s/and
                               #(instance? Atom %)
                               #(boolean? (deref %))))
 
@@ -171,6 +177,8 @@
                :request any?))
 (defn send-message!
   ;; FIXME: Rename this to something like send-to-server!
+  ;; FIXME: This does not belong in here. I need to mock
+  ;; it out for the sake of an in-browser mock websocket
   "Send `body` over `socket` for `world-id`"
   [{{:keys [::web-socket/socket]} ::web-socket/wrapper
     :keys [::lamport/clock]
@@ -217,13 +225,13 @@
 (defmethod handle-worker-message :frereth/forked
   [{:keys [::web-socket/wrapper
            ::session/manager
-           ::need-dom-animation?]
+           ::workers-need-dom-animation?]
     :as this}
    action world-key worker event
    {:keys [:frereth/needs-dom-animation?]
     :as raw-message}]
   (when needs-dom-animation?
-    (reset! need-dom-animation? needs-dom-animation?))
+    (reset! workers-need-dom-animation? needs-dom-animation?))
   (let [worlds (session/get-worlds manager)
         {:keys [::world/cookie]
          :as world-state} (world/get-world worlds
@@ -249,10 +257,18 @@
               "\nin" worlds
               "\nfrom" this))))
 
-;; Defer this to actual classes
+;; Defer this to concrete "Window Manager" implementations.
 ;; It seems like it would be handy to have this call a
 ;; PureVirtualMethod exception to force concrete instances
 ;; to override.
+;; Actually, it gets trickier than that.
+;; The Window Manager shouldn't do the rendering. That's
+;; the responsibility of the various...whatevers. Some
+;; Worlds may be just fine as Reagent Components. Others
+;; will just draw raw OpenGL.
+;; Combining those is its own kettle of fish.
+;; The Window Manager should handle things like compositing
+;; and event passing.
 #_(defmethod handle-worker-message :frereth/render
   [this action world-key worker event raw-message]
     (let [dom (sanitize-scripts clock
@@ -335,9 +351,10 @@
                                         :hash #js{:name "SHA-256"}}
                                    secret
                                    packet-bytes)]
-      ;; TODO: Look at the way promesa handles this
+      ;; TODO: Look at the way promesa handles this kind of event chain.
       ;; Q: Is it really any cleaner?
       (.then signature-promise
+             ;; TODO: Refactor this into a top-level function
              (fn [signature]
                (let [base-url (::web-socket/base-url wrapper)
                      sock (::web-socket/socket wrapper)
@@ -365,6 +382,18 @@
                                  ;; in Chrome, at least, module scripts are not
                                  ;; supported on DedicatedWorker
                                  #js{"type" "classic"})]
+                 ;; TODO: At least in theory, we shoulld be able to to
+                 ;; set the ::workers-need-dom-animation value the first
+                 ;; time this gets called.
+                 ;; Which, really, should be to create the Window
+                 ;; Manager.
+                 ;; Which gets weird with auth and anonymity: what if
+                 ;; different end-users choose different Window
+                 ;; Managers?
+                 (.debug js/console "(.-requestAnimationFrame worker)"
+                         (.-requestAnimationFrame worker)
+                         "among"
+                         worker)
                  (set! (.-onmessage worker)
                        (partial on-worker-message this world-key worker))
                  (set! (.-onerror worker)
@@ -478,7 +507,7 @@
         ch (async/chan)]
     (.log js/console "cljs JWK:" full-pk
           "\nworlds: " worlds)
-    (session/add-pending-world manager full-pk ch {})
+    (session/add-pending-world! manager full-pk ch {})
     ;; This seems like it's putting the cart before the horse, but
     ;; it returns a go block that's waiting for something
     ;; to write to ch to trigger the creation of the WebWorker.
