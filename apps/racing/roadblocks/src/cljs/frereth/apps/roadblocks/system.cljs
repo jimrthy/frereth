@@ -65,7 +65,7 @@
   {::lamport/clock clock
    #_#_::session<->socket/connection (into {::lamport/clock (ig/ref ::lamport/clock)
                                         ::session/manager (ig/ref ::session/manager)
-                                        ::web-socket/wrapper (ig/ref ::web-socket/wrapper)
+                                        #_#_::web-socket/wrapper (ig/ref ::web-socket/wrapper)
                                         ::worker/manager (ig/ref ::worker/manager)}
                                   connection)
    ::session/manager manager

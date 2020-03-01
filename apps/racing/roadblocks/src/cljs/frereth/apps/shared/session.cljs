@@ -17,6 +17,7 @@
 ;;;; Specs
 
 ;; FIXME: Better spec.
+;; This is the path?query part of a URL
 (s/def ::path-to-fork string?)
 
 (s/def ::world-atom (s/and #(= (type %) Atom)
@@ -25,7 +26,7 @@
 ;;; TODO: ::session-state
 (s/def ::manager (s/keys :req [::path-to-fork
                                :frereth/session-id
-                               ;; TODO: Try to move anything that refers
+                               ;; TODO: Move anything that refers
                                ;; to this into session-socket
                                ::web-socket/sock
                                ::world-atom]))
@@ -33,6 +34,8 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Implementation
 
+;; There aren't any side-effects here.
+;; Q: Does this make any sense as a Component?
 (defmethod ig/init-key ::manager
   [_ {:keys [:frereth/world-atom]
       :as opts}]

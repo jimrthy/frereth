@@ -15,18 +15,18 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Specs
 
-(s/def ::connection (s/keys :required [::lamport/clock
-                                       ::session/manager
-                                       ::web-socket/wrapper
-                                       ;; This is a bit redundant.
-                                       ;; The ::worker/manager consists
-                                       ;; of those 3 keys plus
-                                       ;; ::worker/workers.
-                                       ;; Then again, we should probably
-                                       ;; treat it as a black box here.
-                                       ;; The duplication is really just
-                                       ;; an implementation detail.
-                                       ::worker/manager]))
+(s/def ::connection (s/keys :req [::lamport/clock
+                                  ::session/manager
+                                  ::web-socket/wrapper
+                                  ;; This is a bit redundant.
+                                  ;; The ::worker/manager consists
+                                  ;; of those 3 keys plus
+                                  ;; ::worker/workers.
+                                  ;; Then again, we should probably
+                                  ;; treat it as a black box here.
+                                  ;; The duplication is really just
+                                  ;; an implementation detail.
+                                  ::worker/manager]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Implementation
@@ -42,6 +42,7 @@
 (defn recv-message!
   ;; This function is nuts.
   ;; TODO: Refactor it into smaller pieces.
+  ;; It seems like many/most of those really belong in the socket ns
   [{:keys [::lamport/clock
            ::session/manager]
     :as this} event]
@@ -209,11 +210,11 @@
   ;; really be an http-only cookie to which we don't have any
   ;; access.
   (.log js/console "Trying to send logged-in notification for" this)
-  (worker/send-message! (::worker/manager this)
-                        ::login
-                        {:path-info "/api/v1/logged-in"
-                         :request-method :put
-                         :params {:frereth/session-id session-id}}))
+  (web-socket/send-message! (::worker/manager this)
+                            ::login
+                            {:path-info "/api/v1/logged-in"
+                             :request-method :put
+                             :params {:frereth/session-id session-id}}))
 
 (defn check
   []
@@ -242,6 +243,8 @@
               ;; This is really just a
               ;; placeholder until I add real auth.
               ;; And it falls apart in terms of anonymous sessions.
+              ;; Anonymous sessions do not get access to a websock.
+              ;; We got logged in before we ever got here.
               (notify-logged-in! this session-id)
               ;; TODO: This needs to wait for something like a
               ;; ::login-complete-ack message.

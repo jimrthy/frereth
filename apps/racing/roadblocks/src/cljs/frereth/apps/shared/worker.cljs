@@ -16,7 +16,7 @@
    [integrant.core :as ig]
    ;; Start by at least partially supporting this, since it's
    ;; so popular
-   [reagent.core :as r]))
+   #_[reagent.core :as r]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Specs
@@ -33,11 +33,16 @@
 ;; to tell whether the Web Worker has a requestAnimationFrame member,
 ;; at least after I create the original.
 ;; Q: Right?
+;; I'm torn about whether this belongs in here.
+;; On one hand, of course it does! Who else makes sense as a source of
+;; truth about a Worker's capabilities?
+;; On the other...why even make it an option? The window manager gets to
+;; trigger animations because it owns which windows are visible/active.
 (s/def ::workers-need-dom-animation? (s/and
                               #(instance? Atom %)
                               #(boolean? (deref %))))
 
-;; Q: What is this really?
+;; Q: What is this, really?
 (s/def ::exported-public-key any?)
 
 (s/def ::worker-map (s/map-of :frereth/world-id ::worker-instance))
@@ -160,49 +165,6 @@
                        content))
                    body))))))
 
-;; This doesn't belong in here.
-;; But the session-socket ns depends on this ns,
-;; and we need to call this function here.
-;; So it doesn't make any sense to define it there.
-(s/fdef send-message!
-  :args (s/cat :this ::manager
-               :world-id :frereth/world-key
-               ;; This really turns into a subset of the Pedestal
-               ;; Request map.
-               ;; TODO: Need to define exactly which subset.
-               ;; And think this through a bit more.
-               ;; Would it be worth splitting into something
-               ;; more traditional, like post/get/delete
-               ;; methods?
-               :request any?))
-(defn send-message!
-  ;; FIXME: Rename this to something like send-to-server!
-  ;; FIXME: This does not belong in here. I need to mock
-  ;; it out for the sake of an in-browser mock websocket
-  "Send `body` over `socket` for `world-id`"
-  [{{:keys [::web-socket/socket]} ::web-socket/wrapper
-    :keys [::lamport/clock]
-    :as this}
-   world-id
-   request]
-  {:pre [socket]}
-  (when-not clock
-    (throw (ex-info "Missing clock"
-                    {::problem this})))
-  (lamport/do-tick clock)
-  (let [envelope {:request request
-                  :frereth/lamport @clock
-                  :frereth/wall-clock (.now js/Date)
-                  :frereth/world-key world-id}]
-    ;; TODO: Check that bufferedAmount is low enough
-    ;; to send more
-    (try
-      (.log js/console "Trying to send-message!" envelope)
-      (.send socket (serial/serialize envelope))
-      (.log js/console request "sent successfully")
-      (catch :default ex
-        (.error js/console "Sending message failed:" ex)))))
-
 (s/fdef send-to-worker!
   :args (s/cat :clock ::lamport/clock
                :worker ::web-worker
@@ -241,16 +203,16 @@
                              :frereth/cookie cookie
                              :frereth/world-key world-key)
             {:keys [::web-socket/socket]} wrapper]
-        (send-message! this
-                       world-key
-                       {:path-info "/api/v1/forked"
-                        :request-method :put
-                        ;; Anyway, that's premature optimization.
-                        ;; Worry about that detail later.
-                        ;; Even though this is the boundary area where
-                        ;; it's probably the most important.
-                        ;; (Well, not here. But in general)
-                        :body decorated})
+        (web-socket/send-message! this
+                                  world-key
+                                  {:path-info "/api/v1/forked"
+                                   :request-method :put
+                                   ;; Anyway, that's premature optimization.
+                                   ;; Worry about that detail later.
+                                   ;; Even though this is the boundary area where
+                                   ;; it's probably the most important.
+                                   ;; (Well, not here. But in general)
+                                   :body decorated})
         (session/do-mark-forked manager world-key worker))
       (.error js/console "Missing ::cookie among" world-state
               "\namong" (keys worlds)
@@ -385,8 +347,8 @@
                  ;; TODO: At least in theory, we shoulld be able to to
                  ;; set the ::workers-need-dom-animation value the first
                  ;; time this gets called.
-                 ;; Which, really, should be to create the Window
-                 ;; Manager.
+                 ;; Which, really, should be to create the Login/Attract
+                 ;; Screen.
                  ;; Which gets weird with auth and anonymity: what if
                  ;; different end-users choose different Window
                  ;; Managers?
@@ -494,10 +456,10 @@
   (.log js/console "Set up pending World. Notify about pending fork.")
   ;; Want this part to happen asap to minimize the length of time
   ;; we have to spend waiting on network hops
-  (send-message! this full-pk {:path-info "/api/v1/forking"
-                               :request-method :post
-                               :params {:frereth/command 'shell
-                                        :frereth/world-key full-pk}})
+  (web-socket/send-message! this full-pk {:path-info "/api/v1/forking"
+                                          :request-method :post
+                                          :params {:frereth/command 'login
+                                                   :frereth/world-key full-pk}})
   (.log js/console "Setting up worker 'fork' in worlds inside the manager in"
                this "\namong" (keys this))
   ;; Q: Should this next section wait on the forking-ACK?
