@@ -10,9 +10,12 @@
 
 (s/def ::socket #(instance? js/WebSocket %))
 
-(s/def ::wrapper (s/keys :req [::socket]
-                         :opt [::base-url
-                               ::ws-url]))
+(s/def ::options (s/keys :opt [::base-url
+                               ::ws-url]
+                         :req [::lamport/clock]))
+
+(s/def ::wrapper (s/keys :req [::lamport/clock
+                               ::socket]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Implementation
@@ -20,6 +23,7 @@
 (defmethod ig/init-key ::wrapper
   [_ {:keys [::ws-url ::lamport/clock]
       :as opts}]
+  {:pre [clock]}
   (lamport/do-tick clock)
   (.log js/console "Connecting WebSocket to"
         ws-url
@@ -31,11 +35,14 @@
       ;; async op to convert it to an arraybuffer.
       (set! (.-binaryType ws) "arraybuffer")
       (lamport/do-tick clock)
-      (assoc opts ::socket ws))
+      {::lamport/clock clock
+       ::socket ws})
     (catch :default ex
       (.error js/console "Initializing wrapper failed:" ex
               "\nbased on" opts)
-      nil)))
+      nil
+      #_(throw ex)    ; Q: Is there a reason this shouldn't fail terribly?
+      )))
 
 (defmethod ig/halt-key! ::wrapper
   [_ {:keys [::socket] :as this}]

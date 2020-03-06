@@ -1,5 +1,11 @@
 (ns frereth.apps.shared.session
-  "Manage a web socket session"
+  ;; It's really tempting to move this into a .cljc.
+  ;; The parts that don't deal with the forked shell probably do
+  ;; belong in there instead.
+  ;; We *do* need to track something like a world-atom on the
+  ;; server-side, after all.
+  "Manage the worlds associated with a web socket session"
+  ;; FIXME: Rename this to world-manager
   (:require [cljs.core.async :as async]
             [clojure.spec.alpha :as s]
             ;; It seems highly likely that everything that's currently
@@ -18,18 +24,15 @@
 
 ;; FIXME: Better spec.
 ;; This is the path?query part of a URL
-(s/def ::path-to-fork string?)
+(s/def ::path-to-fork-shell string?)
 
 (s/def ::world-atom (s/and #(= (type %) Atom)
                            #(s/valid? :frereth/worlds (deref %))))
 
 ;;; TODO: ::session-state
-(s/def ::manager (s/keys :req [::path-to-fork
-                               :frereth/session-id
-                               ;; TODO: Move anything that refers
-                               ;; to this into session-socket
-                               ::web-socket/sock
-                               ::world-atom]))
+(s/def ::manager (s/keys :req [::path-to-fork-shell
+                               ::world-atom]
+                         :opt [:frereth/session-id]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Implementation

@@ -320,7 +320,7 @@
              (fn [signature]
                (let [base-url (::web-socket/base-url wrapper)
                      sock (::web-socket/socket wrapper)
-                     path-to-shell (::session/path-to-fork manager)
+                     path-to-shell (::session/path-to-fork-shell manager)
                      url #_(url/url base-url path-to-shell) (str base-url "/" path-to-shell)
                      params {:frereth/initiate packet-string
                              :frereth/signature (-> signature
@@ -565,7 +565,15 @@
         (assoc this
                ::workers (atom {})
                ::workers-need-dom-animation? (atom false))]
-    (fork-shell! result session-id)
+    ;; This is happening twice.
+    ;; The call here is wrong.
+    ;; The one in session-socket/log-in! makes sense.
+    ;; Actually, the call here isn't *quite* wrong:
+    ;; We *do* need to fork the "Attract" worker.
+    ;; Just not a full shell.
+    ;; And maybe not from here.
+    ;; Q: If not here, then where?
+    #_(fork-shell! result session-id)
     result))
 
 (defmethod ig/halt-key! ::manager

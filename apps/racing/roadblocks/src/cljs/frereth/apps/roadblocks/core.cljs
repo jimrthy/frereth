@@ -37,10 +37,10 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Internal Helpers
 
-(s/fdef build-socket-wrapper
+(s/fdef build-socket-wrapper-config
   :args (s/cat :window-location #(= (type %) js/window.Location))
   :ret ::socket/wrapper)
-(defn build-socket-wrapper
+(defn build-socket-wrapper-config
   "Define how to get to the websocket that will do most of the work"
   [location]
   (let [origin-protocol (.-protocol location)
@@ -67,9 +67,10 @@
   "Run application startup logic."
   []
   (assert js/window)  ; leftover from mixing everything up w/ Web Worker
-  (let [socket-wrapper (build-socket-wrapper (.-location js/window))
+  (let [socket-wrapper (build-socket-wrapper-config (.-location js/window))
         initial-path "/api/attract"  ; start in attract/demo mode
-        manager-config {::session/path-to-fork initial-path
+        manager-config {::session/path-to-fork-shell initial-path
+                        ;; FIXME: This should be hidden inside a cookie
                         :frereth/session-id session-id-from-server}]
     (.log js/console "Configuring system, starting with socket-wrapper:"
           (clj->js socket-wrapper))

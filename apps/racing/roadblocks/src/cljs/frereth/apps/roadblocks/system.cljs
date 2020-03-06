@@ -55,29 +55,30 @@
   [{:keys [::lamport/clock
            ::session<->socket/connection
            ::session/manager
-           ::repl
-           ::web-socket/wrapper]
+           ::repl]
+    websock-options ::web-socket/options
     :as current}]
   (.log js/console "Configuring system based on\n"
         (clj->js (keys current))
         "\namong\n"
         (clj->js current))
+  ;; FIXME: This seems like it needs an "Attract" worker.
+  ;; But that isn't something that makes sense at this level.
+  ;; Q: Where does it belong?
   {::lamport/clock clock
-   #_#_::session<->socket/connection (into {::lamport/clock (ig/ref ::lamport/clock)
+   ::session<->socket/connection (into {::lamport/clock (ig/ref ::lamport/clock)
                                         ::session/manager (ig/ref ::session/manager)
-                                        #_#_::web-socket/wrapper (ig/ref ::web-socket/wrapper)
+                                        ::web-socket/options websock-options
                                         ::worker/manager (ig/ref ::worker/manager)}
                                   connection)
    ::session/manager manager
+   ;; TODO: This is pretty integral to the entire point.
+   ;; Q: But does it still make sense in a shadow-cljs world?
    #_#_::repl repl
-   #_#_::web-socket/wrapper (into {::lamport/clock (ig/ref ::lamport/clock)}
-                              wrapper)
    ::window-manager/root {::lamport/clock (ig/ref ::lamport/clock)
                           ::worker/manager (ig/ref ::worker/manager)}
    ::worker/manager {::lamport/clock (ig/ref ::lamport/clock)
-                     ::session/manager (ig/ref ::session/manager)
-                     #_#_::web-socket/wrapper (ig/ref ::web-socket/wrapper)}
-   })
+                     ::session/manager (ig/ref ::session/manager)}})
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Public

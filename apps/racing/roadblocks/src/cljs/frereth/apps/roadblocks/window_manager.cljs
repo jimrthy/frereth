@@ -62,7 +62,7 @@
    new-dims]
   {:pre [worker-manager]}
   "Notify the workers that the rendering size has changed"
-  (.log js/console "Trying to find workers-atom among"
+  (.log js/console "send-resize! Trying to find workers-atom among"
         (clj->js (keys worker-manager))
         "from" worker-manager )
   (if-let [workers-atom (::worker/workers worker-manager)]
