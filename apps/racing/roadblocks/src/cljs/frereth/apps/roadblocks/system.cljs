@@ -7,11 +7,11 @@
   integrant."
   (:require
    [clojure.spec.alpha :as s]
-   [frereth.apps.roadblocks.window-manager :as window-manager]
    [frereth.apps.shared.lamport :as lamport]
    [frereth.apps.shared.session :as session]
    [frereth.apps.shared.session-socket :as session<->socket]
    [frereth.apps.shared.socket :as web-socket]
+   [frereth.apps.shared.window-manager :as shared-wm]
    [frereth.apps.shared.worker :as worker]
    [integrant.core :as ig]
    ;; Q: Does it make any sense to tie to something as specific as weasel?
@@ -57,6 +57,7 @@
            ::session/manager
            ::repl]
     websock-options ::web-socket/options
+    wm-base ::shared-wm/base
     :as current}]
   (.log js/console "Configuring system based on\n"
         (clj->js (keys current))
@@ -69,14 +70,16 @@
    ::session<->socket/connection (into {::lamport/clock (ig/ref ::lamport/clock)
                                         ::session/manager (ig/ref ::session/manager)
                                         ::web-socket/options websock-options
+                                        ::shared-wm/interface (ig/ref ::shared-wm/interface)
                                         ::worker/manager (ig/ref ::worker/manager)}
                                   connection)
-   ::session/manager manager
    ;; TODO: This is pretty integral to the entire point.
    ;; Q: But does it still make sense in a shadow-cljs world?
    #_#_::repl repl
-   ::window-manager/root {::lamport/clock (ig/ref ::lamport/clock)
-                          ::worker/manager (ig/ref ::worker/manager)}
+   ::session/manager manager
+   ::shared-wm/interface (into wm-base
+                               {::lamport/clock (ig/ref ::lamport/clock)
+                                ::worker/manager (ig/ref ::worker/manager)})
    ::worker/manager {::lamport/clock (ig/ref ::lamport/clock)
                      ::session/manager (ig/ref ::session/manager)}})
 
@@ -91,9 +94,12 @@
   [state-atom initial]
   (swap! state
          (fn [current]
-           (ig/init
-            (or current
-                (configure initial))))))
+           (.log js/console "do-begin based around" current)
+           (let [result (ig/init
+                         (or current
+                             (configure initial)))]
+             (.log js/console "System initialized")
+             result))))
 
 (comment
   (println state))

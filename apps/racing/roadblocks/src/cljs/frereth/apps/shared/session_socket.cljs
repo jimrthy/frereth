@@ -3,6 +3,7 @@
   (:require
    [cljs.core.async :as async]
    [clojure.spec.alpha :as s]
+   [frereth.apps.shared.window-manager :as window-manager]
    [frereth.apps.shared.lamport :as lamport]
    [frereth.apps.shared.serialization :as serial]
    [frereth.apps.shared.session :as session]
@@ -12,13 +13,15 @@
    [integrant.core :as ig]))
 
 (enable-console-print!)
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Specs
 
 (s/def ::connection (s/keys :opt [::web-socket/wrapper]
                             :req [::lamport/clock
                                   ::session/manager
-                                  ::web-socket/options  ; Q: Is this worth keeping?
+                                  ::web-socket/options  ; Q: Is this worth keeping after creation?
+                                  ::window-manager/base
                                   ;; This is a bit redundant.
                                   ;; The ::worker/manager consists
                                   ;; of those 3 keys plus
@@ -230,18 +233,23 @@
 
   The end-user has logged in. Let's set up 2nd phase of System to start
   doing interesting stuff."
-  [{:keys [::lamport/clock]
+  [{:keys [::lamport/clock
+           ::window-manager/ctor
+           ::window-manager/dtor!]
     :as options}]
-  {:pre [clock]}
+  {:pre [clock
+         ctor]}
   ;; This is where the window-manager/shell actually comes into
   ;; play.
   ;; Think of the dichotomy in recent Ubuntu versions between
   ;; VT 1 and 2 vs. VT 7.
-  ;; TODO: Move window-manager into here. It needs to be configured
-  ;; on a per-user basis.
-  {::web-socket/wrapper (into {::lamport/clock (ig/ref ::lamport/clock)}
+  {::lamport/clock clock
+   ::web-socket/wrapper (into {::lamport/clock (ig/ref ::lamport/clock)}
                               options)
-   ::lamport/clock clock})
+   ::window-manager/base {::lamport/clock (ig/ref ::lamport/clock)
+                          ::worker/manager (ig/ref ::worker/manager)
+                          ::window-manager/ctor ctor
+                          ::window-manager/dtor! dtor!}})
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Public
@@ -302,4 +310,5 @@
 (defmethod ig/init-key ::connection
   [_ this]
   ;; This seems pointless.
+  ;; Q: What happens if I just don't define it?
   this)

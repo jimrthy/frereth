@@ -3,8 +3,10 @@
   (:require
    [clojure.spec.alpha :as s]
    [frereth.apps.roadblocks.system :as sys]
+   [frereth.apps.roadblocks.window-manager :as w-m]
    [frereth.apps.shared.session :as session]
    [frereth.apps.shared.socket :as socket]
+   [frereth.apps.shared.window-manager :as shared-wm]
    [frereth.apps.shared.worker :as worker]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -64,14 +66,17 @@
 ;; lifecycle.
 ;; That may or may not make sense.
 (defn ^:dev/after-load ^:export main  ; Q: Does the ^:export make sense under shadow-cljs?
-  "Run application startup logic."
+  "Run application startup logic"
   []
   (assert js/window)  ; leftover from mixing everything up w/ Web Worker
   (let [socket-wrapper (build-socket-wrapper-config (.-location js/window))
         initial-path "/api/attract"  ; start in attract/demo mode
         manager-config {::session/path-to-fork-shell initial-path
                         ;; FIXME: This should be hidden inside a cookie
-                        :frereth/session-id session-id-from-server}]
+                        :frereth/session-id session-id-from-server}
+        base-wm-cfg {::shared-wm/ctor w-m/do-start
+                     ::shared-wm/dtor! (fn []
+                                         (.warn js/console "Send shut-down notifications"))}]
     (.log js/console "Configuring system, starting with socket-wrapper:"
           (clj->js socket-wrapper))
     ;; Contrary to comments in the original log-viewer, want to start
@@ -80,6 +85,10 @@
     ;; into the initial html.
     ;; Q: How badly does that go wrong?
     ;; A: It goes into a header. Duh.
-    (sys/do-begin sys/state
-                  {::session/manager manager-config
-                   ::socket/wrapper socket-wrapper})))
+    (try
+      (sys/do-begin sys/state
+                    {::session/manager manager-config
+                     ::socket/wrapper socket-wrapper
+                     ::shared-wm/base base-wm-cfg})
+      (catch :default ex
+        (.error js/console "Oops" ex)))))

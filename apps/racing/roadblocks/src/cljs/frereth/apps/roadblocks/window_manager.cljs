@@ -7,9 +7,12 @@
    [frereth.apps.shared.lamport :as lamport]
    [frereth.apps.shared.serialization :as serial]
    [frereth.apps.shared.ui :as ui]
+   [frereth.apps.shared.window-manager :as shared-wm]
    [frereth.apps.shared.worker :as worker]
    [integrant.core :as ig]
    ["three" :as THREE]))
+
+(enable-console-print!)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Specs
@@ -92,6 +95,8 @@
    evt]
   {:pre [::canvas-dimensions]}
   (when-not renderer
+    (.info js/console "road-blocks.window-manager/resize-handler called badly"
+          this evt)
     (throw (ex-info "Missing renderer" this)))
   (let [canvas (.querySelector js/document "#root")
         width (.-clientWidth canvas)
@@ -102,7 +107,7 @@
     (assert canvas-dimensions)
     (when (ui/should-resize-renderer? @canvas-dimensions
                                       new-dims)
-      ;; (send-resize is getting a nil ::worker/manager.
+      ;; (send-resize! is getting a nil ::worker/manager.
       ;; Odds are, it comes from here.
       (send-resize! (select-keys this [::worker/manager ::lamport/clock])
                     new-dims)
@@ -212,54 +217,73 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Public
 
-(defmethod ig/init-key ::root
-  [_ {:keys [::lamport/clock]
-      worker-manager ::worker/manager
-      :as this}]
-  (let [canvas (.querySelector js/document "#root")
-        {:keys [::cube]
-         :as graphics} (build-scene canvas)
-        this (into this graphics)
-        size-sender (partial resize-handler this)]
-    (.addEventListener js/window "resize" size-sender)
-    (size-sender nil)  ; trigger initial sizing signal
+(s/def do-start ::shared-wm/ctor)
+(defn do-start
+  ([this
+    {:keys [::lamport/clock]
+     worker-manager ::worker/manager
+     :as args}]
+   ;; This is really the restart
+   (println "roadblocks.window-manager/do-start")
+   (let [canvas (.querySelector js/document "#root")
+         {:keys [::cube]
+          :as graphics} (build-scene canvas)
+         _ (.info js/console
+                  "roadblocks.window-manager/build-scene returned"
+                  graphics)
+         _ (.info js/console "this before into" this)
+         this (into this graphics)
+         ;; this has gotten converted into a List
+         _ (.info js/console
+                  "this after into"
+                  this)
+         ;; This isn't working right.
+         ;; resize-handler is getting called with no
+         ;; renderer. Or any of the other graphics pieces that should
+         ;; have been added by build-scene
+         size-sender (partial resize-handler this)]
+     (.addEventListener js/window "resize" size-sender)
+     (size-sender nil)  ; trigger initial sizing signal
 
-    (defmethod worker/handle-worker-message :frereth/render
-      [{:keys [::worker/need-dom-animation?]
-        :as worker-manager}
-       action world-key worker event
-       {:keys [:frereth/texture]
-        worker-clock ::lamport/clock
-        :as raw-message}]
-      (lamport/do-tick clock worker-clock)
-      ;; Need to update the Material.
-      ;; Which seems like it probably means a recompilation.
-      ;; Oh well. There aren't a lot of alternatives.
-      (let [material (.-material cube)]
-        (set! (.-texture material) texture)
-        (set! (.-needsUpdate texture) true))
-      (when need-dom-animation?
-        (js/requestAnimationFrame (fn [clock-tick]
+     (defmethod worker/handle-worker-message :frereth/render
+       [{:keys [::worker/need-dom-animation?]
+         :as worker-manager}
+        action world-key worker event
+        {:keys [:frereth/texture]
+         worker-clock ::lamport/clock
+         :as raw-message}]
+       (lamport/do-tick clock worker-clock)
+       ;; Need to update the Material.
+       ;; Which seems like it probably means a recompilation.
+       ;; Oh well. There aren't a lot of alternatives.
+       (let [material (.-material cube)]
+         (set! (.-texture material) texture)
+         (set! (.-needsUpdate texture) true))
+       (when need-dom-animation?
+         (js/requestAnimationFrame (fn [clock-tick]
 
-                                    ;; This seems like it really should
-                                    ;; involve a wrapper in...maybe the
-                                    ;; worker-manager?
-                                    (.postMessage worker (serial/serialize
-                                                          {:frereth/action :frereth/render-frame
-                                                           ::lamport/clock @clock}))))))
-    (let [result
-          (into (assoc this
-                       ::resize-handler size-sender
-                       ;; Start w/ a bogus definition to force the initial resize
-                       ::canvas-dimensions (atom {::ui/width -1
-                                                  ::ui/height -1}))
-                graphics)]
-      (js/requestAnimationFrame (partial render! result))
-      result)))
+                                     ;; This seems like it really should
+                                     ;; involve a wrapper in...maybe the
+                                     ;; worker-manager?
+                                     (.postMessage worker (serial/serialize
+                                                           {:frereth/action :frereth/render-frame
+                                                            ::lamport/clock @clock}))))))
+     (let [result
+           (into (assoc this
+                        ::resize-handler size-sender
+                        ;; Start w/ a bogus definition to force the initial resize
+                        ::canvas-dimensions (atom {::ui/width -1
+                                                   ::ui/height -1}))
+                 graphics)]
+       (js/requestAnimationFrame (partial render! result))
+       result)))
+  ([args]
+   (do-start {} args)))
 
-(defmethod ig/halt-key! ::root
-  [_ {size-sender ::resize-handler
-      :keys [::cube ::floor]}]
+(s/def halt! ::shared-wm/dtor!)
+(defn halt!
+  [{size-sender ::resize-handler
+    :keys [::cube ::floor]}]
   (.removeEventListener js/window "resize" size-sender)
   (remove-method worker/handle-worker-message :frereth/render)
   (doseq [mesh [cube floor]]

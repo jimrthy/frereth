@@ -150,10 +150,10 @@ The `shadow.cljs.devtools.api` ns contains functions that more-or-less
 map directly to the CLI. By default, it is aliased as `shadow`.
 
 `;; shadow-cljs watch worker
-(shadow/watch :foo)`
+(shadow/watch :app)`
 
-`;; shadow-cljs watch foo --verbose
-(shadow/watch :foo {:verbose true})`
+`;; shadow-cljs watch app --verbose
+(shadow/watch :app {:verbose true})`
 
 `;; shadow-cljs browser-repl
 (shadow/browser-repl)`
