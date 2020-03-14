@@ -74,7 +74,15 @@
         manager-config {::session/path-to-fork-shell initial-path
                         ;; FIXME: This should be hidden inside a cookie
                         :frereth/session-id session-id-from-server}
-        base-wm-cfg {::shared-wm/ctor w-m/do-start
+        base-wm-cfg {::shared-wm/ctor (fn [& args]
+                                        ;; This is a strange construct.
+                                        ;; Don't want to just store a
+                                        ;; direct reference to do-start.
+                                        ;; If we do that, we can't pick up
+                                        ;; changes to it without a refresh.
+                                        ;; And that defeats a huge part of
+                                        ;; the point.
+                                        (apply w-m/do-start args))
                      ::shared-wm/dtor! (fn []
                                          (.warn js/console "Send shut-down notifications"))}]
     (.log js/console "Configuring system, starting with socket-wrapper:"
@@ -86,9 +94,17 @@
     ;; Q: How badly does that go wrong?
     ;; A: It goes into a header. Duh.
     (try
+      ;; Accessing sys/state directly in here feels like I'm
+      ;; breaking encapsulation.
+      ;; It seems like it would be better to just set the start/stop
+      ;; metadata on the system methods and eliminate this ns.
       (sys/do-begin sys/state
                     {::session/manager manager-config
                      ::socket/wrapper socket-wrapper
-                     ::shared-wm/base base-wm-cfg})
+                     ::shared-wm/factory base-wm-cfg})
       (catch :default ex
         (.error js/console "Oops" ex)))))
+
+(defn ^:dev/before-load stop!
+  []
+  (sys/halt! sys/state))

@@ -57,7 +57,7 @@
            ::session/manager
            ::repl]
     websock-options ::web-socket/options
-    wm-base ::shared-wm/base
+    wm-factory ::shared-wm/factory
     :as current}]
   (.log js/console "Configuring system based on\n"
         (clj->js (keys current))
@@ -77,9 +77,9 @@
    ;; Q: But does it still make sense in a shadow-cljs world?
    #_#_::repl repl
    ::session/manager manager
-   ::shared-wm/interface (into wm-base
-                               {::lamport/clock (ig/ref ::lamport/clock)
-                                ::worker/manager (ig/ref ::worker/manager)})
+   ::shared-wm/interface {::lamport/clock (ig/ref ::lamport/clock)
+                          ::shared-wm/factory wm-factory
+                          ::worker/manager (ig/ref ::worker/manager)}
    ::worker/manager {::lamport/clock (ig/ref ::lamport/clock)
                      ::session/manager (ig/ref ::session/manager)}})
 
@@ -92,7 +92,7 @@
   :ret ::state)
 (defn do-begin
   [state-atom initial]
-  (swap! state
+  (swap! state-atom
          (fn [current]
            (.log js/console "do-begin based around" current)
            (let [result (ig/init
@@ -100,6 +100,16 @@
                              (configure initial)))]
              (.log js/console "System initialized")
              result))))
+
+(defn halt!
+  [state-atom]
+  ;; Honestly, this should call ig/suspend!
+  ;; And do-begin should call ig/resume.
+  ;; Well, during development. Prod should always used the full
+  ;; init/halt! lifecycle. resume/suspend! is only a convenience for
+  ;; maintaining active connections.
+  (ig/halt! @state-atom)
+  (swap! state-atom configure))
 
 (comment
   (println state))

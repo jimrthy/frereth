@@ -21,6 +21,7 @@
                             :req [::lamport/clock
                                   ::session/manager
                                   ::web-socket/options  ; Q: Is this worth keeping after creation?
+                                  ;; Q: Why is this referenced in here?
                                   ::window-manager/base
                                   ;; This is a bit redundant.
                                   ;; The ::worker/manager consists

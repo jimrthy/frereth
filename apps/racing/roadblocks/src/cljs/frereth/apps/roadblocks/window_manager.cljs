@@ -219,71 +219,75 @@
 
 (s/def do-start ::shared-wm/ctor)
 (defn do-start
-  ([this
-    {:keys [::lamport/clock]
-     worker-manager ::worker/manager
-     :as args}]
-   ;; This is really the restart
-   (println "roadblocks.window-manager/do-start")
-   (let [canvas (.querySelector js/document "#root")
-         {:keys [::cube]
-          :as graphics} (build-scene canvas)
-         _ (.info js/console
-                  "roadblocks.window-manager/build-scene returned"
-                  graphics)
-         _ (.info js/console "this before into" this)
-         this (into this graphics)
-         ;; this has gotten converted into a List
-         _ (.info js/console
-                  "this after into"
-                  this)
-         ;; This isn't working right.
-         ;; resize-handler is getting called with no
-         ;; renderer. Or any of the other graphics pieces that should
-         ;; have been added by build-scene
-         size-sender (partial resize-handler this)]
-     (.addEventListener js/window "resize" size-sender)
-     (size-sender nil)  ; trigger initial sizing signal
+  [{:keys [::lamport/clock
+           ::shared-wm/implementation]
+    worker-manager ::worker/manager
+    :as this}]
+  (println "roadblocks.window-manager/do-start")
+  (when implementation
+    ;; This is really the restart
+    ;; If I were going to require applications to use Integrant, this
+    ;; case should be covered by an ig/resume method.
+    ;; Since I'm not, that isn't an option here, either.
+    ;; Well, maybe it would be. But it seems like it would just add
+    ;; needless complexity, since I have to exit that ecosystem
+    ;; anyway.
+    (println "Q: What do we want/need to do on a restart?"))
+  (let [canvas (.querySelector js/document "#root")
+        {:keys [::cube]
+         :as graphics} (build-scene canvas)
+        _ (.info js/console
+                 "roadblocks.window-manager/build-scene returned"
+                 graphics)
+        this (into this graphics)
+        ;; This isn't working right.
+        ;; resize-handler is getting called with no
+        ;; renderer. Or any of the other graphics pieces that should
+        ;; have been added by build-scene
+        size-sender (partial resize-handler this)]
+    (.addEventListener js/window "resize" size-sender)
+    (size-sender nil)  ; trigger initial sizing signal
 
-     (defmethod worker/handle-worker-message :frereth/render
-       [{:keys [::worker/need-dom-animation?]
-         :as worker-manager}
-        action world-key worker event
-        {:keys [:frereth/texture]
-         worker-clock ::lamport/clock
-         :as raw-message}]
-       (lamport/do-tick clock worker-clock)
-       ;; Need to update the Material.
-       ;; Which seems like it probably means a recompilation.
-       ;; Oh well. There aren't a lot of alternatives.
-       (let [material (.-material cube)]
-         (set! (.-texture material) texture)
-         (set! (.-needsUpdate texture) true))
-       (when need-dom-animation?
-         (js/requestAnimationFrame (fn [clock-tick]
+    ;; TODO: Figure out a way to define this outside the function
+    ;; scope.
+    (defmethod worker/handle-worker-message :frereth/render
+      [{:keys [::worker/need-dom-animation?]
+        :as worker-manager}
+       action world-key worker event
+       {:keys [:frereth/texture]
+        worker-clock ::lamport/clock
+        :as raw-message}]
+      (lamport/do-tick clock worker-clock)
+      ;; Need to update the Material.
+      ;; Which seems like it probably means a recompilation.
+      ;; Oh well. There aren't a lot of alternatives.
+      (let [material (.-material cube)]
+        (set! (.-texture material) texture)
+        (set! (.-needsUpdate texture) true))
+      (when need-dom-animation?
+        (js/requestAnimationFrame (fn [clock-tick]
 
-                                     ;; This seems like it really should
-                                     ;; involve a wrapper in...maybe the
-                                     ;; worker-manager?
-                                     (.postMessage worker (serial/serialize
-                                                           {:frereth/action :frereth/render-frame
-                                                            ::lamport/clock @clock}))))))
-     (let [result
-           (into (assoc this
-                        ::resize-handler size-sender
-                        ;; Start w/ a bogus definition to force the initial resize
-                        ::canvas-dimensions (atom {::ui/width -1
-                                                   ::ui/height -1}))
-                 graphics)]
-       (js/requestAnimationFrame (partial render! result))
-       result)))
-  ([args]
-   (do-start {} args)))
+                                    ;; This seems like it really should
+                                    ;; involve a wrapper in...maybe the
+                                    ;; worker-manager?
+                                    (.postMessage worker (serial/serialize
+                                                          {:frereth/action :frereth/render-frame
+                                                           ::lamport/clock @clock}))))))
+    (let [result
+          (into (assoc this
+                       ::resize-handler size-sender
+                       ;; Start w/ a bogus definition to force the initial resize
+                       ::canvas-dimensions (atom {::ui/width -1
+                                                  ::ui/height -1}))
+                graphics)]
+      (js/requestAnimationFrame (partial render! result))
+      result)))
 
 (s/def halt! ::shared-wm/dtor!)
 (defn halt!
   [{size-sender ::resize-handler
     :keys [::cube ::floor]}]
+  (println "Cleaning up the concrete-blocks/wm")
   (.removeEventListener js/window "resize" size-sender)
   (remove-method worker/handle-worker-message :frereth/render)
   (doseq [mesh [cube floor]]
