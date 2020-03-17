@@ -7,6 +7,7 @@
   integrant."
   (:require
    [clojure.spec.alpha :as s]
+   [frereth.apps.roadblocks.login-demo :as login]
    [frereth.apps.shared.lamport :as lamport]
    [frereth.apps.shared.session :as session]
    [frereth.apps.shared.session-socket :as session<->socket]
@@ -67,13 +68,20 @@
   ;; But that isn't something that makes sense at this level.
   ;; Q: Where does it belong?
   {::lamport/clock clock
+   ;; FIXME: What should this reference?
+   ;; Realistically, this is what should start the
+   ;; ::session<->socket/connection
+   ;; Q: Does it need to start before or after the
+   ;; ::shared-wm/interface?
+   ::login/worker {::lamport/clock (ig/ref ::lamport/clock)
+                   ::worker/manager (ig/ref ::worker/manager)}
    ::session<->socket/connection (into {::lamport/clock (ig/ref ::lamport/clock)
                                         ::session/manager (ig/ref ::session/manager)
                                         ::web-socket/options websock-options
                                         ::shared-wm/interface (ig/ref ::shared-wm/interface)
                                         ::worker/manager (ig/ref ::worker/manager)}
                                   connection)
-   ;; TODO: This is pretty integral to the entire point.
+   ;; TODO: This is pretty integral to the entire big-picture point.
    ;; Q: But does it still make sense in a shadow-cljs world?
    #_#_::repl repl
    ::session/manager manager

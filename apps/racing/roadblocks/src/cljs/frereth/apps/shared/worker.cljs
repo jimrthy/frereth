@@ -261,17 +261,80 @@
     (.log js/console "Message from" worker ":" action "in" data)
     (handle-worker-message this action world-key worker event data)))
 
-(s/fdef spawn-worker!
+(s/fdef fork-world-worker
+  ;; Q: What was :this?
+  ;; A: It's defined in session-socket.
+  ;; Absolutely cannot use it here.
+  ;; However, do need the semantics behind it.
+  :args (s/cat :this ::connection
+               :world-key ::jwk
+               ;; FIXME: at least set up a regex
+               :url string?
+               :params map?))
+(defn fork-world-worker
+  [this world-key url params]
+  ;; Q: Can I use window.Worker. instead of `new`?
+  (let [worker (js/window.Worker.
+                ;; This can't possibly be right, can it?!
+                (str (assoc url :query params))
+                ;; Currently redundant:
+                ;; in Chrome, at least, module scripts are not
+                ;; supported on DedicatedWorker
+                #js{"type" "classic"})]
+    ;; TODO: At least in theory, we shoulld be able to to
+    ;; set the ::workers-need-dom-animation value the first
+    ;; time this gets called.
+    ;; Which, really, should be to create the Login/Attract
+    ;; Screen.
+    ;; Which gets weird with auth and anonymity: what if
+    ;; different end-users choose different Window
+    ;; Managers?
+    (.debug js/console "(.-requestAnimationFrame worker)"
+            (.-requestAnimationFrame worker)
+            "among"
+            worker)
+    (set! (.-onmessage worker)
+          (partial on-worker-message this world-key worker))
+    (set! (.-onerror worker)
+          (fn [problem]
+            (.error js/console "FIXME: Need to handle\n"
+                    problem
+                    "\nfrom World\n"
+                    world-key)))
+    worker))
+
+(defn get-to-the-point!
+  "Create the actual web Worker"
+  ;; This seems completely and totally pointless.
+  ;; I needed a way to extract the actual fork code
+  ;; from out of the middle of `fork-authenticated-worker!`
+  ;; so I can call it from elsewhere.
+  ;; But, as it stands...well, I've botched the refactoring.
+  [url
+   manager
+   params]
+  (let []
+    (.log js/console
+          "\nfrom session-manager" manager
+          "\nTrying to trigger worker on\n"
+          url
+          "\nwith query params:\n"
+          params)
+    (fork-world-worker this world-key url params)))
+
+(s/fdef fork-authenticated-worker!
   :args (s/cat :crypto ::subtle-crypto
                :this ::connection
                :session-id :frereth/session-id
                :key-pair ::internal-key-pair
-               ;; Actually, this is anything that transit can serialize
-               :public ::jwk
+               ;; Actually, this is anything that transit can serialize.
+               ;; Well, any sort of key
+               :public-key ::jwk
                :cookie ::cookie)
   :ret (s/nilable ::web-worker))
-(defn spawn-worker!
-  "Begin promise chain that leads to an ::active World"
+(defn fork-authenticated-worker!
+  "Begin promise chain that leads to an authenticated, ::active World
+  connected over a web socket"
   [crypto
    {:keys [::session/manager
            ::web-socket/wrapper]
@@ -281,6 +344,7 @@
    world-key
    cookie]
   (when (.-Worker js/window)
+    ;; <comment_rot from="2019-FEB">
     ;; This is missing a layer of indirection.
     ;; The worker this spawns should return a shadow
     ;; DOM that combines all the visible Worlds (like
@@ -299,9 +363,32 @@
     ;; (along with details like window location) around
     ;; as they have free CPU cycles.
     ;; Q: Do web workers provide that degree of isolation?
-    ;; Q: Web Workers are designed to be relatively heavy-
-    ;; weight. Is it worth spawning a new one for each
-    ;; world (which are also supposed to be pretty hefty).
+    ;; Web Workers are designed to be relatively heavy-
+    ;; weight.
+    ;; Q: Is it worth spawning a new one for each
+    ;; world (which are also supposed to be pretty hefty)?
+    ;; </comment_rot>
+    ;; (This answers the direct questions in that rotted
+    ;; comment)
+    ;; A: Want 1 web Worker per world. That provides the hefty
+    ;; isolation guarantees that frereth requires (think i386
+    ;; protected mode)
+    ;; For the bigger-picture question, I think I have the
+    ;; extra indirection layer I want, sort-of.
+    ;; I think that putting
+    ;; a) login screen into 1 web worker
+    ;; b) "shell" into a second (window manager) that gets
+    ;; activated after login
+    ;; c) "real" apps that interact w/ "window manager" (this
+    ;; part TBD)
+    ;; and
+    ;; d) top-level generic renderer that displays either
+    ;;    1. login
+    ;;    or
+    ;;    2. window-manager + composited children
+    ;; is just about what I want.
+    ;; This current app is a step in that direction, but still
+    ;; missing a lot of ingredients.
     (let [initiate {:frereth/cookie cookie
                     :frereth/session-id session-id
                     :frereth/world-key world-key}
@@ -309,6 +396,8 @@
           packet-bytes (serial/str->array packet-string)
           _ (.log js/console "Signing" packet-bytes)
           signature-promise (.sign crypto
+                                   ;; Q: Does ECDSA make any sense
+                                   ;; at all?
                                    #js {:name "ECDSA"
                                         :hash #js{:name "SHA-256"}}
                                    secret
@@ -316,55 +405,29 @@
       ;; TODO: Look at the way promesa handles this kind of event chain.
       ;; Q: Is it really any cleaner?
       (.then signature-promise
-             ;; TODO: Refactor this into a top-level function
              (fn [signature]
                (let [base-url (::web-socket/base-url wrapper)
                      sock (::web-socket/socket wrapper)
                      path-to-shell (::session/path-to-fork-shell manager)
                      url #_(url/url base-url path-to-shell) (str base-url "/" path-to-shell)
                      params {:frereth/initiate packet-string
+                             ;; Web server uses the cookie to verify that
+                             ;; the request comes from the correct World.
+                             ;; Q: Is that comment about the cookie from the
+                             ;; `initiate` packet or the actual HTTP cookie?
+                             ;; (my guess is the former)
                              :frereth/signature (-> signature
                                                     serial/array-buffer->string
-                                                    serial/serialize)}
-                     _ (.log js/console "Constructed Worker fork URL based on\n"
-                                    base-url "\namong" wrapper
-                                    "\nadded" path-to-shell
-                                    "\nfrom session-manager" manager
-                                    "\nTrying to trigger worker on\n"
-                                    url
-                                    "\nwith query params:\n"
-                                    params
-                                    "\nsigned with secret-key" secret)
-                     ;; Web server uses the cookie to verify that
-                     ;; the request comes from the correct World.
-                     ;; Q: Can I use window.Worker. instead of `new`?
-                     worker (js/window.Worker.
-                                 (str (assoc url :query params))
-                                 ;; Currently redundant:
-                                 ;; in Chrome, at least, module scripts are not
-                                 ;; supported on DedicatedWorker
-                                 #js{"type" "classic"})]
-                 ;; TODO: At least in theory, we shoulld be able to to
-                 ;; set the ::workers-need-dom-animation value the first
-                 ;; time this gets called.
-                 ;; Which, really, should be to create the Login/Attract
-                 ;; Screen.
-                 ;; Which gets weird with auth and anonymity: what if
-                 ;; different end-users choose different Window
-                 ;; Managers?
-                 (.debug js/console "(.-requestAnimationFrame worker)"
-                         (.-requestAnimationFrame worker)
-                         "among"
-                         worker)
-                 (set! (.-onmessage worker)
-                       (partial on-worker-message this world-key worker))
-                 (set! (.-onerror worker)
-                       (fn [problem]
-                         (.error js/console "FIXME: Need to handle\n"
-                                 problem
-                                 "\nfrom World\n"
-                                 world-key)))
-                 worker))))))
+                                                    serial/serialize)}]
+                 (.log js/console  "World signature prepared starting from\n"
+                       wrapper
+                       "\nConstructed Worker fork URL based on\n"
+                       base-url
+                       "\nadded" path-to-shell
+                       "\nsigned with secret-key" secret)
+                 (get-to-the-point! wrapper
+                                    manager
+                                    params)))))))
 
 (s/fdef do-build-actual-worker
   :args (s/cat :this ::manager
@@ -542,7 +605,7 @@
                                      clj-exported (js->clj exported)]
                                  (build-worker-from-exported-key
                                   this
-                                  (partial spawn-worker!
+                                  (partial fork-authenticated-worker!
                                            crypto
                                            this
                                            session-id
@@ -555,26 +618,14 @@
 (defmethod ig/init-key ::manager
   [_ {:keys [::lamport/clock]
       session-manager ::session/manager
-      web-sock-wrapper ::web-socket/wrapper
       :as this}]
-  {:pre [clock session-manager #_web-sock-wrapper]}
+  {:pre [clock session-manager]}
   ;; FIXME: session-id should come from the server as a header.
   ;; Or possibly in (.-cookie js/document)
-  (let [session-id (random-uuid)
-        result
-        (assoc this
-               ::workers (atom {})
-               ::workers-need-dom-animation? (atom false))]
-    ;; This is happening twice.
-    ;; The call here is wrong.
-    ;; The one in session-socket/log-in! makes sense.
-    ;; Actually, the call here isn't *quite* wrong:
-    ;; We *do* need to fork the "Attract" worker.
-    ;; Just not a full shell.
-    ;; And maybe not from here.
-    ;; Q: If not here, then where?
-    #_(fork-shell! result session-id)
-    result))
+  (let [session-id (random-uuid)]
+    (assoc this
+           ::workers (atom {})
+           ::workers-need-dom-animation? (atom false))))
 
 (defmethod ig/halt-key! ::manager
   [_ {:keys [::lamport/clock
