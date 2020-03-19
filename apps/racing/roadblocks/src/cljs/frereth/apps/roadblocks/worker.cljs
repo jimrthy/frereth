@@ -134,7 +134,7 @@
 
 (defn render-and-animate!
   "This triggers all the interesting pieces"
-  [renderer time-stamp]
+  [time-stamp renderer]
   (let [time (/ time-stamp 1000)
         {:keys [::ui/camera
                 ::destination
@@ -153,6 +153,9 @@
                                world)]
     ;; Realize that lazy sequence
     (dorun animation)
+    (.info js/console
+           "Trying to set the render-target to" render-target
+           "on renderer" renderer)
     (.setRenderTarget renderer render-target)
     (.render renderer scene camera)
     (.setRenderTarget renderer nil)
@@ -166,7 +169,8 @@
   ;; This seems like a check to optimize away. Then again, it also seems
   ;; like something branch prediction should handle, and premature
   ;; optimization etc.
-  (when has-animator (js/requestAnimationFrame (partial render-and-animate! renderer))))
+  (when has-animator
+    (js/requestAnimationFrame (partial render-and-animate! renderer))))
 (when has-animator
   (let [renderer (-> state deref ::destination ::ui/renderer)]
     (js/requestAnimationFrame (partial render-and-animate! ))))
@@ -177,7 +181,7 @@
 (set! (.-onerror js/self)
       (fn
         [error]
-        (.error js/console "[WORKER]" error)
+        (.log js/console "[WORKER] Error:" error)
         ;; We can call .preventDefault on error to "prevent the default
         ;; action from taking place."
         ;; Q: Do we want to?
@@ -240,6 +244,7 @@
   [_ {:keys [::ui/width
              ::ui/height]
       :as new-dims}]
+  (.error js/console "Wrap :frereth/resize as :frereth/event")
   (throw (js/Error. "This should be a :frereth/event"))
   (let [render-dst (-> state deref ::destination)
         current-dims (select-keys render-dst [::ui/width

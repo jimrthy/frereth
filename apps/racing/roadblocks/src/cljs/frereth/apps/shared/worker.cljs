@@ -266,61 +266,58 @@
   ;; A: It's defined in session-socket.
   ;; Absolutely cannot use it here.
   ;; However, do need the semantics behind it.
-  :args (s/cat :this ::connection
-               :world-key ::jwk
-               ;; FIXME: at least set up a regex
-               :url string?
-               :params map?))
+  ;; TODO: Start back here
+  :args (s/or :parameterized (s/cat :this ::manager
+                                    :world-key ::jwk
+                                    ;; FIXME: at least set up a regex
+                                    :url string?
+                                    :params map?)
+              :basic (s/cat :this ::manager
+                            :world-key ::jwk
+                            :url string?))
+  :ret ::web-worker)
 (defn fork-world-worker
-  [this world-key url params]
-  ;; Q: Can I use window.Worker. instead of `new`?
-  (let [worker (js/window.Worker.
-                ;; This can't possibly be right, can it?!
-                (str (assoc url :query params))
-                ;; Currently redundant:
-                ;; in Chrome, at least, module scripts are not
-                ;; supported on DedicatedWorker
-                #js{"type" "classic"})]
-    ;; TODO: At least in theory, we shoulld be able to to
-    ;; set the ::workers-need-dom-animation value the first
-    ;; time this gets called.
-    ;; Which, really, should be to create the Login/Attract
-    ;; Screen.
-    ;; Which gets weird with auth and anonymity: what if
-    ;; different end-users choose different Window
-    ;; Managers?
-    (.debug js/console "(.-requestAnimationFrame worker)"
-            (.-requestAnimationFrame worker)
-            "among"
-            worker)
-    (set! (.-onmessage worker)
-          (partial on-worker-message this world-key worker))
-    (set! (.-onerror worker)
-          (fn [problem]
-            (.error js/console "FIXME: Need to handle\n"
-                    problem
-                    "\nfrom World\n"
-                    world-key)))
-    worker))
-
-(defn get-to-the-point!
-  "Create the actual web Worker"
-  ;; This seems completely and totally pointless.
-  ;; I needed a way to extract the actual fork code
-  ;; from out of the middle of `fork-authenticated-worker!`
-  ;; so I can call it from elsewhere.
-  ;; But, as it stands...well, I've botched the refactoring.
-  [url
-   manager
-   params]
-  (let []
-    (.log js/console
-          "\nfrom session-manager" manager
-          "\nTrying to trigger worker on\n"
-          url
-          "\nwith query params:\n"
-          params)
-    (fork-world-worker this world-key url params)))
+  ([this world-key base-url params]
+   (let [url (if (empty? params)
+               base-url
+               (do
+                 (.error js/console "Can't build a URL this way")
+                 ;; Q: Building url this way can't possibly be right, can it?!
+                 ;; A: Well...this is what I did in log-viewer
+                 ;; But that was starting from cemerick.url.
+                 ;; So no.
+                 (str (assoc base-url :query params))))
+         _ (.info js/console "Trying to open a web worker at" url)
+         ;; Q: Can I use window.Worker. instead of `new`?
+         worker (js/window.Worker.
+                 url
+                 ;; Currently redundant:
+                 ;; in Chrome, at least, module scripts are not
+                 ;; supported on DedicatedWorker
+                 #js{"type" "classic"})]
+     ;; TODO: At least in theory, we shoulld be able to to
+     ;; set the ::workers-need-dom-animation value the first
+     ;; time this gets called.
+     ;; Which, really, should be to create the Login/Attract
+     ;; Screen.
+     ;; Which gets weird with auth and anonymity: what if
+     ;; different end-users choose different Window
+     ;; Managers?
+     (.debug js/console "(.-requestAnimationFrame worker)"
+             (.-requestAnimationFrame worker)
+             "among"
+             worker)
+     (set! (.-onmessage worker)
+           (partial on-worker-message this world-key worker))
+     (set! (.-onerror worker)
+           (fn [problem]
+             (.error js/console "FIXME: Need to handle\n"
+                     problem
+                     "\nfrom World\n"
+                     world-key)))
+     worker))
+  ([this world-key base-url]
+   (fork-world-worker this world-key base-url {})))
 
 (s/fdef fork-authenticated-worker!
   :args (s/cat :crypto ::subtle-crypto
@@ -329,7 +326,7 @@
                :key-pair ::internal-key-pair
                ;; Actually, this is anything that transit can serialize.
                ;; Well, any sort of key
-               :public-key ::jwk
+               :world-key ::jwk
                :cookie ::cookie)
   :ret (s/nilable ::web-worker))
 (defn fork-authenticated-worker!
@@ -425,8 +422,9 @@
                        base-url
                        "\nadded" path-to-shell
                        "\nsigned with secret-key" secret)
-                 (get-to-the-point! wrapper
-                                    manager
+                 (fork-world-worker this
+                                    world-key
+                                    url
                                     params)))))))
 
 (s/fdef do-build-actual-worker

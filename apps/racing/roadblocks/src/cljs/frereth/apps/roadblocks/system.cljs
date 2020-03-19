@@ -74,6 +74,7 @@
    ;; Q: Does it need to start before or after the
    ;; ::shared-wm/interface?
    ::login/worker {::lamport/clock (ig/ref ::lamport/clock)
+                   ::session/manager (ig/ref ::session/manager)
                    ::worker/manager (ig/ref ::worker/manager)}
    ::session<->socket/connection (into {::lamport/clock (ig/ref ::lamport/clock)
                                         ::session/manager (ig/ref ::session/manager)
@@ -116,8 +117,13 @@
   ;; Well, during development. Prod should always used the full
   ;; init/halt! lifecycle. resume/suspend! is only a convenience for
   ;; maintaining active connections.
-  (ig/halt! @state-atom)
-  (swap! state-atom configure))
+  (try
+    (ig/halt! @state-atom)
+    (swap! state-atom configure)
+    (catch :default ex
+      (.error js/console
+              "Halting the system" state-atom
+              "failed:" ex))))
 
 (comment
   (println state))
