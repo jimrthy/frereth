@@ -1,0 +1,42 @@
+{:builds
+ {:app {:asset-path "/js"
+        :devtools {#_#_:after-load (fn []
+                                     ;; Would need to call ig/halt! on @system/state
+                                     ;; And then...what?
+                                     ;; The current implementation seems to work OK for now.
+                                     (throw (js/Error. "What would make sense?")))
+                   :browser-inject :main}
+        ;; TODO: Add add a license :prepend to each
+        :modules {:main {:init-fn frereth.apps.roadblocks.core/main
+                         :depends-on #{:shared}}
+                  ;; Empty :entries forces the compiler to collect all
+                  ;; the code shared between :main and :worker.
+                  ;; Q: Why would you ever do anything else?
+                  :shared {:entries []}
+                  :worker {:init-fn frereth.apps.roadblocks.worker/main
+                           :depends-on #{:shared}
+                           :web-worker true}}
+        :output-dir "public/js"
+        :target :browser}
+  :cards {:asset-path "/js"
+          :modules {:main {:init-fn frereth.apps.roadblocks.cards/main}}
+          :compiler-options {:devcards true}
+          :output-dir "public/js"
+          :target :browser}
+  :test {:ns-regexp "roadblocks.cards"
+         :output-to "out/test.js"
+         :target :node-test}
+  :e2e {:ns-regexp "e2e.*"
+        :output-to "out/e2e.js"
+        :target :node-test}}
+ :dependencies [[cider/cider-nrepl "0.22.0"]
+                [devcards "0.2.6"]
+                [integrant "0.8.0"]
+                [integrant/repl "0.3.1"]
+                ;; Get a warning that I cannot override this.
+                ;; Apparently, I can, if I switch to deps.edn mode.
+                [org.clojure/clojure "1.10.1"]
+                [reagent "0.8.1"]]
+ :dev-http {3000 "public"}
+ :nrepl {:port 3333}
+ :source-paths ["src/clj" "src/cljs" "src/cljc"]}

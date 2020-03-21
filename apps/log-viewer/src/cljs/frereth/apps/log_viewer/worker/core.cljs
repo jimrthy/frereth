@@ -115,4 +115,4 @@
 (let [message {:frereth/action :frereth/forked}]
   (.postMessage js/self (transit/write (transit/writer :json) message)))
 
-(console.log "Worker bottom")
+(js/console.log "Worker bottom")
