@@ -72,37 +72,6 @@
   (fn [action _]
     action))
 
-(defprotocol EventTarget
-  "Wrapper around js/EventTarget"
-  (^:export addEventListener
-   ;; Options parameter might be [deprecated] boolean useCapture
-   [this type-name listener options]
-   "Add listener for event dispatching")
-  (^:export removeEventListener
-   [this type listener options]
-   "Options parameter might be [deprecated] boolean useCapture")
-  (^:export dispatchEvent
-   [this event]
-   "Returns false if event is cancelable and at least one handler called .preventDefault otherwise true"))
-
-(defrecord BogusCanvas
-    []
-  EventTarget
-  (^:export addEventListener
-    ;; Q: Why can't I handle multiple arities?
-    #_#_([this type-name listener]
-     :anything)
-    ([this type-name listener options]
-     :non-falsey)
-    [this type-name listener options]
-    ;; Q: Can I do anything that makes sense here?
-    nil)
-  #_(removeEventListener
-      [type-name listener options])
-  (dispatchEvent
-    [this event]
-    true))
-
 (defn define-world!
   []
   (let [w 512
@@ -139,31 +108,38 @@
             cubes [(make-instance! geometry 0xaaaa00 -2)
                    (make-instance! geometry 0xaa0000 0)
                    (make-instance! geometry 0x0000aa 2)]
-            ;; This isn't working, even with simple compilation.
-            ;; Q: Why not?
-            canvas #_:something #_(BogusCanvas.) #js {:addEventListener (fn [type-name listener options]
-                                                                          (.log js/console "Trying to add an event listener:"
-                                                                                type-name
-                                                                                "options:" options))
-                                                      :getContext (fn [context-name attributes]
-                                                                    ;; This may be a deal-killer for my current plan.
-                                                                    ;; Alternatively, this may be an opportunity to write
-                                                                    ;; a buffering renderer that forwards along calls to
-                                                                    ;; happen on the "outside."
-                                                                    ;; Q: Is this worth the effort it would take?
-                                                                    (throw (js/Error. "Need a WebGL context")))}
+            canvas #js {:addEventListener (fn [type-name listener options]
+                                            (.log js/console "Trying to add an event listener:"
+                                                  type-name
+                                                  "options:" options))
+                        :getContext (fn [context-name attributes]
+                                      ;; This may be a deal-killer for my current plan.
+                                      ;; Alternatively, this may be an opportunity to write
+                                      ;; a buffering renderer that forwards along calls to
+                                      ;; happen on the "outside."
+                                      ;; Q: Is this worth the effort it would take?
+                                      (throw (js/Error. "Need a WebGL context")))}
             ;; Q: How does this work?
-            ;; If I'm not careful, I could open myself up to a separate OpenGL
-            ;; context per thread.
+            ;; A: Pretty sure it produces a separate OpenGL context per
+            ;; thread.
             ;; That seems safest, but it's actually quite limiting:
             ;; on my current desktop, I'm limited to 16 contexts.
             ;; (Yes, I have an ancient video card)
-            ;; Next problem: this is set up to require a DOM canvas.
-            ;; Which takes us back to the original off-screen
-            ;; shared canvas example that will not work in FireFox.
-            ;; Well, not without major hoops to tackle.
-            ;; Try supplying something like a bogus canvas here
-            renderer (THREE/WebGLRenderer. #js {:canvas #_canvas (clj->js canvas)})
+            ;; To implement this approach, we really need an
+            ;; OffscreenCanvas.
+            ;; That means giving up on support for things like Firefox
+            ;; and iOS (well, maybe...according to google, you can
+            ;; install chrome from the app store now)
+            ;; Supplying something a bogus canvas here acts like it might
+            ;; work.
+            ;; Long-term, I think I want this to produce a proxy that can
+            ;; feed back the functions with which it got called to replay
+            ;; on the main thread.
+            ;; That needs to be heavily vetted and raises all sorts of
+            ;; red flags about breaking the encapsulation I'm trying to
+            ;; establish here.
+            ;; So it isn't something to just automate away.
+            renderer (THREE/WebGLRenderer. #js {:canvas (clj->js canvas)})
             render-target (THREE/WebGLRenderTarget. w h)]
         (.setRenderTarget renderer render-target)
         (swap! state into {::camera {::fov fov
