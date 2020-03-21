@@ -18,7 +18,8 @@
 ;; I have in worker.cljs
 (s/def ::camera #(instance? THREE/Camera %))
 (s/def ::mesh #(instance? THREE/Mesh %))
-(s/def ::renderer #(instance? THREE/WebGLRenderTarget %))
+(s/def ::renderer #(instance? THREE/WebGLRenderer %))
+(s/def ::render-target #(instance? THREE/WebGLRenderTarget %))
 (s/def ::scene #(instance? THREE/Scene %))
 ;; Probably shouldn't use this directly: want to be
 ;; able to swap out loading styles seamlessly.
