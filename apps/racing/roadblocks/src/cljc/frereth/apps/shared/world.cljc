@@ -24,13 +24,17 @@
                             ::fsm-error             ; Tried an illegal state transition
                             ::pending               ; browser would like to fork
                             })
+
 (s/def ::cookie #?(:clj bytes?
                    :cljs any?))
 ;; This is whatever makes sense for the world implementation.
 ;; This seems like it will probably always be a map?, but it could very
 ;; easily also be a mutable Object (though that seems like a terrible
-;; idea).
+;; idea, since it blows out the idea of history).
 (s/def ::internal-state any?)
+
+(s/def :frereth/world-key :frereth/pid)
+(s/def :frereth/worlds (s/map-of :frereth/world-key ::world))
 
 ;; The clojurescript side can't find this.
 ;; Even though it's totally defined in specs.
@@ -42,6 +46,13 @@
                                              ::connection-state
                                              ::internal-state]
                                        :opt [::cookie
+                                             ;; There's a conundrum here.
+                                             ;; This ns really shouldn't have any
+                                             ;; idea about messaging.
+                                             ;; But, if I'm going to encapsulate a
+                                             ;; World's message-sender!, where else
+                                             ;; would I put it?
+                                             :frereth/message-sender!
                                              ::notification-channel
                                              ;; In hindsight, making these
                                              ;; distinct was a foolish choice.
@@ -50,13 +61,11 @@
                                                 :cljs :frereth/browser->worker)
                                              #?(:cljs :frereth/worker)]))
 (s/def ::history (s/coll-of ::world-without-history))
-;; This leads to other namespaces referencing ::world/world
+
+;; This name leads to other namespaces referencing ::world/world
 ;; which is just weird.
 (s/def ::world (s/merge ::world-without-history
                         (s/keys :req [::history])))
-
-(s/def :frereth/world-key :frereth/pid)
-(s/def :frereth/worlds (s/map-of :frereth/world-key ::world))
 
 (s/def ::fsm-transition
   (s/fspec :args (s/cat :world ::world)
@@ -94,10 +103,12 @@
      :cljs (js/Date.)))
 
 (defn log
+  ;; We *could* use println in cljs also, but then we loose all the
+  ;; benefits of the console logger.
+  ;; TODO: Switch to weald. Or, at the very least, timbre.
   "It seems silly this isn't unified"
   [& args]
   #?(:clj (apply println args)
-     ;; Q: What are the odds of this working?
      :cljs (apply js/console.log args)))
 
 (s/fdef ctor
@@ -359,8 +370,25 @@
   (update-world-connection-state world-map world-key ::failed))
 
 (s/fdef trigger-disconnection!
-  :args (s/cat :world ::world))
+  :args (s/cat :world ::world)
+  :ret any?)
 (defn trigger-disconnection!
   [world]
   (throw (ex-info "Need to send a ::disconnect signal to the world"
                   {})))
+
+(s/fdef set-key
+  :args (s/cat :world-map :frereth/worlds
+               :world-key :frereth/world-key
+               :setting-key #{:frereth/message-sender!}
+               ;; Q: Is there a good way to specify that the
+               ;; :setting-val should match the :setting-key
+               ;; spec?
+               ;; (The fact that I need to probably indicates
+               ;; that I'm doing something wrong)
+               :setting-val any?)
+  :ret :frereth/worlds)
+(defn set-key
+  "Special-case for overriding specific keys in the world state"
+  [world-map world-key setting-key value]
+  (assoc-in world-map [world-key setting-key] value))

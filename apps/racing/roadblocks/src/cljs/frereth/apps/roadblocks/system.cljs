@@ -117,13 +117,15 @@
   ;; Well, during development. Prod should always used the full
   ;; init/halt! lifecycle. resume/suspend! is only a convenience for
   ;; maintaining active connections.
-  (try
-    (ig/halt! @state-atom)
-    (swap! state-atom configure)
-    (catch :default ex
-      (.error js/console
-              "Halting the system" state-atom
-              "failed:" ex))))
+  (when-let [current @state-atom]
+    (.info js/console "Calling halt! on" current)
+    (try
+      (ig/halt! current)
+      (swap! state-atom configure)
+      (catch :default ex
+        (.error js/console
+                "Halting the system" @state-atom
+                "failed:" ex)))))
 
 (comment
   (println state))

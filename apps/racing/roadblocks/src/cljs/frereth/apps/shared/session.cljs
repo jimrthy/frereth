@@ -121,3 +121,12 @@
   (swap! world-atom
          (fn [world-map]
            (world/mark-forking world-map full-pk cookie raw-key-pair))))
+
+;; FIXME: Spec
+(defn set-message-sender!
+  [{:keys [::world-atom]
+    :as this}
+   pk sender!]
+  (swap! world-atom
+         (fn [world-map]
+           (world/set-key world-map pk :frereth/message-sender! sender!))))

@@ -75,13 +75,15 @@
         (lamport/do-tick clock)
         ;; This is wrong.
         ;; It's going to cause the cube to resize. Need to figure out
-        ;; how much space each face takes up an screen and resize "each"
+        ;; how much space each face takes up an screen and resize each
         ;; worker appropriately.
         ;; But it's a start.
         (worker/send-to-worker! clock
                                 worker
                                 ;; FIXME: This is really a
                                 ;; :frereth/event
+                                ;; Although :dom/event would be
+                                ;; a better name for that
                                 :frereth/resize
                                 new-dims)))
     (throw (ex-info "Missing workers among manager" this))))
@@ -98,22 +100,23 @@
     (.info js/console "road-blocks.window-manager/resize-handler called badly"
           this evt)
     (throw (ex-info "Missing renderer" this)))
-  (let [canvas (.querySelector js/document "#root")
-        width (.-clientWidth canvas)
-        height (.-clientHeight canvas)
-        new-dims {::ui/width width
-                  ::ui/height height}]
+  (let [canvas (.querySelector js/document "#root")]
     (assert canvas)
-    (assert canvas-dimensions)
-    (when (ui/should-resize-renderer? @canvas-dimensions
-                                      new-dims)
-      ;; (send-resize! is getting a nil ::worker/manager.
-      ;; Odds are, it comes from here.
-      (send-resize! (select-keys this [::worker/manager ::lamport/clock])
-                    new-dims)
+    ;; Verify that browser supports off-screen canvas
+    ;; This is currently very limited.
+    ;; TODO: Better error handling.
+    (assert (.-transferControlToOffscreen canvas))
+    (let [width (.-clientWidth canvas)
+          height (.-clientHeight canvas)
+          new-dims {::ui/width width
+                    ::ui/height height}]
+      (when (ui/should-resize-renderer? @canvas-dimensions
+                                        new-dims)
+        (send-resize! (select-keys this [::worker/manager ::lamport/clock])
+                      new-dims)
 
-      (ui/resize-renderer-to-display-size! renderer new-dims)
-      (ui/fix-camera-aspect! camera new-dims))))
+        (ui/resize-renderer-to-display-size! renderer new-dims)
+        (ui/fix-camera-aspect! camera new-dims)))))
 
 (s/fdef create-camera
   :args (s/cat :z-position number?)
@@ -162,6 +165,15 @@
   :args (s/cat :canvas ::canvas)
   :ret ::graphics)
 (defn build-scene
+  "This builds the 'outer' shell renderer
+
+  I'm conflating abstraction layers.
+
+  This part is conceptually in the ballpark of the X Server
+  layer. It should draw either a) the login/demo screen or the
+  b) authenticated end-user's window manager/desktop/shell.
+  c) Or the public website with a login option (which really
+  should be the same as a)"
   [canvas]
   {:pre [canvas]}
   (let [renderer (THREE/WebGLRenderer. #js {:antialias true
