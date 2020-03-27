@@ -2,7 +2,8 @@
   (:require
    [clojure.core.async.impl.protocols :as async-protocols]
    [clojure.spec.alpha :as s]
-   [cognitect.transit :as transit])
+   [cognitect.transit :as transit]
+   [frereth.apps.shared.specs])
   #?(:clj (:import [java.io
                     ByteArrayInputStream
                     ByteArrayOutputStream])))
@@ -122,10 +123,8 @@
 ;;;; Public
 
 (s/fdef serialize
-           ;; body isn't *really* "any?" It has to be something that's
-           ;; directly serializable via transit.
-           :args (s/cat :body any?)
-           :ret ::array-buffer)
+  :args (s/cat :body :frereth/message)
+  :ret ::array-buffer)
 
 #?(:clj
    (defn serialize

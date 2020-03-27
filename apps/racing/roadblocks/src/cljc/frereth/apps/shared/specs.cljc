@@ -23,10 +23,18 @@
 ;; TODO: Find a spec for this
 (s/def :frereth/message any?)
 
+;; This was the original
 (s/def :frereth/message-sender!
   (s/fspec :args (s/cat :message :frereth/message)
            :ret any?))
-
+;; This is what I've been using in the different places
+;; where I'm actually sending messages.
+;; And I need it defined somewhere common
+#_(s/def ::message-sender! (s/fspec :args (s/cat :this :worker/manager  ; ::worker/manager
+                                               :world-key :frereth/world-key
+                                               :params :frereth/message)
+                                  ;; Called for side-effects
+                                  :ret any?))
 (s/def #?(:clj :frereth/renderer->client
           :cljs :frereth/browser->worker) (s/keys :req [:frereth/disconnect!
                                                         :frereth/message-sender!]))

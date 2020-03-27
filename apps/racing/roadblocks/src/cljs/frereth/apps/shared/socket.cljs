@@ -2,8 +2,11 @@
   (:require
    [clojure.spec.alpha :as s]
    [integrant.core :as ig]
+   [frereth.apps.shared.lamport :as lamport]
    [frereth.apps.shared.serialization :as serial]
-   [frereth.apps.shared.lamport :as lamport]))
+   ;; Not referenced directly. Just for the :frereth/??
+   ;; specs it defines
+   [frereth.apps.shared.specs]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Specs
@@ -53,16 +56,22 @@
 ;;;; Public
 
 (s/fdef send-message!
-  :args (s/cat :this ::manager
-               :world-id :frereth/world-key
-               ;; This really turns into a subset of the Pedestal
-               ;; Request map.
-               ;; TODO: Need to define exactly which subset.
-               ;; And think this through a bit more.
-               ;; Would it be worth splitting into something
-               ;; more traditional, like post/get/delete
-               ;; methods?
-               :request any?))
+  :args (s/cat
+         ;; Q: What is this?
+         ;; A: This was almost definitely refactored out of
+         ;; shared.worker.
+         ;; Which means I need to move the definition elsewhere
+         ;; to avoid circular dependencies.
+         :this ::manager
+         :world-id :frereth/world-key
+         ;; This really turns into a subset of the Pedestal
+         ;; Request map.
+         ;; TODO: Need to define exactly which subset.
+         ;; And think this through a bit more.
+         ;; Would it be worth splitting into something
+         ;; more traditional, like post/get/delete
+         ;; methods?
+         :request :frereth/message))
 (defn send-message!
   ;; FIXME: Rename this to something like send-to-server!
   ;; FIXME: This does not belong in here. I need to mock

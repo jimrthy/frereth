@@ -172,10 +172,43 @@
                :payload :frereth/body))
 (defn send-to-worker!
   [clock worker action payload]
-  (.postMessage worker (serial/serialize
-                        {:frereth/action action
-                         :frereth/body payload
-                         ::lamport/clock @clock})))
+  (.postMessage worker #js {:type :cloned
+                            :clock  @clock
+                            :body (serial/serialize
+                                   {:frereth/action action
+                                    :frereth/body payload})}))
+
+(s/fdef transfer-to-worker!
+  :args (s/cat :clock ::lamport/clock
+               :worker ::web-worker
+               :action :frereth/action
+               ;; FIXME: Need a better spec.
+               ;; This is what we're transferring.
+               ;; There's a very limited set of options
+               :payload any?))
+(defn transfer-to-worker!
+  "This is really for occasions where we want to transfer rather than clone"
+  [clock worker action payload]
+  (let [values-to-transfer #js[payload]
+        ;; Wrapper around the body/payload.
+        ;; Naming for multiple layers of serialization always seems
+        ;; to wind up jumbled.
+        letter {:type :raw
+                :action action
+                :clock @clock
+                :message payload}
+        ;; What we're actually .post'ing
+        envelope (clj->js letter)]
+    (.info js/console
+           "Trying to transfer" payload
+           "at" values-to-transfer
+           "among" letter
+           "to" worker)
+    (.postMessage worker
+                  envelope
+                  values-to-transfer)
+    (.info js/console
+           payload "transfer sent successfully")))
 
 (defmethod handle-worker-message :default
   [{:keys [:web-socket/wrapper]
@@ -195,24 +228,31 @@
   (when needs-dom-animation?
     (reset! workers-need-dom-animation? needs-dom-animation?))
   (let [worlds (session/get-worlds manager)
-        {:keys [::world/cookie]
+        {:keys [::world/cookie
+                :frereth/message-sender!]
+         :or {message-sender! (partial web-socket/send-message!
+                                       this
+                                       world-key)}
          :as world-state} (world/get-world worlds
                                            world-key)]
+    (.info js/console
+           "Worker is trying to notify Server that it forked successfully.\nworld-state:"
+           world-state
+           "\nmessage-sender!" message-sender!
+           "\nworld-state keys:" (clj->js (keys world-state)))
     (if cookie
       (let [decorated (assoc raw-message
                              :frereth/cookie cookie
                              :frereth/world-key world-key)
             {:keys [::web-socket/socket]} wrapper]
-        (web-socket/send-message! this
-                                  world-key
-                                  {:path-info "/api/v1/forked"
-                                   :request-method :put
-                                   ;; Anyway, that's premature optimization.
-                                   ;; Worry about that detail later.
-                                   ;; Even though this is the boundary area where
-                                   ;; it's probably the most important.
-                                   ;; (Well, not here. But in general)
-                                   :body decorated})
+        (message-sender! {:path-info "/api/v1/forked"
+                          :request-method :put
+                          ;; Anyway, that's premature optimization.
+                          ;; Worry about that detail later.
+                          ;; Even though this is the boundary area where
+                          ;; it's probably the most important.
+                          ;; (Well, not here. But in general)
+                          :body decorated})
         (session/do-mark-forked manager world-key worker))
       (.error js/console "Missing ::cookie among" world-state
               "\namong" (keys worlds)
@@ -221,7 +261,7 @@
 
 ;; Defer this to concrete "Window Manager" implementations.
 ;; It seems like it would be handy to have this call a
-;; PureVirtualMethod exception to force concrete instances
+;; PureVirtualMethod exception to remind concrete instances
 ;; to override.
 ;; Actually, it gets trickier than that.
 ;; The Window Manager shouldn't do the rendering. That's
@@ -277,7 +317,10 @@
                             :url string?))
   :ret ::web-worker)
 (defn fork-world-worker
-  ([this world-key base-url params]
+  ([{:keys [::lamport/clock]
+     :as this}
+    world-key base-url params]
+   (lamport/do-tick clock)
    (let [url (if (empty? params)
                base-url
                (do
@@ -288,7 +331,6 @@
                  ;; So no.
                  (str (assoc base-url :query params))))
          _ (.info js/console "Trying to open a web worker at" url)
-         ;; Q: Can I use window.Worker. instead of `new`?
          worker (js/window.Worker.
                  url
                  ;; Currently redundant:
@@ -300,21 +342,36 @@
      ;; time this gets called.
      ;; Which, really, should be to create the Login/Attract
      ;; Screen.
-     ;; Which gets weird with auth and anonymity: what if
-     ;; different end-users choose different Window
-     ;; Managers?
      (.debug js/console "(.-requestAnimationFrame worker)"
              (.-requestAnimationFrame worker)
              "among"
              worker)
-     (set! (.-onmessage worker)
-           (partial on-worker-message this world-key worker))
-     (set! (.-onerror worker)
-           (fn [problem]
-             (.error js/console "FIXME: Need to handle\n"
-                     problem
-                     "\nfrom World\n"
-                     world-key)))
+     (let [;; FIXME: Those defaults don't make any sense, except as a
+           ;; starting point
+           w 300  ; canvas default
+           h 150  ; canvas default
+           worker-canvas (js/OffscreenCanvas. w h)]
+       (set! (.-onmessage worker)
+             (partial on-worker-message this world-key worker))
+       (set! (.-onerror worker)
+             (fn [problem]
+               (.error js/console "FIXME: Need to handle\n"
+                       problem
+                       "\nfrom World\n"
+                       world-key)))
+       ;; I don't want to hand over the canvas object.
+       ;; That approach can't scale.
+       ;; Really want to set up a proxy that lets the Worker pretend
+       ;; it's writing to a GL Context. Then (flush!) back to main
+       ;; thread (or, better yet, to a pool of web workers that have
+       ;; access to "just enough" Rendering Contexts, probably with
+       ;; an affinity setting to avoid thrashing things like texture
+       ;; memory
+       ;; FIXME: Work that out
+       (transfer-to-worker! clock
+                            worker
+                            :frereth/main
+                            worker-canvas))
      worker))
   ([this world-key base-url]
    (fork-world-worker this world-key base-url {})))
@@ -628,6 +685,6 @@
 (defmethod ig/halt-key! ::manager
   [_ {:keys [::lamport/clock
              ::workers]}]
-  (doseq [worker workers]
+  (doseq [worker @workers]
     (lamport/do-tick clock)
     (send-to-worker! clock worker :frereth/halt {})))

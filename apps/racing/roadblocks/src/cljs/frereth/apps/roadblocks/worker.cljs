@@ -73,7 +73,7 @@
     action))
 
 (defn define-world!
-  []
+  [canvas]
   (let [w 512
         h 512
         fov 75
@@ -108,17 +108,25 @@
             cubes [(make-instance! geometry 0xaaaa00 -2)
                    (make-instance! geometry 0xaa0000 0)
                    (make-instance! geometry 0x0000aa 2)]
-            canvas #js {:addEventListener (fn [type-name listener options]
-                                            (.log js/console "Trying to add an event listener:"
-                                                  type-name
-                                                  "options:" options))
-                        :getContext (fn [context-name attributes]
-                                      ;; This may be a deal-killer for my current plan.
-                                      ;; Alternatively, this may be an opportunity to write
-                                      ;; a buffering renderer that forwards along calls to
-                                      ;; happen on the "outside."
-                                      ;; Q: Is this worth the effort it would take?
-                                      (throw (js/Error. "Need a WebGL context")))}
+            ;; TODO: Honestly, I'd rather have something like this than
+            ;; an OffscreenCanvas.
+            ;; Even if OffscreenCanvas becomes widely supported, there are
+            ;; limits to the number of available graphics contexts, and it
+            ;; seems like each must consume one.
+            ;; TODO: Verify that
+            ;; TODO: Get back to this approach
+            mock-canvas #js {
+                             :addEventListener (fn [type-name listener options]
+                                                 (.log js/console "Trying to add an event listener:"
+                                                       type-name
+                                                       "options:" options))
+                             :getContext (fn [context-name attributes]
+                                           ;; This may be a deal-killer for my current plan.
+                                           ;; Alternatively, this may be an opportunity to write
+                                           ;; a buffering renderer that forwards along calls to
+                                           ;; happen on the "outside."
+                                           ;; Q: Is this worth the effort it would take?
+                                           (throw (js/Error. "Need a WebGL context")))}
             ;; Q: How does this work?
             ;; A: Pretty sure it produces a separate OpenGL context per
             ;; thread.
@@ -139,7 +147,7 @@
             ;; red flags about breaking the encapsulation I'm trying to
             ;; establish here.
             ;; So it isn't something to just automate away.
-            renderer (THREE/WebGLRenderer. #js {:canvas (clj->js canvas)})
+            renderer #_(THREE/WebGLRenderer. #js {:canvas (clj->js mock-canvas)}) (THREE/WebGLRenderer. canvas)
             render-target (THREE/WebGLRenderTarget. w h)]
         (.setRenderTarget renderer render-target)
         (swap! state into {::camera {::fov fov
@@ -153,10 +161,6 @@
                                           ::ui/render-target render-target}
                            ::ui/scene scene
                            ::world cubes})))))
-;; It's important that this gets called before
-;; render-and-animate!
-;; It configures global state that the latter uses
-(define-world!)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Internal Implementation
@@ -209,9 +213,6 @@
   ;; like something branch prediction should handle, and premature
   ;; optimization etc.
   (when has-animator
-    (js/requestAnimationFrame (partial render-and-animate! renderer))))
-(when has-animator
-  (let [renderer (-> state deref ::destination ::ui/renderer)]
     (js/requestAnimationFrame (partial render-and-animate! renderer))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -271,15 +272,22 @@
     (.error js/console "What does this mean in this context?")
     (catch :default ex
       (.error js/console ex))))
-(throw (ex-info "Missing"
-                {:need ["Handlers for messages from core"
-                        "Animation-frame is obvious"
-                        "Proxy events for orbit controls"]}))
 
 (defmethod handle-incoming-message! :frereth/forward
   ;; Data passed-through from server
   [_ data]
   (.warn js/console "Worker should handle" data))
+
+(defmethod handle-incoming-message! :frereth/main
+  [_ {canvas :frereth/message}]
+  (.info js/console "handle-incoming-message! :frereth/main" canvas)
+  ;; It's important that this gets called before
+  ;; render-and-animate!
+  ;; It configures global state that the latter uses
+  (define-world! canvas)
+  (when has-animator
+    (let [renderer (-> state deref ::destination ::ui/renderer)]
+      (js/requestAnimationFrame (partial render-and-animate! renderer)))))
 
 (defmethod handle-incoming-message! :frereth/resize
   [_ {:keys [::ui/width
@@ -307,22 +315,33 @@
                          assoc
                          ::aspect (/ width height)))))))
 
+(s/fdef message-handler
+  ;; FIXME: Message wrapper spec
+  :args (s/cat :wrapper any?)
+  ;; Called for side-effects
+  :ret any?)
 (defn message-handler
   "Unwrap and dispatch incoming messages"
   ;; Q: What does the ^js metadata do?
   [^js message-wrapper]
   (.log js/console "Worker received event" message-wrapper)
-  (let [{:keys [:frereth/action]
-         remote-clock ::lamport/clock
-         :as data} (serial/deserialize (.-data message-wrapper))]
+  (let [{message-type :type
+         remote-clock :clock
+         body :body
+         :as envelope} (js->clj (.-data message-wrapper))]
     (if remote-clock
       (lamport/do-tick clock remote-clock)
       (do
         (.warn js/console "Incoming payload missing clock tick")
         (lamport/do-tick clock)))
-    (handle-incoming-message! action data)))
+    (let [{:keys [:frereth/action]
+           :as data} (condp = message-type
+                       :cloned (serial/deserialize body)
+                       :raw {:frereth/action (:action envelope)
+                             :frereth/message (:message envelope)})]
+      (handle-incoming-message! action data))))
 
-(defn init
+(defn main
   []
   (.log js/console "Background worker: init")
   ;; The shadow-cljs example shows this as
@@ -342,4 +361,21 @@
                                                  :frereth/immediate  ; trigger next frame as fast as possible
                                                  )}]
     (.postMessage js/self (serial/serialize message)))
+  (if true
+    ;; Punt on these for now. I want to paint some pixels.
+    (.warn js/console "TODO: Implement missing handlers")
+    ;; This shows up in the Console as [object Object] because
+    ;; it's escaping to the main thread's error context.
+    ;; Since there isn't anything to handle it here, of course
+    ;; it should. But it's annoyingly opaque.
+    ;; Actually, it also shows up near the bottom of the logs with
+    ;; appropriate context. So that's better than I expected at first.
+    ;; All these handlers (or, at least, a proxy for them) are
+    ;; important for adding things like Orbit controls.
+    ;; But I don't really care in terms of the initial demo/proof
+    ;; of concept for minimalist off-screen rendering.
+    (throw (ex-info "Missing"
+                    {:need ["Handlers for messages from core"
+                            "Animation-frame is obvious"
+                            "Proxy events for orbit controls"]})))
   (js/console.log "Worker bottom"))
