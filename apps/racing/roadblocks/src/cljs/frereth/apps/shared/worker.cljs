@@ -21,11 +21,10 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Specs
 
-(s/def ::web-worker #(instance? js/Worker %))
 (s/def ::dom-event #(instance? js/Event %))
 
 (s/def ::worker-instance (s/keys :req [:frereth/cookie
-                                       ::web-worker]))
+                                       :frereth/web-worker]))
 
 ;; This tracks whether we need to call rAF to forward
 ;; frame increments to each worker.
@@ -72,7 +71,7 @@
 
 (s/fdef event-forwarder
   :args (s/cat :clock ::lamport/clock
-               :worker ::web-worker
+               :worker :frereth/web-worker
                :control-id keyword?
                :tag keyword?)
   :ret (s/fspec :args (s/cat :event ::dom-event)
@@ -167,7 +166,7 @@
 
 (s/fdef send-to-worker!
   :args (s/cat :clock ::lamport/clock
-               :worker ::web-worker
+               :worker :frereth/web-worker
                :action :frereth/action
                :payload :frereth/body))
 (defn send-to-worker!
@@ -180,7 +179,7 @@
 
 (s/fdef transfer-to-worker!
   :args (s/cat :clock ::lamport/clock
-               :worker ::web-worker
+               :worker :frereth/web-worker
                :action :frereth/action
                ;; FIXME: Need a better spec.
                ;; This is what we're transferring.
@@ -315,7 +314,7 @@
               :basic (s/cat :this ::manager
                             :world-key ::jwk
                             :url string?))
-  :ret ::web-worker)
+  :ret :frereth/web-worker)
 (defn fork-world-worker
   ([{:keys [::lamport/clock]
      :as this}
@@ -385,7 +384,7 @@
                ;; Well, any sort of key
                :world-key ::jwk
                :cookie ::cookie)
-  :ret (s/nilable ::web-worker))
+  :ret (s/nilable :frereth/web-worker))
 (defn fork-authenticated-worker!
   "Begin promise chain that leads to an authenticated, ::active World
   connected over a web socket"

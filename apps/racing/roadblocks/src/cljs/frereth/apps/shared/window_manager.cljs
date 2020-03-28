@@ -66,8 +66,10 @@
   ;; have a reference to itself.
   [_ {{:keys [::ctor]} ::factory
       :as this}]
-  (assoc this ::implementation
-         (ctor this)))
+  (if ctor
+    (assoc this ::implementation
+           (ctor this))
+    (throw (ex-info "Missing factory constructor for the interface among" this))))
 
 (defmethod ig/halt-key! ::interface
   [_ {:keys [::implementation]

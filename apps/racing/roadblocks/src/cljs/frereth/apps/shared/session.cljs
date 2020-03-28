@@ -97,7 +97,7 @@
 (s/fdef do-mark-forked
   :args (s/cat :this ::manager
                :world-key :frereth/world-key
-               :worker :frereth/worker)
+               :worker :frereth/web-worker)
   :ret :frereth/worlds)
 (defn do-mark-forked
   [{:keys [::world-atom]
@@ -123,6 +123,11 @@
            (world/mark-forking world-map full-pk cookie raw-key-pair))))
 
 ;; FIXME: Spec
+(s/fdef set-message-sender!
+  :args (s/cat :this ::manager
+               :public-key :frereth/world-key
+               :sender! :frereth/message-sender!)
+  :ret any?)
 (defn set-message-sender!
   [{:keys [::world-atom]
     :as this}

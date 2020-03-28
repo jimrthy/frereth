@@ -14,6 +14,9 @@
    [frereth.apps.shared.worker :as worker]
    [integrant.core :as ig]))
 
+(s/fdef message-sender!
+  :args (s/cat )
+  :ret any?)
 (defn message-sender!
   ;; This is really a mock-up of the web-socket connection.
   ;; Q: Is there any point to dumbing this down? Or should
@@ -22,8 +25,11 @@
   ;; At the very worst, I don't need to worry about messages
   ;; from multiple Clients
   "Pretend to send messages to the Server"
-  [message]
-  (throw (js/Error. "Q: What do I do with" message "?")))
+  [clock worker body]
+  ;; I want a fake "Server" world-manager.
+  ;; This should bypass all the networking hoops to send
+  ;; messages to that.
+  (worker/send-to-worker! clock worker :what-action? body))
 
 (defmethod ig/init-key ::worker
   [_ {:keys [::lamport/clock]
@@ -39,14 +45,11 @@
     ;; to route message to the proper Server.
     ;; Doesn't particularly apply here.
     (session/add-pending-world! session-manager pk ch {})
-    (session/set-message-sender! session-manager pk message-sender!)
-    (session/do-mark-forking session-manager pk cookie raw-key-pair)
     (let [demo-worker (worker/fork-world-worker worker-manager
                                                 pk
-                                                "/js/worker.js")]
-      ;; Q: What happens next?
-      ;; A: Well, once the worker has loaded, it should send a forked
-      ;; notification back toward the websocket.
-      ;; Obviously, there's no websocket yet, so that doesn't work.
-      ;; FIXME: Finish writing this
+                                                "/js/worker.js")
+          sender! (partial message-sender! clock demo-worker)]
+      (session/set-message-sender! session-manager pk sender!)
+      (session/do-mark-forking session-manager pk cookie raw-key-pair)
+      (.warn js/console "FIXME: How does demo-worker get merged back into `this`?")
       this)))
