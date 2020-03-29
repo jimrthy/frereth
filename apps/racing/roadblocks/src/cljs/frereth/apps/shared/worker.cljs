@@ -171,11 +171,22 @@
                :payload :frereth/body))
 (defn send-to-worker!
   [clock worker action payload]
-  (.postMessage worker #js {:type :cloned
-                            :clock  @clock
-                            :body (serial/serialize
-                                   {:frereth/action action
-                                    :frereth/body payload})}))
+  (let [body (serial/serialize
+              {:frereth/action action
+               :frereth/body payload})]
+    (.info js/console
+           "Trying to transfer" action
+           "message to" worker
+           "specifically:" body
+           "(a " (type body) ")")
+    ;; I think I should convert body to an ArrayBuffer so I can
+    ;; transfer it instead of cloning.
+    ;; Q: does the data conversion create more overhead than the
+    ;; cloning?
+    (.postMessage worker
+                  #js {:type :cloned
+                       :clock @clock
+                       :body body})))
 
 (s/fdef transfer-to-worker!
   :args (s/cat :clock ::lamport/clock
@@ -187,6 +198,11 @@
                :payload any?))
 (defn transfer-to-worker!
   "This is really for occasions where we want to transfer rather than clone"
+  ;; This makes things significantly messier, since we can't
+  ;; serialize the payload.
+  ;; At the same time, there must be a way to make send-to-worker! a
+  ;; wrapper around this to avoid the duplication.
+  ;; TODO: Find time to make that de-duplication worthwhile.
   [clock worker action payload]
   (let [values-to-transfer #js[payload]
         ;; Wrapper around the body/payload.
@@ -195,7 +211,7 @@
         letter {:type :raw
                 :action action
                 :clock @clock
-                :message payload}
+                :body payload}
         ;; What we're actually .post'ing
         envelope (clj->js letter)]
     (.info js/console
