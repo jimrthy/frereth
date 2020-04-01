@@ -115,6 +115,7 @@
                :raw-key-pair any?)
   :ret :frereth/worlds)
 (defn do-mark-forking
+  "Update the World into a :forking state"
   [{:keys [::world-atom]
     :as this} full-pk cookie raw-key-pair]
   (.log js/console "do-mark-forking: swap!ing the Cookie into the World")

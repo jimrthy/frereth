@@ -26,6 +26,9 @@
   ;; from multiple Clients
   "Pretend to send messages to the Server"
   [clock worker body]
+  (.info js/console
+         "Message to send to server from"
+         worker ":" body)
   ;; I want a fake "Server" world-manager.
   ;; This should bypass all the networking hoops to send
   ;; messages to that.
@@ -45,11 +48,15 @@
     ;; to route message to the proper Server.
     ;; Doesn't particularly apply here.
     (session/add-pending-world! session-manager pk ch {})
+    ;; For most worlds, this gets called inside
+    ;; shared.worker/do-build-actual-worker
+    (session/do-mark-forking session-manager pk cookie raw-key-pair)
     (let [demo-worker (worker/fork-world-worker worker-manager
                                                 pk
                                                 "/js/worker.js")
           sender! (partial message-sender! clock demo-worker)]
       (session/set-message-sender! session-manager pk sender!)
-      (session/do-mark-forking session-manager pk cookie raw-key-pair)
-      (.warn js/console "FIXME: How does demo-worker get merged back into `this`?")
+      ;; Once the Worker sends a notification that it's ready, call
+      (session/do-mark-forked session-manager pk demo-worker)
+      (.warn js/console "FIXME: How should demo-worker get merged back into `this`?")
       this)))

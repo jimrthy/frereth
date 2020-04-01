@@ -262,6 +262,7 @@
             {:keys [::web-socket/socket]} wrapper]
         (message-sender! {:path-info "/api/v1/forked"
                           :request-method :put
+                          ;; FIXME: Comment rot. Which `that`?
                           ;; Anyway, that's premature optimization.
                           ;; Worry about that detail later.
                           ;; Even though this is the boundary area where
@@ -519,6 +520,7 @@
     (let [[response port] (async/alts! [response-ch (async/timeout 1000)])]
       (if response
         (do
+          ;; TODO: Better error handling
           (assert (= port response-ch))
           (let [cookie (:frereth/cookie response)]
             (.log js/console "Received signal to fork worker:" response
@@ -535,6 +537,8 @@
                          ;; designing this on the fly.
                          ;; TODO: Clean it up and move it into documentation
                          (fn [worker]
+                           ;; Comment rot Q: What is `that` in the next line?
+                           ;; Speculation: this is about the world-id key
                            ;; Honestly, that should be something that gets
                            ;; assigned here. It's independent of whatever key the
                            ;; Worker might actually use.
@@ -608,6 +612,9 @@
     ;; to write to ch to trigger the creation of the WebWorker.
     ;; It seems like we should probably do something with it, but
     ;; I'm not sure what would be appropriate.
+    ;; Note that ch gets added to the worlds' state as part of
+    ;; add-pending-world!
+    ;; Which is messy, but so is the rest of this ns
     (do-build-actual-worker this
                             ch
                             spawner
