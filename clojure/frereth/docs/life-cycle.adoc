@@ -1,0 +1,94 @@
+= Frereth Lifecycle
+James Gatannah
+
+== Renderer (browser-based)
+
+=== Top-Level
+
+In the latest incarnation (under apps/racing/roadblocks, at the time of
+writing), it starts with a core.cljs that quickly defers to an Integrant
+System.
+
+This incarnation is intended to work off-line. The most Component,
+really, is the `::login-demo/worker`.
+
+The 2 main pieces it uses are the `::session/manager` and
+`::worker/manager`.
+
+For the real thing,
+the `::session<->socket/connection` ties together all the big-picture
+pieces like the session manager, web socket connection, "Window Manager,"
+and Web Worker manager.
+
+TIP: In a lot of ways, the `apps/log-viewer` project is really a more
+complete earlier example that was a rushed prototype. It includes real
+Server interaction. If you dig into the front-end system definition,
+it was also missing several of these components. Though it does have
+a bunch of `TODO` placeholders where I rambled on about them. So it
+may be worth looking back into as a full life-cycle example. And its
+actual function (viewing logs at different layers of the composite
+system) is pretty vital.
+
+=== login-demo
+
+roadblocks.login-demo is a simplified starting point that doesn't
+involve all sorts of pesky details like dealing with promises to
+make calls into the crypto API.
+
+FIXME: This next piece really needs to be something more like a
+swim-lane diagram showing message flows back and forth between the
+different layers.
+
+.It mocks those parts out and calls:
+[width="100%",options="header"]
+|===========================================================
+| Function                             | What it does/should do
+| `session-manager/add-pending-world!` | add the new pending world to the SESSION. This involves a core.async channel
+| `session-manager/do-mark-forking`    | after something (Q: what?) writes to that core.async channel,  transition to a `forking` state
+| `worker/fork-world-worker`           | starts Web Worker
+| `session/do-mark-forked`             | marks Web Worker active and notifies Server
+|===========================================================
+
+==== add-pending-world -> do-mark-forking
+
+In the real thing, this goes through the previously mintioned chain of
+crypto promises. Once the pending world has an exported public key,
+we get into `shared.worker/build-worker-from-exported-key`.
+
+That sends a `forking` message to the web server which should forward
+a message that contains the new World's public key along with the
+`login` command.
+
+TIP: I think I've conflated details because I keep procrastinating when it
+comes to authentication.
+
+This probably made sense for my initial prototype, since I just glossed
+over that part and decided to pretend it was happening.
+
+It doesn't make any sense for the roadblocks demo. I'm pretending that
+this is a really light version with which you can dabble until you log in.
+
+The whole login/authentication/authorization piece is a huge chunk that
+I need to quit avoiding. It's just that it's pointless until I have a
+proof of concept for the architectural pieces that are the central point.
+
+==== fork-world-worker
+
+This is what actually creates the Web Worker. It also creates an off-screen
+Canvas that Worker can use for drawing, since it has no access to the
+DOM.
+
+I am extremely torn about the details behind the way this part works.
+
+Partially because "works" is such a loose term. Right now, it's a crash
+and burn because I try to initialize the three.js library, and that fails
+because it tries to access `js/document` despite the offscreen Canvas.
+Hopefully that's a bug in my code rather than an inherent limitation of
+`three.js`.
+
+Even if it is, I'm very skeptical about being able to create as many
+off-screen Canvas instances as I'd need to make this approach viable. My
+current (ancient) video card is limited to 16 OpenGL contexts, which isn't
+even close to what I want to have available here.
+
+TODO: Need to test out these assumptions.
