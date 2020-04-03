@@ -303,7 +303,8 @@
                :event any?))
 (defn on-worker-message
   "Dispatch message from Worker"
-  [{:keys [::web-socket/wrapper]
+  [{:keys [::lamport/clock
+           ::web-socket/wrapper]
     :as this}
    world-key worker event]
   ;; I'd really like to feed this through a pedestal interceptor chain.
@@ -315,14 +316,10 @@
         {:keys [:frereth/action]
          :as data} (serial/deserialize raw-data)]
     (.log js/console "Message from" worker ":" action "in" data)
+    (lamport/do-tick clock)
     (handle-worker-message this action world-key worker event data)))
 
 (s/fdef fork-world-worker
-  ;; Q: What was :this?
-  ;; A: It's defined in session-socket.
-  ;; Absolutely cannot use it here.
-  ;; However, do need the semantics behind it.
-  ;; TODO: Start back here
   :args (s/or :parameterized (s/cat :this ::manager
                                     :world-key ::jwk
                                     ;; FIXME: at least set up a regex
