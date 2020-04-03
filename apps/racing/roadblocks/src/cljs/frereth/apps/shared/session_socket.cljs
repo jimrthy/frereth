@@ -84,15 +84,15 @@
                                                world-key
                                                ::world/forked)]
         (let [{:keys [:frereth/browser->worker
-                      :frereth/worker]} world]
-          (if worker
+                      :frereth/web-worker]} world]
+          (if web-worker
             ;; Q: Is this something I can consolidate with the
             ;; server-side version? (It doesn't seem all that likely)
             (let [browser->worker (fn [raw-message]
                                     (let [serialized (serial/serialize raw-message)
                                           wrapped {:frereth/action :frereth/forward
                                                    :frereth/body serialized}]
-                                      (.postMessage worker wrapped))
+                                      (.postMessage web-worker wrapped))
                                     (throw (js/Error. "write this")))]
               (swap! world-atom
                      (fn [worlds]
@@ -148,7 +148,7 @@
 
       :frereth/disconnect
       (if-let [world (world/get-world worlds world-key)]
-        (if-let [worker (:frereth/worker world)]
+        (if-let [worker (:frereth/web-worker world)]
           (.postMessage worker raw-envelope)
           (.error js/console "Disconnect message for"
                   world-key
@@ -165,7 +165,7 @@
 
       :frereth/forward
       (if-let [world (world/get-world-in-state worlds world-key ::world/active)]
-        (if-let [worker (:frereth/worker world)]
+        (if-let [worker (:frereth/web-worker world)]
           (.postMessage worker (serial/serialize body))
           (.error js/console "Message for\n"
                   world-key

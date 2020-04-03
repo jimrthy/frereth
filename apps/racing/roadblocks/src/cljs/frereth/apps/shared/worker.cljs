@@ -21,11 +21,10 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Specs
 
-(s/def ::web-worker #(instance? js/Worker %))
 (s/def ::dom-event #(instance? js/Event %))
 
 (s/def ::worker-instance (s/keys :req [:frereth/cookie
-                                       ::web-worker]))
+                                       :frereth/web-worker]))
 
 ;; This tracks whether we need to call rAF to forward
 ;; frame increments to each worker.
@@ -72,7 +71,7 @@
 
 (s/fdef event-forwarder
   :args (s/cat :clock ::lamport/clock
-               :worker ::web-worker
+               :worker :frereth/web-worker
                :control-id keyword?
                :tag keyword?)
   :ret (s/fspec :args (s/cat :event ::dom-event)
@@ -167,20 +166,31 @@
 
 (s/fdef send-to-worker!
   :args (s/cat :clock ::lamport/clock
-               :worker ::web-worker
+               :worker :frereth/web-worker
                :action :frereth/action
                :payload :frereth/body))
 (defn send-to-worker!
   [clock worker action payload]
-  (.postMessage worker #js {:type :cloned
-                            :clock  @clock
-                            :body (serial/serialize
-                                   {:frereth/action action
-                                    :frereth/body payload})}))
+  (let [body (serial/serialize
+              {:frereth/action action
+               :frereth/body payload})]
+    (.info js/console
+           "Trying to transfer" action
+           "message to" worker
+           "specifically:" body
+           "(a " (type body) ")")
+    ;; I think I should convert body to an ArrayBuffer so I can
+    ;; transfer it instead of cloning.
+    ;; Q: does the data conversion create more overhead than the
+    ;; cloning?
+    (.postMessage worker
+                  #js {:type :cloned
+                       :clock @clock
+                       :body body})))
 
 (s/fdef transfer-to-worker!
   :args (s/cat :clock ::lamport/clock
-               :worker ::web-worker
+               :worker :frereth/web-worker
                :action :frereth/action
                ;; FIXME: Need a better spec.
                ;; This is what we're transferring.
@@ -188,6 +198,11 @@
                :payload any?))
 (defn transfer-to-worker!
   "This is really for occasions where we want to transfer rather than clone"
+  ;; This makes things significantly messier, since we can't
+  ;; serialize the payload.
+  ;; At the same time, there must be a way to make send-to-worker! a
+  ;; wrapper around this to avoid the duplication.
+  ;; TODO: Find time to make that de-duplication worthwhile.
   [clock worker action payload]
   (let [values-to-transfer #js[payload]
         ;; Wrapper around the body/payload.
@@ -196,7 +211,7 @@
         letter {:type :raw
                 :action action
                 :clock @clock
-                :message payload}
+                :body payload}
         ;; What we're actually .post'ing
         envelope (clj->js letter)]
     (.info js/console
@@ -247,6 +262,7 @@
             {:keys [::web-socket/socket]} wrapper]
         (message-sender! {:path-info "/api/v1/forked"
                           :request-method :put
+                          ;; FIXME: Comment rot. Which `that`?
                           ;; Anyway, that's premature optimization.
                           ;; Worry about that detail later.
                           ;; Even though this is the boundary area where
@@ -287,7 +303,8 @@
                :event any?))
 (defn on-worker-message
   "Dispatch message from Worker"
-  [{:keys [::web-socket/wrapper]
+  [{:keys [::lamport/clock
+           ::web-socket/wrapper]
     :as this}
    world-key worker event]
   ;; I'd really like to feed this through a pedestal interceptor chain.
@@ -299,14 +316,10 @@
         {:keys [:frereth/action]
          :as data} (serial/deserialize raw-data)]
     (.log js/console "Message from" worker ":" action "in" data)
+    (lamport/do-tick clock)
     (handle-worker-message this action world-key worker event data)))
 
 (s/fdef fork-world-worker
-  ;; Q: What was :this?
-  ;; A: It's defined in session-socket.
-  ;; Absolutely cannot use it here.
-  ;; However, do need the semantics behind it.
-  ;; TODO: Start back here
   :args (s/or :parameterized (s/cat :this ::manager
                                     :world-key ::jwk
                                     ;; FIXME: at least set up a regex
@@ -315,7 +328,7 @@
               :basic (s/cat :this ::manager
                             :world-key ::jwk
                             :url string?))
-  :ret ::web-worker)
+  :ret :frereth/web-worker)
 (defn fork-world-worker
   ([{:keys [::lamport/clock]
      :as this}
@@ -385,7 +398,7 @@
                ;; Well, any sort of key
                :world-key ::jwk
                :cookie ::cookie)
-  :ret (s/nilable ::web-worker))
+  :ret (s/nilable :frereth/web-worker))
 (defn fork-authenticated-worker!
   "Begin promise chain that leads to an authenticated, ::active World
   connected over a web socket"
@@ -504,6 +517,7 @@
     (let [[response port] (async/alts! [response-ch (async/timeout 1000)])]
       (if response
         (do
+          ;; TODO: Better error handling
           (assert (= port response-ch))
           (let [cookie (:frereth/cookie response)]
             (.log js/console "Received signal to fork worker:" response
@@ -520,6 +534,8 @@
                          ;; designing this on the fly.
                          ;; TODO: Clean it up and move it into documentation
                          (fn [worker]
+                           ;; Comment rot Q: What is `that` in the next line?
+                           ;; Speculation: this is about the world-id key
                            ;; Honestly, that should be something that gets
                            ;; assigned here. It's independent of whatever key the
                            ;; Worker might actually use.
@@ -593,6 +609,9 @@
     ;; to write to ch to trigger the creation of the WebWorker.
     ;; It seems like we should probably do something with it, but
     ;; I'm not sure what would be appropriate.
+    ;; Note that ch gets added to the worlds' state as part of
+    ;; add-pending-world!
+    ;; Which is messy, but so is the rest of this ns
     (do-build-actual-worker this
                             ch
                             spawner

@@ -1,5 +1,6 @@
 (ns frereth.apps.shared.world
-  ;; TODO: Refactor move this to frereth.apps.shared.worlds
+  "Manage the state/history of world(s)"
+  ;; TODO: Refactor-move this to frereth.apps.shared.worlds
   (:require [clojure.core.async :as async]
             [clojure.pprint :refer [pprint]]
             [clojure.spec.alpha :as s]
@@ -36,10 +37,6 @@
 (s/def :frereth/world-key :frereth/pid)
 (s/def :frereth/worlds (s/map-of :frereth/world-key ::world))
 
-;; The clojurescript side can't find this.
-;; Even though it's totally defined in specs.
-;; Actually, it isn't looking there.
-;; I'm going to blame caching.
 (s/def ::notification-channel ::async/chan)
 
 (s/def ::world-without-history (s/keys :req [::specs/time-in-state
@@ -59,7 +56,7 @@
                                              ;; TODO: Consolidate them.
                                              #?(:clj :frereth/renderer->client
                                                 :cljs :frereth/browser->worker)
-                                             #?(:cljs :frereth/worker)]))
+                                             #?(:cljs :frereth/web-worker)]))
 (s/def ::history (s/coll-of ::world-without-history))
 
 ;; This name leads to other namespaces referencing ::world/world
@@ -174,7 +171,7 @@
                              pre-check)]
      (log ::update-world-connection-state
           "Calling transition function on world")
-     (pprint (get world-map world-key))
+     (pprint (dissoc (get world-map world-key) ::history))
      (update updated world-key transition))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -320,7 +317,7 @@
 (s/fdef mark-forked
   :args (s/cat :world-map :frereth/worlds
                :world-key :frereth/world-key
-               #?@(:cljs [:worker :frereth/worker]))
+               #?@(:cljs [:worker :frereth/web-worker]))
   :ret (s/nilable ::world))
 (defn mark-forked
   [world-map world-key #?(:cljs worker)]
@@ -338,7 +335,7 @@
                                       ;; Though possibly worth verifying
                                       ;; that they match.
                                       (assoc transitioned
-                                             :frereth/worker worker)))))
+                                             :frereth/web-worker worker)))))
 
 (s/fdef mark-forking
   :args (s/cat :world-map :frereth/worlds

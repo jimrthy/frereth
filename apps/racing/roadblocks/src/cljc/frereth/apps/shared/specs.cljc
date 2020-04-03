@@ -46,7 +46,7 @@
 
 (s/def ::time-in-state inst?)
 
-#?(:cljs (s/def :frereth/worker #(instance? js/Worker %)))
+#?(:cljs (s/def :frereth/web-worker #(instance? js/Worker %)))
 
 (s/def :frereth/world-stop-signal (s/or :symbol symbol?
                                         :uuid uuid?

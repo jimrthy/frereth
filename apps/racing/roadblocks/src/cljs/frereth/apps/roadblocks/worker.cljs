@@ -279,8 +279,12 @@
   (.warn js/console "Worker should handle" data))
 
 (defmethod handle-incoming-message! :frereth/main
-  [_ {canvas :frereth/message}]
-  (.info js/console "handle-incoming-message! :frereth/main" canvas)
+  [_
+   {canvas :frereth/message
+    :as body}]
+  (.info js/console
+         "handle-incoming-message! :frereth/main" canvas
+         "\nin" body)
   ;; It's important that this gets called before
   ;; render-and-animate!
   ;; It configures global state that the latter uses
@@ -328,17 +332,21 @@
   (let [{message-type :type
          remote-clock :clock
          body :body
-         :as envelope} (js->clj (.-data message-wrapper))]
+         :as envelope} (js->clj (.-data message-wrapper) :keywordize-keys true)]
     (if remote-clock
       (lamport/do-tick clock remote-clock)
       (do
-        (.warn js/console "Incoming payload missing clock tick")
+        (.warn js/console
+               "Incoming payload missing clock tick"
+               (clj->js (keys envelope))
+               "among"
+               envelope)
         (lamport/do-tick clock)))
     (let [{:keys [:frereth/action]
            :as data} (condp = message-type
-                       :cloned (serial/deserialize body)
-                       :raw {:frereth/action (:action envelope)
-                             :frereth/message (:message envelope)})]
+                       "cloned" (serial/deserialize body)
+                       "raw" {:frereth/action (keyword "frereth" (:action envelope))
+                              :frereth/message body})]
       (handle-incoming-message! action data))))
 
 (defn main
