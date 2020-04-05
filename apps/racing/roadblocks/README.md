@@ -45,6 +45,17 @@ TODO: look into the sft folder to see how they set up deps.edn.
 
 If you install it "globally," you can use the `shadow-cljs` command directly.
 
+### Short Version
+
+`$ shadow-cljs clj-repl`
+
+`[2:0]~shadow.user=> (shadow/watch :app)
+
+That will print instructions for connecting the browser and your
+editor's nrepl client.
+
+Read on for more generic details that probably don't belong in here.
+
 ### Common Commands
 
 Compile a build once and exit:
@@ -105,14 +116,6 @@ much faster.
 #### Specific Build Targets
 
 Mostly, you'll want to run builds for specific target.
-
-##### Short Version
-
-`$ shadow-cljs clj-repl`
-
-`[2:0]~shadow.user=> (shadow/watch :app)
-
-Read on for more generic details that probably don't belong in here.
 
 ##### CLI
 

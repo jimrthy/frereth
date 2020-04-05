@@ -147,7 +147,7 @@
             ;; red flags about breaking the encapsulation I'm trying to
             ;; establish here.
             ;; So it isn't something to just automate away.
-            renderer #_(THREE/WebGLRenderer. #js {:canvas (clj->js mock-canvas)}) (THREE/WebGLRenderer. canvas)
+            renderer #_(THREE/WebGLRenderer. #js {:canvas (clj->js mock-canvas)}) (THREE/WebGLRenderer. #js{:canvas canvas})
             render-target (THREE/WebGLRenderTarget. w h)]
         (.setRenderTarget renderer render-target)
         (swap! state into {::camera {::fov fov
@@ -235,6 +235,20 @@
   ;; to be able to gracefully recover from those
   (throw (js/Error. "Not Implemented")))
 
+(defmethod handle-incoming-message!   :frereth/event
+  ;; UI event
+  [_ {[tag ctrl-id event] :frereth/body} data]
+  (.log js/console "Should dispatch" event "to" ctrl-id "based on" tag)
+  (try
+    (.error js/console "What does this mean in this context?")
+    (catch :default ex
+      (.error js/console ex))))
+
+(defmethod handle-incoming-message! :frereth/forward
+  ;; Data passed-through from server
+  [_ data]
+  (.warn js/console "Worker should handle" data))
+
 (defmethod handle-incoming-message! :frereth/halt
   [_ _]
   (.log js/console "World halted. Exiting.")
@@ -263,20 +277,6 @@
       (.dispose (.-map (.-material mesh))))
     (.dispose scene))
   (reset! state (create-initial-state)))
-
-(defmethod handle-incoming-message!   :frereth/event
-  ;; UI event
-  [_ {[tag ctrl-id event] :frereth/body} data]
-  (.log js/console "Should dispatch" event "to" ctrl-id "based on" tag)
-  (try
-    (.error js/console "What does this mean in this context?")
-    (catch :default ex
-      (.error js/console ex))))
-
-(defmethod handle-incoming-message! :frereth/forward
-  ;; Data passed-through from server
-  [_ data]
-  (.warn js/console "Worker should handle" data))
 
 (defmethod handle-incoming-message! :frereth/main
   [_
