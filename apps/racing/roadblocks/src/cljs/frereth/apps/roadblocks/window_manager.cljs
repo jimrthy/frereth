@@ -103,7 +103,10 @@
   (let [canvas (.querySelector js/document "#root")]
     (assert canvas)
     ;; Verify that browser supports off-screen canvas
-    ;; This is currently very limited.
+    ;; This is currently very limited (in that it
+    ;; only really works in chrome...there's some
+    ;; experimental firefox support, but it will be severely crippled
+    ;; until their web workers support .requestAnimationFrame).
     ;; TODO: Better error handling.
     (assert (.-transferControlToOffscreen canvas))
     (let [width (.-clientWidth canvas)
@@ -226,6 +229,14 @@
   (.render renderer scene camera)
   (js/requestAnimationFrame (partial render! this)))
 
+(defn build-texture-from-raw-bytes
+  ;; This doesn't belong here
+  ;; We have an ArrayBuffer built from the internal canvas's .toBlob
+  ;; function. Q: What should we do with it?
+  [array-buffer]
+  (throw (ex-info "How should this work?"
+                  {::src array-buffer})))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Public
 
@@ -266,25 +277,38 @@
       [{:keys [::worker/need-dom-animation?]
         :as worker-manager}
        action world-key worker event
-       {:keys [:frereth/texture]
+       {pixels :frereth/body
         worker-clock ::lamport/clock
         :as raw-message}]
-      (lamport/do-tick clock worker-clock)
+      (.info js/console "Handling render request:" raw-message)
       ;; Need to update the Material.
       ;; Which seems like it probably means a recompilation.
       ;; Oh well. There aren't a lot of alternatives.
-      (let [material (.-material cube)]
-        (set! (.-texture material) texture)
-        (set! (.-needsUpdate texture) true))
+      (let [texture (build-texture-from-raw-bytes pixels)
+            material (.-material cube)]
+        (set! (.-map material) texture)
+        ;; We are getting here.
+        ;; And throwing an exception because texture is nil
+        ;; I still have the name typo'd.
+        ;; More importantly: is it possile to build a Texture from those
+        ;; raw bytes?
+        ;; Well, obviously, it is. Since there's a Loader that builds
+        ;; them from a data URL.
+        ;; Is it worthwhile, since the performance of this approach
+        ;; seems guaranteed to suck?
+        ;; (Yes, premature optimization and all that, but this approach
+        ;; is pretty much guaranteed to be awful)
+        (set! (.-needsUpdate (.-texture material)) true))
       (when need-dom-animation?
-        (js/requestAnimationFrame (fn [clock-tick]
+        (comment
+          (js/requestAnimationFrame (fn [clock-tick]
 
-                                    ;; This seems like it really should
-                                    ;; involve a wrapper in...maybe the
-                                    ;; worker-manager?
-                                    (.postMessage worker (serial/serialize
-                                                          {:frereth/action :frereth/render-frame
-                                                           ::lamport/clock @clock}))))))
+                                      ;; This seems like it really should
+                                      ;; involve a wrapper in...maybe the
+                                      ;; worker-manager?
+                                      (.postMessage worker (serial/serialize
+                                                            {:frereth/action :frereth/render-frame
+                                                             ::lamport/clock @clock})))))))
     (let [result
           (into (assoc this
                        ::resize-handler size-sender

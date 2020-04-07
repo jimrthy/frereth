@@ -6,8 +6,12 @@
    [clojure.spec.alpha :as s]
    [frereth.apps.shared.lamport :as lamport]
    [frereth.apps.shared.serialization :as serial]
+   [frereth.apps.shared.worker :as shared-worker]
    [frereth.apps.shared.ui :as ui]
    ["three" :as THREE]))
+
+;; I really want to add a REPL connection into here.
+;; FIXME: Figure out how
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Specs
@@ -60,7 +64,7 @@
 ;; Q: How much sense does it make for this to be a def vs. defonce?
 ;; A: Since this implementation is purely a throw-away PoC, who cares
 ;; either way?
-(def clock (atom 0))
+(def global-clock (atom 0))
 ;; Can this animate itself?
 ;; Currently, in Firefox, at least, the main thread has to trigger each
 ;; frame.
@@ -147,15 +151,17 @@
             ;; red flags about breaking the encapsulation I'm trying to
             ;; establish here.
             ;; So it isn't something to just automate away.
-            renderer #_(THREE/WebGLRenderer. #js {:canvas (clj->js mock-canvas)}) (THREE/WebGLRenderer. #js{:canvas canvas})
+            renderer (THREE/WebGLRenderer. #js{:canvas canvas})
+            #_(THREE/WebGLRenderer. #js {:canvas (clj->js mock-canvas)})
             render-target (THREE/WebGLRenderTarget. w h)]
-        (.setRenderTarget renderer render-target)
+        #_(.setRenderTarget renderer render-target)
         (swap! state into {::camera {::fov fov
                                      ::aspect aspect
                                      ::near near
                                      ::far far
                                      ::ui/camera camera}
-                           ::destination {::ui/width w
+                           ::destination {::ui/canvas canvas
+                                          ::ui/width w
                                           ::ui/height h
                                           ::ui/renderer renderer
                                           ::ui/render-target render-target}
@@ -165,16 +171,22 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Internal Implementation
 
+(s/fdef render-and-animate!
+  :args (s/cat :clock ::lamport/clock
+               :renderer :ui/renderer
+               :time-stamp (s/and number? pos?))
+  :ret any?)
 (defn render-and-animate!
   "This triggers all the interesting pieces"
-  [renderer time-stamp]
+  [clock renderer time-stamp]
   (let [time (/ time-stamp 1000)
-        {:keys [::ui/camera
-                ::destination
+        {:keys [::destination
                 ::ui/scene
                 :world]
+         {:keys [::camera]
+          :as camera-wrapper} ::camera
          :as state} @state
-        camera (::ui/camera camera)
+        camera (::ui/camera camera-wrapper)
         renderer (::ui/renderer destination)
         render-target (::ui/render-target destination)
         ;; Using a map variant for side-effects feels wrong.
@@ -190,8 +202,13 @@
     (.info js/console
            "Trying to set the render-target to" render-target
            "on renderer" renderer
-           "a" (type renderer))
+           "a" (type renderer)
+           "so we can render from the camera" camera
+           "a" (type camera)
+           "from the state-keys" (clj->js (keys state)))
     (try
+      ;; The .setRenderTarget pieces would make sense if I were
+      ;; rendering to a texture.
       #_(.setRenderTarget renderer render-target)
       (.render renderer scene camera)
       #_(.setRenderTarget renderer nil)
@@ -206,14 +223,66 @@
     ;; FIXME: Need a wrapper for this.
     ;; Don't send raw messages willy-nilly.
     ;; Need to update the Lamport clock.
-    (.postMessage js/self (serial/serialize {:frereth/action :frereth/render
-                                             :frereth/texture (.-texture render-target)})))
+    #_(.postMessage js/self (serial/serialize {:frereth/action :frereth/render
+                                               :frereth/texture (.-texture render-target)}))
+    ;; Here's an ugly piece where the abstraction leaks.
+    ;; I don't want this layer to know anything about underlying details
+    ;; like the clock.
+    ;; It's usage is scattered all over the place in here anyway.
+    ;; TODO: Invest some hammock time into hiding this detail.
+    (let [texture (.-texture render-target)
+          ;; This is a shallow clone.
+          ;; Which means that it creates something that is not
+          ;; transferrable.
+          ;; I need to copy the image data.
+          ;; Actually, that's a terrible idea.
+          ;; That would mean
+          ;; a) copying the data off the GPU
+          ;; b) cloning it into a byte array
+          ;; c) transferring control of the byte array over to the main thread
+          ;; d) converting the byte array back into an image
+          ;; e) uploading that back to the GPU
+          ;; What I really want to do is transfer the texture ID so the
+          ;; main thread can use it correctly.
+          ;; Q: Can those be shared across rendering contexts?
+          ;; Q: How big a hole does this blow in my security plan if other
+          ;; worlds can access each others' textures that way?
+          clone (.clone texture)
+          image (.-image clone)
+          canvas (::ui/canvas destination)
+          conversion-promise (.convertToBlob canvas)]
+      (.then conversion-promise
+             (fn [blob]
+               (.then (.arrayBuffer blob)
+                      (fn [a-b]
+                        ;; Comment/log rot (sort-of): I can transfer the ArrayBuffer.
+                        ;; But I'm not sure what I can do with it when I get it into
+                        ;; the main thread. And this is a ridiculous hoop to waste
+                        ;; valuable VRAM bandwidth on.
+                        (.info js/console
+                               "[WORKER] Transferring newly rendered texture #" (.-id clone)
+                               "to Window Manager"
+                               "\nThis is going to fail.\n"
+                               "Image:" image "a" (type image)
+                               "\nCanvas:" canvas "a" (type canvas))
 
-  ;; This seems like a check to optimize away. Then again, it also seems
-  ;; like something branch prediction should handle, and premature
-  ;; optimization etc.
-  (when has-animator
-    (js/requestAnimationFrame (partial render-and-animate! renderer))))
+                        (shared-worker/transfer-to-worker! clock
+                                                           js/self
+                                                           :frereth/render
+                                                           ;; Q: Is there any reality in which
+                                                           ;; this works?
+                                                           #_clone
+                                                           #_image
+                                                           #_(.toBlob canvas)
+                                                           #_blob
+                                                           a-b)
+
+                        ;; This seems like a check to optimize away. Then again, it also seems
+                        ;; like something branch prediction should handle, and premature
+                        ;; optimization etc.
+                        (comment
+                          (when has-animator
+                            (js/requestAnimationFrame (partial render-and-animate! clock renderer)))))))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Event handlers
@@ -291,7 +360,7 @@
   (define-world! canvas)
   (when has-animator
     (let [renderer (-> state deref ::destination ::ui/renderer)]
-      (js/requestAnimationFrame (partial render-and-animate! renderer)))))
+      (js/requestAnimationFrame (partial render-and-animate! global-clock renderer)))))
 
 (defmethod handle-incoming-message! :frereth/resize
   [_ {:keys [::ui/width
@@ -334,14 +403,14 @@
          body :body
          :as envelope} (js->clj (.-data message-wrapper) :keywordize-keys true)]
     (if remote-clock
-      (lamport/do-tick clock remote-clock)
+      (lamport/do-tick global-clock remote-clock)
       (do
         (.warn js/console
                "Incoming payload missing clock tick"
                (clj->js (keys envelope))
                "among"
                envelope)
-        (lamport/do-tick clock)))
+        (lamport/do-tick global-clock)))
     (let [{:keys [:frereth/action]
            :as data} (condp = message-type
                        "cloned" (serial/deserialize body)
