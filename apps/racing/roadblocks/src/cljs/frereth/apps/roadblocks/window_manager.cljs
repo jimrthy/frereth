@@ -277,14 +277,14 @@
       [{:keys [::worker/need-dom-animation?]
         :as worker-manager}
        action world-key worker event
-       {pixels :frereth/body
+       {img-bmp :frereth/body
         worker-clock ::lamport/clock
         :as raw-message}]
       (.info js/console "Handling render request:" raw-message)
       ;; Need to update the Material.
       ;; Which seems like it probably means a recompilation.
       ;; Oh well. There aren't a lot of alternatives.
-      (let [texture (build-texture-from-raw-bytes pixels)
+      (let [texture (THREE/CanvasTexture. img-bmp)
             material (.-material cube)]
         (set! (.-map material) texture)
         ;; We are getting here.
@@ -298,7 +298,7 @@
         ;; seems guaranteed to suck?
         ;; (Yes, premature optimization and all that, but this approach
         ;; is pretty much guaranteed to be awful)
-        (set! (.-needsUpdate (.-texture material)) true))
+        (set! (.-needsUpdate (.-map material)) true))
       (when need-dom-animation?
         (comment
           (js/requestAnimationFrame (fn [clock-tick]

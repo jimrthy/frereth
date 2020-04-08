@@ -152,6 +152,8 @@
             ;; establish here.
             ;; So it isn't something to just automate away.
             renderer (THREE/WebGLRenderer. #js{:canvas canvas})
+            ;; Leaving this around, because, really, it's what I want
+            ;; to do.
             #_(THREE/WebGLRenderer. #js {:canvas (clj->js mock-canvas)})
             render-target (THREE/WebGLRenderTarget. w h)]
         #_(.setRenderTarget renderer render-target)
@@ -250,8 +252,9 @@
           clone (.clone texture)
           image (.-image clone)
           canvas (::ui/canvas destination)
-          conversion-promise (.convertToBlob canvas)]
-      (.then conversion-promise
+          #_#_conversion-promise (.convertToBlob canvas)
+          img-bmp (.transferToImageBitmap canvas)]
+      #_(.then conversion-promise
              (fn [blob]
                (.then (.arrayBuffer blob)
                       (fn [a-b]
@@ -282,7 +285,11 @@
                         ;; optimization etc.
                         (comment
                           (when has-animator
-                            (js/requestAnimationFrame (partial render-and-animate! clock renderer)))))))))))
+                            (js/requestAnimationFrame (partial render-and-animate! clock renderer))))))))
+      (shared-worker/transfer-to-worker! clock
+                                         js/self
+                                         :frereth/render
+                                         img-bmp))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Event handlers
