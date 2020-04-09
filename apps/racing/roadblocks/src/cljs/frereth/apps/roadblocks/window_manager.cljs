@@ -103,7 +103,11 @@
   (let [canvas (.querySelector js/document "#root")]
     (assert canvas)
     ;; Verify that browser supports off-screen canvas
-    ;; This is currently very limited.
+    ;; This is currently very limited (in that it
+    ;; only really works in chrome...there's some
+    ;; experimental firefox support, but it will be severely crippled
+    ;; until their web workers support .requestAnimationFrame).
+    ;; Even then, they don't support 2d rendering.
     ;; TODO: Better error handling.
     (assert (.-transferControlToOffscreen canvas))
     (let [width (.-clientWidth canvas)
@@ -244,7 +248,7 @@
     ;; Well, maybe it would be. But it seems like it would just add
     ;; needless complexity, since I have to exit that ecosystem
     ;; anyway.
-    (println "Q: What do we want/need to do on a restart?"))
+    (.info js/console "Q: What do we want/need to do on a restart?"))
   (let [canvas (.querySelector js/document "#root")
         {:keys [::cube]
          :as graphics} (build-scene canvas)
@@ -266,25 +270,24 @@
       [{:keys [::worker/need-dom-animation?]
         :as worker-manager}
        action world-key worker event
-       {:keys [:frereth/texture]
+       {img-bmp :frereth/body
         worker-clock ::lamport/clock
         :as raw-message}]
-      (lamport/do-tick clock worker-clock)
-      ;; Need to update the Material.
-      ;; Which seems like it probably means a recompilation.
-      ;; Oh well. There aren't a lot of alternatives.
-      (let [material (.-material cube)]
-        (set! (.-texture material) texture)
-        (set! (.-needsUpdate texture) true))
+      (.info js/console "Handling render request:" raw-message)
+      (let [texture (THREE/CanvasTexture. img-bmp)
+            material (.-material cube)]
+        (set! (.-map material) texture)
+        (set! (.-needsUpdate (.-map material)) true))
       (when need-dom-animation?
-        (js/requestAnimationFrame (fn [clock-tick]
+        (comment
+          (js/requestAnimationFrame (fn [clock-tick]
 
-                                    ;; This seems like it really should
-                                    ;; involve a wrapper in...maybe the
-                                    ;; worker-manager?
-                                    (.postMessage worker (serial/serialize
-                                                          {:frereth/action :frereth/render-frame
-                                                           ::lamport/clock @clock}))))))
+                                      ;; This seems like it really should
+                                      ;; involve a wrapper in...maybe the
+                                      ;; worker-manager?
+                                      (.postMessage worker (serial/serialize
+                                                            {:frereth/action :frereth/render-frame
+                                                             ::lamport/clock @clock})))))))
     (let [result
           (into (assoc this
                        ::resize-handler size-sender

@@ -314,9 +314,24 @@
   ;; that.
   (let [raw-data (.-data event)
         {:keys [:frereth/action]
-         :as data} (serial/deserialize raw-data)]
+         other-clock-tick ::lamport/clock
+         :as data} (if (not= "raw" (.-type raw-data))
+                     ;; Structured event data that we need to deserialize
+                     (serial/deserialize raw-data)
+                     ;; It seems like there really ought to be a built-in
+                     ;; to do this sort of thing.
+                     ;; clojure.walk has keywordize-keys which is close,
+                     ;; but seems like it would be more verbose
+                     {:frereth/action (keyword "frereth" (.-action raw-data))
+                      :frereth/body (.-body raw-data)
+                      ::lamport/clock (.-clock raw-data)
+                      :frereth/type :frereth/raw})]
     (.log js/console "Message from" worker ":" action "in" data)
-    (lamport/do-tick clock)
+    ;; This might have a clock-tick. Deciding how to keep clients
+    ;; from knowing about that detail is an important API detail
+    (if other-clock-tick
+      (lamport/do-tick clock other-clock-tick)
+      (lamport/do-tick clock))
     (handle-worker-message this action world-key worker event data)))
 
 (s/fdef fork-world-worker

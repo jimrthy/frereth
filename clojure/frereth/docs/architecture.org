@@ -1,3 +1,5 @@
+* TODO Convert this to asciidoc
+
 * Why?
 
 Frereth's goal is to make it easier, simpler, and more fun
@@ -154,4 +156,3 @@ to be running in the same process on one piece
 of hardware.
 
 ** Programming Language Optimizations
-

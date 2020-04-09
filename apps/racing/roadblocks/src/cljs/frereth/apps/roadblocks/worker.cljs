@@ -6,8 +6,12 @@
    [clojure.spec.alpha :as s]
    [frereth.apps.shared.lamport :as lamport]
    [frereth.apps.shared.serialization :as serial]
+   [frereth.apps.shared.worker :as shared-worker]
    [frereth.apps.shared.ui :as ui]
    ["three" :as THREE]))
+
+;; I really want to add a REPL connection into here.
+;; FIXME: Figure out how
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Specs
@@ -60,7 +64,7 @@
 ;; Q: How much sense does it make for this to be a def vs. defonce?
 ;; A: Since this implementation is purely a throw-away PoC, who cares
 ;; either way?
-(def clock (atom 0))
+(def global-clock (atom 0))
 ;; Can this animate itself?
 ;; Currently, in Firefox, at least, the main thread has to trigger each
 ;; frame.
@@ -147,36 +151,41 @@
             ;; red flags about breaking the encapsulation I'm trying to
             ;; establish here.
             ;; So it isn't something to just automate away.
-            renderer #_(THREE/WebGLRenderer. #js {:canvas (clj->js mock-canvas)}) (THREE/WebGLRenderer. canvas)
-            render-target (THREE/WebGLRenderTarget. w h)]
-        (.setRenderTarget renderer render-target)
+            renderer (THREE/WebGLRenderer. #js{:canvas canvas})
+            ;; Leaving this around, because, really, it's what I want
+            ;; to do.
+            #_(THREE/WebGLRenderer. #js {:canvas (clj->js mock-canvas)})]
         (swap! state into {::camera {::fov fov
                                      ::aspect aspect
                                      ::near near
                                      ::far far
                                      ::ui/camera camera}
-                           ::destination {::ui/width w
+                           ::destination {::ui/canvas canvas
+                                          ::ui/width w
                                           ::ui/height h
-                                          ::ui/renderer renderer
-                                          ::ui/render-target render-target}
+                                          ::ui/renderer renderer}
                            ::ui/scene scene
                            ::world cubes})))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Internal Implementation
 
+(s/fdef render-and-animate!
+  :args (s/cat :clock ::lamport/clock
+               :renderer :ui/renderer
+               :time-stamp (s/and number? pos?))
+  :ret any?)
 (defn render-and-animate!
   "This triggers all the interesting pieces"
-  [renderer time-stamp]
+  [clock renderer time-stamp]
   (let [time (/ time-stamp 1000)
-        {:keys [::ui/camera
-                ::destination
+        {:keys [::destination
                 ::ui/scene
                 :world]
+         {:keys [::ui/camera]
+          :as camera-wrapper} ::camera
          :as state} @state
-        camera (::ui/camera camera)
         renderer (::ui/renderer destination)
-        render-target (::ui/render-target destination)
         ;; Using a map variant for side-effects feels wrong.
         animation (map-indexed (fn [ndx obj]
                                  (let [speed (inc (* ndx 0.1))
@@ -188,13 +197,13 @@
     ;; Realize that lazy sequence
     (dorun animation)
     (.info js/console
-           "Trying to set the render-target to" render-target
+           "Trying to render from the camera" camera
+           "a" (type camera)
            "on renderer" renderer
-           "a" (type renderer))
+           "a" (type renderer)
+           "from the state-keys" (clj->js (keys state)))
     (try
-      #_(.setRenderTarget renderer render-target)
       (.render renderer scene camera)
-      #_(.setRenderTarget renderer nil)
       (catch :default ex
         (.error js/console ex
                 "[WORKER] Trying to use"
@@ -203,17 +212,17 @@
                 scene)
         (throw ex)))
 
-    ;; FIXME: Need a wrapper for this.
-    ;; Don't send raw messages willy-nilly.
-    ;; Need to update the Lamport clock.
-    (.postMessage js/self (serial/serialize {:frereth/action :frereth/render
-                                             :frereth/texture (.-texture render-target)})))
-
-  ;; This seems like a check to optimize away. Then again, it also seems
-  ;; like something branch prediction should handle, and premature
-  ;; optimization etc.
-  (when has-animator
-    (js/requestAnimationFrame (partial render-and-animate! renderer))))
+    (let [canvas (::ui/canvas destination)
+          img-bmp (.transferToImageBitmap canvas)]
+      ;; Here's an ugly piece where the abstraction leaks.
+      ;; I don't want this layer to know anything about underlying details
+      ;; like the clock.
+      ;; Its usage is scattered all over the place in here anyway.
+      ;; TODO: Invest some hammock time into hiding this detail.
+      (shared-worker/transfer-to-worker! clock
+                                         js/self
+                                         :frereth/render
+                                         img-bmp))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Event handlers
@@ -233,7 +242,24 @@
   [_ _]
   ;; Q: This really should cope with connection drops. Need
   ;; to be able to gracefully recover from those
-  (throw (js/Error. "Not Implemented")))
+  (throw (js/Error. "TODO: Cope with web server disconnect.")))
+
+(defmethod handle-incoming-message!   :frereth/event
+  ;; UI event. This is where my event handling Proxy
+  ;; should/will come into play
+  [_ {[tag ctrl-id event] :frereth/body} data]
+  (.log js/console "Should dispatch" event "to" ctrl-id "based on" tag)
+  (try
+    (.error js/console "What does this mean in this context?")
+    (catch :default ex
+      (.error js/console ex))))
+
+(defmethod handle-incoming-message! :frereth/forward
+  ;; Data passed-through from server to...well, something
+  ;; in this world.
+  ;; Obviously, this needs more thought.
+  [_ data]
+  (.warn js/console "Worker should handle" data))
 
 (defmethod handle-incoming-message! :frereth/halt
   [_ _]
@@ -264,20 +290,6 @@
     (.dispose scene))
   (reset! state (create-initial-state)))
 
-(defmethod handle-incoming-message!   :frereth/event
-  ;; UI event
-  [_ {[tag ctrl-id event] :frereth/body} data]
-  (.log js/console "Should dispatch" event "to" ctrl-id "based on" tag)
-  (try
-    (.error js/console "What does this mean in this context?")
-    (catch :default ex
-      (.error js/console ex))))
-
-(defmethod handle-incoming-message! :frereth/forward
-  ;; Data passed-through from server
-  [_ data]
-  (.warn js/console "Worker should handle" data))
-
 (defmethod handle-incoming-message! :frereth/main
   [_
    {canvas :frereth/message
@@ -291,7 +303,7 @@
   (define-world! canvas)
   (when has-animator
     (let [renderer (-> state deref ::destination ::ui/renderer)]
-      (js/requestAnimationFrame (partial render-and-animate! renderer)))))
+      (js/requestAnimationFrame (partial render-and-animate! global-clock renderer)))))
 
 (defmethod handle-incoming-message! :frereth/resize
   [_ {:keys [::ui/width
@@ -334,14 +346,14 @@
          body :body
          :as envelope} (js->clj (.-data message-wrapper) :keywordize-keys true)]
     (if remote-clock
-      (lamport/do-tick clock remote-clock)
+      (lamport/do-tick global-clock remote-clock)
       (do
         (.warn js/console
                "Incoming payload missing clock tick"
                (clj->js (keys envelope))
                "among"
                envelope)
-        (lamport/do-tick clock)))
+        (lamport/do-tick global-clock)))
     (let [{:keys [:frereth/action]
            :as data} (condp = message-type
                        "cloned" (serial/deserialize body)
