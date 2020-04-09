@@ -154,9 +154,7 @@
             renderer (THREE/WebGLRenderer. #js{:canvas canvas})
             ;; Leaving this around, because, really, it's what I want
             ;; to do.
-            #_(THREE/WebGLRenderer. #js {:canvas (clj->js mock-canvas)})
-            render-target (THREE/WebGLRenderTarget. w h)]
-        #_(.setRenderTarget renderer render-target)
+            #_(THREE/WebGLRenderer. #js {:canvas (clj->js mock-canvas)})]
         (swap! state into {::camera {::fov fov
                                      ::aspect aspect
                                      ::near near
@@ -165,8 +163,7 @@
                            ::destination {::ui/canvas canvas
                                           ::ui/width w
                                           ::ui/height h
-                                          ::ui/renderer renderer
-                                          ::ui/render-target render-target}
+                                          ::ui/renderer renderer}
                            ::ui/scene scene
                            ::world cubes})))))
 
@@ -185,12 +182,10 @@
         {:keys [::destination
                 ::ui/scene
                 :world]
-         {:keys [::camera]
+         {:keys [::ui/camera]
           :as camera-wrapper} ::camera
          :as state} @state
-        camera (::ui/camera camera-wrapper)
         renderer (::ui/renderer destination)
-        render-target (::ui/render-target destination)
         ;; Using a map variant for side-effects feels wrong.
         animation (map-indexed (fn [ndx obj]
                                  (let [speed (inc (* ndx 0.1))
@@ -202,18 +197,13 @@
     ;; Realize that lazy sequence
     (dorun animation)
     (.info js/console
-           "Trying to set the render-target to" render-target
+           "Trying to render from the camera" camera
+           "a" (type camera)
            "on renderer" renderer
            "a" (type renderer)
-           "so we can render from the camera" camera
-           "a" (type camera)
            "from the state-keys" (clj->js (keys state)))
     (try
-      ;; The .setRenderTarget pieces would make sense if I were
-      ;; rendering to a texture.
-      #_(.setRenderTarget renderer render-target)
       (.render renderer scene camera)
-      #_(.setRenderTarget renderer nil)
       (catch :default ex
         (.error js/console ex
                 "[WORKER] Trying to use"
@@ -222,70 +212,13 @@
                 scene)
         (throw ex)))
 
-    ;; FIXME: Need a wrapper for this.
-    ;; Don't send raw messages willy-nilly.
-    ;; Need to update the Lamport clock.
-    #_(.postMessage js/self (serial/serialize {:frereth/action :frereth/render
-                                               :frereth/texture (.-texture render-target)}))
-    ;; Here's an ugly piece where the abstraction leaks.
-    ;; I don't want this layer to know anything about underlying details
-    ;; like the clock.
-    ;; It's usage is scattered all over the place in here anyway.
-    ;; TODO: Invest some hammock time into hiding this detail.
-    (let [texture (.-texture render-target)
-          ;; This is a shallow clone.
-          ;; Which means that it creates something that is not
-          ;; transferrable.
-          ;; I need to copy the image data.
-          ;; Actually, that's a terrible idea.
-          ;; That would mean
-          ;; a) copying the data off the GPU
-          ;; b) cloning it into a byte array
-          ;; c) transferring control of the byte array over to the main thread
-          ;; d) converting the byte array back into an image
-          ;; e) uploading that back to the GPU
-          ;; What I really want to do is transfer the texture ID so the
-          ;; main thread can use it correctly.
-          ;; Q: Can those be shared across rendering contexts?
-          ;; Q: How big a hole does this blow in my security plan if other
-          ;; worlds can access each others' textures that way?
-          clone (.clone texture)
-          image (.-image clone)
-          canvas (::ui/canvas destination)
-          #_#_conversion-promise (.convertToBlob canvas)
+    (let [canvas (::ui/canvas destination)
           img-bmp (.transferToImageBitmap canvas)]
-      #_(.then conversion-promise
-             (fn [blob]
-               (.then (.arrayBuffer blob)
-                      (fn [a-b]
-                        ;; Comment/log rot (sort-of): I can transfer the ArrayBuffer.
-                        ;; But I'm not sure what I can do with it when I get it into
-                        ;; the main thread. And this is a ridiculous hoop to waste
-                        ;; valuable VRAM bandwidth on.
-                        (.info js/console
-                               "[WORKER] Transferring newly rendered texture #" (.-id clone)
-                               "to Window Manager"
-                               "\nThis is going to fail.\n"
-                               "Image:" image "a" (type image)
-                               "\nCanvas:" canvas "a" (type canvas))
-
-                        (shared-worker/transfer-to-worker! clock
-                                                           js/self
-                                                           :frereth/render
-                                                           ;; Q: Is there any reality in which
-                                                           ;; this works?
-                                                           #_clone
-                                                           #_image
-                                                           #_(.toBlob canvas)
-                                                           #_blob
-                                                           a-b)
-
-                        ;; This seems like a check to optimize away. Then again, it also seems
-                        ;; like something branch prediction should handle, and premature
-                        ;; optimization etc.
-                        (comment
-                          (when has-animator
-                            (js/requestAnimationFrame (partial render-and-animate! clock renderer))))))))
+      ;; Here's an ugly piece where the abstraction leaks.
+      ;; I don't want this layer to know anything about underlying details
+      ;; like the clock.
+      ;; Its usage is scattered all over the place in here anyway.
+      ;; TODO: Invest some hammock time into hiding this detail.
       (shared-worker/transfer-to-worker! clock
                                          js/self
                                          :frereth/render
@@ -309,10 +242,11 @@
   [_ _]
   ;; Q: This really should cope with connection drops. Need
   ;; to be able to gracefully recover from those
-  (throw (js/Error. "Not Implemented")))
+  (throw (js/Error. "TODO: Cope with web server disconnect.")))
 
 (defmethod handle-incoming-message!   :frereth/event
-  ;; UI event
+  ;; UI event. This is where my event handling Proxy
+  ;; should/will come into play
   [_ {[tag ctrl-id event] :frereth/body} data]
   (.log js/console "Should dispatch" event "to" ctrl-id "based on" tag)
   (try
@@ -321,7 +255,9 @@
       (.error js/console ex))))
 
 (defmethod handle-incoming-message! :frereth/forward
-  ;; Data passed-through from server
+  ;; Data passed-through from server to...well, something
+  ;; in this world.
+  ;; Obviously, this needs more thought.
   [_ data]
   (.warn js/console "Worker should handle" data))
 

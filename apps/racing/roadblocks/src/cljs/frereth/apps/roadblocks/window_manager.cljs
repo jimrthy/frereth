@@ -107,6 +107,7 @@
     ;; only really works in chrome...there's some
     ;; experimental firefox support, but it will be severely crippled
     ;; until their web workers support .requestAnimationFrame).
+    ;; Even then, they don't support 2d rendering.
     ;; TODO: Better error handling.
     (assert (.-transferControlToOffscreen canvas))
     (let [width (.-clientWidth canvas)
@@ -229,14 +230,6 @@
   (.render renderer scene camera)
   (js/requestAnimationFrame (partial render! this)))
 
-(defn build-texture-from-raw-bytes
-  ;; This doesn't belong here
-  ;; We have an ArrayBuffer built from the internal canvas's .toBlob
-  ;; function. Q: What should we do with it?
-  [array-buffer]
-  (throw (ex-info "How should this work?"
-                  {::src array-buffer})))
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Public
 
@@ -255,7 +248,7 @@
     ;; Well, maybe it would be. But it seems like it would just add
     ;; needless complexity, since I have to exit that ecosystem
     ;; anyway.
-    (println "Q: What do we want/need to do on a restart?"))
+    (.info js/console "Q: What do we want/need to do on a restart?"))
   (let [canvas (.querySelector js/document "#root")
         {:keys [::cube]
          :as graphics} (build-scene canvas)
@@ -281,23 +274,9 @@
         worker-clock ::lamport/clock
         :as raw-message}]
       (.info js/console "Handling render request:" raw-message)
-      ;; Need to update the Material.
-      ;; Which seems like it probably means a recompilation.
-      ;; Oh well. There aren't a lot of alternatives.
       (let [texture (THREE/CanvasTexture. img-bmp)
             material (.-material cube)]
         (set! (.-map material) texture)
-        ;; We are getting here.
-        ;; And throwing an exception because texture is nil
-        ;; I still have the name typo'd.
-        ;; More importantly: is it possile to build a Texture from those
-        ;; raw bytes?
-        ;; Well, obviously, it is. Since there's a Loader that builds
-        ;; them from a data URL.
-        ;; Is it worthwhile, since the performance of this approach
-        ;; seems guaranteed to suck?
-        ;; (Yes, premature optimization and all that, but this approach
-        ;; is pretty much guaranteed to be awful)
         (set! (.-needsUpdate (.-map material)) true))
       (when need-dom-animation?
         (comment

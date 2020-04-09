@@ -396,10 +396,6 @@
        ;; an affinity setting to avoid thrashing things like texture
        ;; memory
        ;; FIXME: Work that out
-       ;; Q: If I hung onto a reference to this worker-canvas, could
-       ;; I do anything useful with it? Like transfer textures?
-       ;; It's a different WebGL rendering context. So surely the answer
-       ;; is "No"...isn't it?
        (transfer-to-worker! clock
                             worker
                             :frereth/main
