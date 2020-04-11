@@ -19,7 +19,7 @@
   "devDependencies": {
     "@testing-library/dom": "^6.11.0",
     "@testing-library/react": "^9.4.0",
-    "clj-kondo": "2020.01.13",
+    "clj-kondo": "2020.1.13",
     "highlight.js": "9.18.0",
     "jsdom": "^16.0.1",
     "jsdom-global": "^3.0.2",
@@ -33,6 +33,7 @@
   },
   "dependencies": {
     "create-react-class": "~15.6.3",
+    "orbit-controls": "^1.2.4",
     "react": "~16.8.0",
     "react-dom": "~16.8.0",
     "three": "^0.113.2"
