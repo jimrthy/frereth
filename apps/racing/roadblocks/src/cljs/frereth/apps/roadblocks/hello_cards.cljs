@@ -1,9 +1,9 @@
 (ns frereth.apps.roadblocks.hello-cards
   (:require [reagent.core :as r]
-            [devcards.core :as dc :refer [defcard deftest]]
+            #_[devcards.core :as dc :refer [defcard deftest]]
             [cljs.test :include-macros true :refer [is]]
             ["@testing-library/react" :refer [render cleanup fireEvent]]
-            [roadblocks.hello :refer [click-counter hello]]))
+            [frereth.apps.roadblocks.hello :refer [click-counter hello]]))
 
 (defn testing-container
   "The container that should be used to render testing-library react components.

@@ -20,7 +20,11 @@
         :target :browser}
   :cards {:asset-path "/js"
           :modules {:main {:init-fn frereth.apps.roadblocks.cards/main}}
-          :compiler-options {:devcards true}
+          #_#_:compiler-options {:devcards true}
+          ;; This seems like it should go to a completely different dir
+          ;; than app.
+          ;; That may be a terrible idea, since they should mostly use
+          ;; the same code.
           :output-dir "public/js"
           :target :browser}
   :test {:ns-regexp "roadblocks.cards"
@@ -29,8 +33,7 @@
   :e2e {:ns-regexp "e2e.*"
         :output-to "out/e2e.js"
         :target :node-test}}
- :dependencies [[cider/cider-nrepl "0.22.0"]
-                [devcards "0.2.6"]
+ :dependencies [[cider/cider-nrepl "0.22.0"]  ; TODO: switch to deps.edn so I can specify this in an alias
                 [integrant "0.8.0"]
                 [integrant/repl "0.3.1"]
                 ;; Get a warning that I cannot override this.

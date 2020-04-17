@@ -1,0 +1,23 @@
+#app {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100vw;
+    height: 100vh;
+    display: block;
+    z-index: -1;
+}
+*[data-preview] {
+    display: inline-block;
+    width: 5em;
+    height: 3em;
+    border: 1px solid black;
+}
+.left {
+    float: left;
+    margin-right: 0.25em;
+}
+.right {
+    float: right;
+    margin-left: 0.25em;
+}
