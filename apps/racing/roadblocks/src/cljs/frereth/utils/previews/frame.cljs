@@ -1,7 +1,10 @@
 (ns frereth.utils.previews.frame
   "Provide something similar to devcards/NuBank workspaces in a Canvas"
   (:require
-   ["three" :as THREE]))
+   ["three" :as THREE]
+   ;; Of course it isn't this easy
+   [#_"three.examples.jsm.controls.TrackballControls"
+    "three/examples/jsm/controls/TrackballControls":as trackball]))
 
 (defn make-scene
   [element]
@@ -15,17 +18,24 @@
     (set! (.-z (.-position camera)) 2)
     (.set (.-position camera) 0 1 2)
     (.lookAt camera 0 0 0)
+    (.add scene camera)
 
     (let [color 0xffffff
           intensity 1
           light (THREE/DirectionalLight. color intensity)]
       (.set (.-position light) -1 2 4)
-      (.add scene light))
-    {::camera camera
-     ::element element
-     ::scene scene}))
+      (.add camera light))
 
-(defn setup-box-scene
+    (let [controls (trackball/TrackballControls. camera element)]
+      (set! (.-noZoom controls) true)
+      (set! (.-noPan controls) true)
+
+      {::camera camera
+       ::controls controls
+       ::element element
+       ::scene scene})))
+
+(defn setup-red-scene
   [element]
   (let [scene-info (make-scene element)
         geometry (THREE/BoxBufferGeometry. 1 1 1)
@@ -34,7 +44,7 @@
     (.add (::scene scene-info) mesh)
     (assoc scene-info ::mesh mesh)))
 
-(defn setup-pyramid-scene
+(defn setup-blue-scene
   [element]
   (let [scene-info (make-scene element)
         geometry (THREE/BoxBufferGeometry. 1 1 1)
@@ -47,10 +57,11 @@
   "Returns a rendering function"
   [element]
   (let [element-name (.-preview (.-dataset element))
-        factories {:box setup-box-scene
-                   :pyramid setup-pyramid-scene}
+        factories {:blue setup-blue-scene
+                   :red setup-red-scene}
         factory (-> element-name keyword factories)
         {:keys [::camera
+                ::controls
                 ::mesh
                 ::scene]
          :as scene-info} (factory element)]
@@ -65,6 +76,8 @@
                  (set! (.-y (.-rotation mesh)) (* 0.1 time))
                  (set! (.-aspect camera) (/ width height))
                  (.updateProjectionMatrix camera)
+                 (.handleResize controls)
+                 (.update controls)
                  (.render renderer scene camera))
      ::element element}))
 
@@ -137,8 +150,7 @@
                  (.setViewport renderer left positive-y-up-bottom width height)
 
                  (render! renderer {::width width ::height height} time)))))
-    ;; FIXME: Restore this
-    #_(js/requestAnimationFrame (partial render! renderer scenes))))
+    (js/requestAnimationFrame (partial render! renderer scenes))))
 
 (defn ^:dev/after-load ^:export start!
   [parent]
