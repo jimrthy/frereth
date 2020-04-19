@@ -1,6 +1,8 @@
 (ns frereth.apps.roadblocks.hello
   (:require [reagent.core :as r]))
 
+(throw (ex-info "This just doesn't fit"))
+
 (defn click-counter [click-count]
   [:div
    "The atom " [:code "click-count"] " has value: "
