@@ -25,7 +25,7 @@
           ;; than app.
           ;; That may be a terrible idea, since they should mostly use
           ;; the same code.
-          :output-dir "public/js"
+          :output-dir "public/js/cards"
           :target :browser}
   :test {:ns-regexp "roadblocks.cards"
          :output-to "out/test.js"

@@ -1,10 +1,55 @@
+;;;; The original version of this was heavily influenced by
+;;;; https://threejsfundamentals.org/threejs/lessons/threejs-multiple-scenes.html
+;;;; and the related code at
+;;;; https://github.com/gfxfundamentals/threejsfundamentals/blob/master/threejs/lessons/threejs-multiple-scenes.md
+;;;; That code is Copyright 2018, Google Inc. All rights reserved.
+;;;; I think
+
+;;;; # Copyright 2018, Google Inc.
+;;;; # All rights reserved.
+;;;; #
+;;;; # Redistribution and use in source and binary forms, with or without
+;;;; # modification, are permitted provided that the following conditions are
+;;;; # met:
+;;;; #
+;;;; #     * Redistributions of source code must retain the above copyright
+;;;; #       notice, this list of conditions and the following disclaimer.
+;;;; #
+;;;; #     * Redistributions in binary form must reproduce the above
+;;;; #       copyright notice, this list of conditions and the following disclaimer
+;;;; #       in the documentation and/or other materials provided with the
+;;;; #       distribution.
+;;;; #
+;;;; #     * Neither the name of Google Inc. nor the names of their
+;;;; #       contributors may be used to endorse or promote products derived from
+;;;; #       this software without specific prior written permission.
+;;;; #
+;;;; # THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+;;;; # "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+;;;; # LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+;;;; # A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+;;;; # OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+;;;; # SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+;;;; # LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+;;;; # DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+;;;; # THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+;;;; # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+;;;; # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+;;;; is a pretty standard MIT license.
+
+;;;; I think this probably qualifies as a derivative work,
+;;;; since I've translated big chunks of it from javascript.
+;;;; I don't think that google owns the copyright to this code,
+;;;; so I think this falls under my overall frereth
+;;;; project lincense, but I am not a lawyer.
+;;;; If I've done something wrong here, then please let me know so I
+;;;; can fix it.
 (ns frereth.utils.previews.frame
   "Provide something similar to devcards/NuBank workspaces in a Canvas"
   (:require
    ["three" :as THREE]
-   ;; Of course it isn't this easy
-   [#_"three.examples.jsm.controls.TrackballControls"
-    "three/examples/jsm/controls/TrackballControls":as trackball]))
+   ["three/examples/jsm/controls/TrackballControls":as trackball]))
 
 (defn make-scene
   [element]
@@ -14,8 +59,6 @@
         near 0.1
         far 5
         camera (THREE/PerspectiveCamera. fov aspect near far)]
-    ;; Considering the next line, isn't this redundant?
-    (set! (.-z (.-position camera)) 2)
     (.set (.-position camera) 0 1 2)
     (.lookAt camera 0 0 0)
     (.add scene camera)
@@ -37,20 +80,22 @@
 
 (defn setup-red-scene
   [element]
-  (let [scene-info (make-scene element)
+  (let [{:keys [::scene]
+         :as scene-info} (make-scene element)
         geometry (THREE/BoxBufferGeometry. 1 1 1)
         material (THREE/MeshPhongMaterial. #js{:color "red"})
         mesh (THREE/Mesh. geometry material)]
-    (.add (::scene scene-info) mesh)
+    (.add scene mesh)
     (assoc scene-info ::mesh mesh)))
 
 (defn setup-blue-scene
   [element]
-  (let [scene-info (make-scene element)
+  (let [{:keys [::scene]
+         :as scene-info} (make-scene element)
         geometry (THREE/BoxBufferGeometry. 1 1 1)
         material (THREE/MeshPhongMaterial. #js{:color "blue" :flatShading true})
         mesh (THREE/Mesh. geometry material)]
-    (.add (::scene scene-info) mesh)
+    (.add scene mesh)
     (assoc scene-info ::mesh mesh)))
 
 (defn renderer-factory
@@ -66,13 +111,9 @@
                 ::scene]
          :as scene-info} (factory element)]
     ;; Realistically, each preview/card will have its own renderer
+    ;; But this is a start
     {::render! (fn [renderer {:keys [::width ::height]
                               :as rect} time]
-                 #_(.info js/console
-                        "Inside local-render! for" element-name
-                        "\nscene-info:" (clj->js scene-info)
-                        "\nbounding rectangle:" rect
-                        "at time" time)
                  (set! (.-y (.-rotation mesh)) (* 0.1 time))
                  (set! (.-aspect camera) (/ width height))
                  (.updateProjectionMatrix camera)
@@ -101,7 +142,6 @@
     (resize-renderer-to-display-size! renderer)
 
     (.setScissorTest renderer false)
-    #_(.info js/console "Clearing background to" (.getClearColor renderer))
     (.clear renderer true true)
     (.setScissorTest renderer true)
 
@@ -110,16 +150,14 @@
           transform (str "translatey(" (.-scrollY js/window) "px)")]
       (set! (.-transform (.-style canvas)) transform))
 
-    (doseq #_[scene-info scenes] [scene-key (keys scenes)]
-           #_(.info js/console "Rendering the" scene-key)
-           #_(render-scene-info! renderer scene-info)
+    (doseq [scene-key (keys scenes)]
            (let [{:keys [::element
                          ::render!]} (get scenes scene-key)
-                 bounding-rect (js->clj (.getBoundingClientRect element) :keywordize-keys)
                  ;; Q: Why didn't the js->clj work?
                  #_{:keys [:left :right :bottom :top :width :height]
                     :as bounding-rect}
                  ;; This kind of destructuring is annoying
+                 bounding-rect (js->clj (.getBoundingClientRect element) :keywordize-keys)
                  bottom (.-bottom bounding-rect)
                  height (.-height bounding-rect)
                  left (.-left bounding-rect)
@@ -131,21 +169,8 @@
                                    (> top (.-clientHeight canvas))
                                    (< right 0)
                                    (> left (.-clientWidth canvas)))]
-             #_(.info js/console
-                      "Rendering a scene around a bounding box"
-                      bounding-rect
-                      "\ni.e. " left "-" right "by" bottom "-" top
-                      (str "that is"
-                           (when is-off-screen " not"))
-                      "currently on-screen, based on a"
-                      (.-clientHeight canvas) "x" (.-clientWidth canvas) "canvas")
              (when-not is-off-screen
                (let [positive-y-up-bottom (- (.-clientHeight canvas) bottom)]
-                 #_(.info js/console
-                          "Setting Scissor/Viewport from"
-                          (str "(" left ", " positive-y-up-bottom ")")
-                          "to"
-                          (str "(" width ", " height ")"))
                  (.setScissor renderer left positive-y-up-bottom width height)
                  (.setViewport renderer left positive-y-up-bottom width height)
 
@@ -159,7 +184,7 @@
         ;; This returns a js/NodeList, which is not ISeqable
         node-list (.querySelectorAll js/document "[data-preview]")
         node-seq (array-seq node-list)
-        ;; It really seems like this should be dynamic
+        ;; The set of scenes really should be dynamic
         scenes (reduce (fn [acc element]
                          (let [preview-name (.-preview (.-dataset element))
                                local-render! (renderer-factory element)]
