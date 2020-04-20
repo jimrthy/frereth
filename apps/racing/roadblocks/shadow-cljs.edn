@@ -33,13 +33,7 @@
   :e2e {:ns-regexp "e2e.*"
         :output-to "out/e2e.js"
         :target :node-test}}
- :dependencies [[cider/cider-nrepl "0.22.0"]  ; TODO: switch to deps.edn so I can specify this in an alias
-                [integrant "0.8.0"]
-                [integrant/repl "0.3.1"]
-                ;; Get a warning that I cannot override this.
-                ;; Apparently, I can, if I switch to deps.edn mode.
-                [org.clojure/clojure "1.10.1"]
-                [reagent "0.8.1"]]
+ :deps {:alias [:dev]}
  :dev-http {3000 "public"}
  :nrepl {:port 3333}
  :source-paths ["src/clj" "src/cljs" "src/cljc"]}
