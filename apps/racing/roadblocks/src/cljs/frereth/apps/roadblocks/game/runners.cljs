@@ -51,7 +51,7 @@
         fov 75
         aspect (/ w h)
         near 0.1
-        far 0.5
+        far 10
         camera (THREE/PerspectiveCamera. fov aspect near far)]
     ;; icck
     (set! (.-z (.-position camera)) 2)
@@ -100,7 +100,7 @@
                                            ;; Q: Is this worth the effort it would take?
                                            (throw (js/Error. "Need a WebGL context")))}
             ;; Leaving this around, because, really, it's what I want
-            ;; to do.
+            ;; to do. Though it (and mock-canvas) no longer belong here
             #_(THREE/WebGLRenderer. #js {:canvas (clj->js mock-canvas)})]
         (swap! state into {::camera {::fov fov
                                      ::aspect aspect
@@ -125,7 +125,7 @@
   (let [time (/ time-stamp 1000)
         {:keys [::destination
                 ::ui/scene
-                :world]
+                ::world]
          {:keys [::ui/camera]
           :as camera-wrapper} ::camera
          :as state} @state
@@ -140,7 +140,10 @@
     ;; Realize that lazy sequence
     (dorun animation)
     (.info js/console
-           "Trying to render from the camera" camera
+           "Trying to render" scene
+           "\nwhich consists of"(clj->js world)
+           "\nfrom" (clj->js state)
+           "\nfrom the camera" camera
            "a" (type camera)
            "on renderer" renderer
            "a" (type renderer)
