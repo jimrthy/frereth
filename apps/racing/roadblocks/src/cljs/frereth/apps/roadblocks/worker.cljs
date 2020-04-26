@@ -10,40 +10,35 @@
    [frereth.apps.shared.worker :as shared-worker]
    [frereth.apps.shared.ui :as ui]))
 
-;; I really want to add a REPL connection into here.
+(enable-console-print!)
+(js/console.log "Worker top")
+
+;; I really want to add a REPL connection into this web worker.
 ;; FIXME: Figure out how
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Specs
 
-;; This feels suspiciously like it would make more
-;; sense in the ui ns
-(s/def ::fov number?)
-(s/def ::aspect number?)
-(s/def ::near (s/and number?
-                     (complement neg?)))
-(s/def ::far (s/and number?
-                    (complement neg?)))
-(s/def ::camera (s/keys :req [::fov
-                              ::aspect
-                              ::near
-                              ::far
-                              ::ui/camera]))
-
 (s/def ::destination (s/merge ::ui/dimensions-2
                               (s/keys :req [::ui/renderer])))
-(s/def ::world (s/coll-of ::ui/mesh))
-
-(s/def ::state (s/keys :req [::camera
-                             ::destination
-                             ::ui/scene
-                             ::world]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Globals
 
-(enable-console-print!)
-(js/console.log "Worker top")
+;; Q: How much sense does it make for this to be a def vs. defonce?
+;; A: Since this implementation is purely a throw-away PoC, who cares
+;; either way?
+(def global-clock (atom 0))
+
+;; Can this animate itself?
+;; Currently, in Firefox, at least, the main thread has to trigger each
+;; frame.
+(defonce has-animator
+  (boolean js/requestAnimationFrame))
+
+(def destination (atom {::ui/width 512
+                        ::ui/height 512
+                        ::ui/renderer nil}))
 
 (defmulti handle-incoming-message!
   "Cope with incoming messages"
@@ -55,14 +50,13 @@
 
 (s/fdef render-and-animate!
   :args (s/cat :clock ::lamport/clock
-               :renderer :ui/renderer
+               :canvas ::ui/canvas
                :time-stamp (s/and number? pos?))
   :ret any?)
 (defn render-and-animate!
-  [clock renderer time-stamp]
-  (runners/render-and-animate! clock renderer time-stamp)
-  (let [canvas (::ui/canvas destination)
-        img-bmp (.transferToImageBitmap canvas)]
+  [clock canvas time-stamp]
+  (runners/render-and-animate! time-stamp)
+  (let [img-bmp (.transferToImageBitmap canvas)]
     ;; Here's an ugly piece where the abstraction leaks.
     ;; I don't want this layer to know anything about underlying details
     ;; like the clock.
@@ -127,17 +121,8 @@
   ;; So a little extra delay.
   ;; And, really, it would be worse to leave old garbage just sitting
   ;; on there.
-  (let [{:keys [::destination
-                ::ui/scene
-                ::world]
-         :as current} @state]
-    (let [{:keys [::ui/renderer]} destination]
-      (.dispose destination))
-    (doseq [mesh world]
-      (.dispose (.-geometry mesh))
-      (.dispose (.-map (.-material mesh))))
-    (.dispose scene))
-  (reset! state (create-initial-state)))
+  (let [{:keys [::ui/renderer]} @destination]
+    (.dispose destination)))
 
 (defmethod handle-incoming-message! :frereth/main
   [_
@@ -146,39 +131,17 @@
   (.info js/console
          "handle-incoming-message! :frereth/main" canvas
          "\nin" body)
-  ;; It's important that this gets called before
-  ;; render-and-animate!
-  ;; It configures global state that the latter uses
-  (let [;; Q: How does this work?
-        ;; A: Pretty sure it produces a separate OpenGL context per
-        ;; thread.
-        ;; That seems safest, but it's actually quite limiting:
-        ;; on my current desktop, I'm limited to 16 contexts.
-        ;; (Yes, I have an ancient video card)
-        ;; To implement this approach, we really need an
-        ;; OffscreenCanvas.
-        ;; That means giving up on support for things like Firefox
-        ;; and iOS (well, maybe...according to google, you can
-        ;; install chrome from the app store now)
-        ;; Supplying something a bogus canvas here acts like it might
-        ;; work.
-        ;; Long-term, I think I want this to produce a js/Proxy that can
-        ;; feed back the functions with which it got called to replay
-        ;; on the main thread.
-        ;; That needs to be heavily vetted and raises all sorts of
-        ;; red flags about breaking the encapsulation I'm trying to
-        ;; establish here.
-        ;; So it isn't something to just automate away.
-        renderer (THREE/WebGLRenderer. #js{:canvas canvas})]
-    (define-world!)
-    (when runners/has-animator
-      ;; Initial implementation stored renderer in the world-state
-      ;; when I passed in into define-world!
-      ;; That approach was cheeseball, and it falls apart in terms of
-      ;; rendering from a preview/workspace/devcard.
-      ;; TODO: Need to come up with a replacement approach for the
-      ;; "real" use case.
-      (js/requestAnimationFrame (partial render-and-animate! renderer)))))
+  (runners/define-world! canvas)
+  (when has-animator
+    ;; Initial implementation stored renderer in the world-state
+    ;; when I passed in into define-world!
+    ;; That approach was cheeseball, and it falls apart in terms of
+    ;; rendering from a preview/workspace/devcard.
+    ;; TODO: Need to come up with a replacement approach for the
+    ;; "real" use case.
+    (js/requestAnimationFrame (partial render-and-animate!
+                                       global-clock
+                                       canvas))))
 
 (defmethod handle-incoming-message! :frereth/resize
   [_ {:keys [::ui/width
@@ -186,25 +149,16 @@
       :as new-dims}]
   (.error js/console "Wrap :frereth/resize as :frereth/event")
   (throw (js/Error. "This should be a :frereth/event"))
-  (let [render-dst (-> state deref ::destination)
+  (let [render-dst @destination
         current-dims (select-keys render-dst [::ui/width
                                               ::ui/height])]
     (when (ui/should-resize-renderer? current-dims new-dims)
-      (ui/resize-renderer-to-display-size! (::ui/renderer render-dst)
-                                           new-dims)
-      (let [camera (-> state deref ::camera ::ui/camera)]
-        (ui/fix-camera-aspect! camera new-dims)))
-    (swap! state
-           (fn [current]
-             (-> current
-                 (update ::destination
-                         (fn [dst]
-                           (assoc dst
-                                  ::ui/width width
-                                  ::ui/height height)))
-                 (update ::camera
-                         assoc
-                         ::aspect (/ width height)))))))
+      (runners/resize! new-dims)
+      (swap! destination
+             (fn [dst]
+               (assoc dst
+                      ::ui/width width
+                      ::ui/height height))))))
 
 (s/fdef message-handler
   ;; FIXME: Message wrapper spec

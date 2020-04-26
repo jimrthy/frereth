@@ -113,17 +113,18 @@
      ::element element}))
 
 (defn setup-runner-preview
-  [element]
+  [canvas element]
   ;; Q: Can I get away without supplying the renderer at all?
-  (runners/define-world!)
-  (let [camera-wrapper (::runners/camera @runners/state)
+  ;; Important problem with this approach:
+  (runners/define-world! canvas)
+  (let [camera-wrapper (::runners/camera @runners/state-atom)
         {:keys [::ui/camera]} camera-wrapper
         _ (when-not camera
             (.error js/console
                     "Mising ::ui/camera in"
                     (clj->js camera-wrapper)
                     "among"
-                    (clj->js @runners/state)))
+                    (clj->js @runners/state-atom)))
         controls (trackball/TrackballControls. camera element)
         step! (fn [renderer
                    {:keys [::width ::height]
@@ -137,7 +138,7 @@
                 ;; in the "real" thing.
                 (.handleResize controls)
                 (.update controls)
-                (runners/render-and-animate! renderer time-stamp))]
+                (runners/render-and-animate! time-stamp))]
     (set! (.-noZoom controls) true)
     (set! (.-noPan controls) true)
     {::render! step!
@@ -145,11 +146,11 @@
 
 (defn renderer-factory
   "Returns a rendering function"
-  [element]
+  [canvas element]
   (let [element-name (.-preview (.-dataset element))
         factories {:blue setup-blue-scene
                    :red setup-red-scene
-                   :runners setup-runner-preview}
+                   :runners (partial setup-runner-preview canvas)}
         factory (-> element-name keyword factories)]
     (factory element)))
 
@@ -221,7 +222,7 @@
         ;; The set of scenes really should be dynamic
         scenes (reduce (fn [acc element]
                          (let [preview-name (.-preview (.-dataset element))
-                               local-render! (renderer-factory element)]
+                               local-render! (renderer-factory canvas element)]
                            ;; This isn't good enough.
                            ;; Also need the element so we can handle all
                            ;; the details about things like off-screen
