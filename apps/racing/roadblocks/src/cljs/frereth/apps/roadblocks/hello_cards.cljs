@@ -1,6 +1,7 @@
 (ns frereth.apps.roadblocks.hello-cards
-  (:require [reagent.core :as r]
-            #_[devcards.core :as dc :refer [defcard deftest]]
+  "An example of using devcards with reagent"
+  ;;; Totally broken, since I've excluded both libraries
+  (:require #_[devcards.core :as dc :refer [defcard deftest]]
             [cljs.test :include-macros true :refer [is]]
             ["@testing-library/react" :refer [render cleanup fireEvent]]
             [frereth.apps.roadblocks.hello :refer [click-counter hello]]))

@@ -1,5 +1,4 @@
-(ns frereth.apps.roadblocks.hello
-  (:require [reagent.core :as r]))
+(ns frereth.apps.roadblocks.hello)
 
 (throw (ex-info "This just doesn't fit"))
 
@@ -10,7 +9,7 @@
    [:input {:type "button" :value "Click me!"
             :on-click #(swap! click-count inc)}]])
 
-(def click-count (r/atom 0))
+(def click-count (atom 0))
 
 (defn hello []
   [:<>

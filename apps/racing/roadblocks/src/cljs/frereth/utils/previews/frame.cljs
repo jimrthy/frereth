@@ -48,6 +48,8 @@
 (ns frereth.utils.previews.frame
   "Provide something similar to devcards/NuBank workspaces in a Canvas"
   (:require
+   [frereth.apps.roadblocks.game.runners :as runners]
+   [frereth.apps.shared.ui :as ui]
    ["three" :as THREE]
    ["three/examples/jsm/controls/TrackballControls":as trackball]))
 
@@ -90,37 +92,67 @@
 
 (defn setup-blue-scene
   [element]
-  (let [{:keys [::scene]
+  (let [{:keys [::camera
+                ::controls
+                ::scene]
          :as scene-info} (make-scene element)
         geometry (THREE/BoxBufferGeometry. 1 1 1)
         material (THREE/MeshPhongMaterial. #js{:color "blue" :flatShading true})
         mesh (THREE/Mesh. geometry material)]
     (.add scene mesh)
-    (assoc scene-info ::mesh mesh)))
+    {::render!
+     (fn [renderer {:keys [::width ::height]
+                    :as rect} time]
+       ;; FIXME: Don't couple the physics with the animation
+       (set! (.-y (.-rotation mesh)) (* 0.1 time))
+       (set! (.-aspect camera) (/ width height))
+       (.updateProjectionMatrix camera)
+       (.handleResize controls)
+       (.update controls)
+       (.render renderer scene camera))
+     ::element element}))
+
+(defn setup-runner-preview
+  [canvas element]
+  ;; Q: Can I get away without supplying the renderer at all?
+  ;; Important problem with this approach:
+  (runners/define-world! canvas)
+  (let [camera-wrapper (::runners/camera @runners/state-atom)
+        {:keys [::ui/camera]} camera-wrapper
+        _ (when-not camera
+            (.error js/console
+                    "Mising ::ui/camera in"
+                    (clj->js camera-wrapper)
+                    "among"
+                    (clj->js @runners/state-atom)))
+        controls (trackball/TrackballControls. camera element)
+        step! (fn [renderer
+                   {:keys [::width ::height]
+                    :as rect}
+                   time-stamp]
+                ;; Q: How does it make sense to get access to the camera here?
+                ;; It should be in @runners/state, but that's awful.
+                (set! (.-aspect camera) (/ width height))
+                (.updateProjectionMatrix camera)
+                ;; controls is even weirder, since it doesn't exist
+                ;; in the "real" thing.
+                (.handleResize controls)
+                (.update controls)
+                (runners/render-and-animate! time-stamp))]
+    (set! (.-noZoom controls) true)
+    (set! (.-noPan controls) true)
+    {::render! step!
+     ::element element}))
 
 (defn renderer-factory
   "Returns a rendering function"
-  [element]
+  [canvas element]
   (let [element-name (.-preview (.-dataset element))
         factories {:blue setup-blue-scene
-                   :red setup-red-scene}
-        factory (-> element-name keyword factories)
-        {:keys [::camera
-                ::controls
-                ::mesh
-                ::scene]
-         :as scene-info} (factory element)]
-    ;; Realistically, each preview/card will have its own renderer
-    ;; But this is a start
-    {::render! (fn [renderer {:keys [::width ::height]
-                              :as rect} time]
-                 (set! (.-y (.-rotation mesh)) (* 0.1 time))
-                 (set! (.-aspect camera) (/ width height))
-                 (.updateProjectionMatrix camera)
-                 (.handleResize controls)
-                 (.update controls)
-                 (.render renderer scene camera))
-     ::element element}))
+                   :red setup-red-scene
+                   :runners (partial setup-runner-preview canvas)}
+        factory (-> element-name keyword factories)]
+    (factory element)))
 
 (defn need-resize?
   [canvas width height]
@@ -136,6 +168,9 @@
       (.setSize renderer width height false)
       true)))
 
+;;; FIXME: Rename this so the internal ::render! inside
+;;; doesn't shadow it.
+;;; It isn't really a problem, but it's confusing.
 (defn render!
   [renderer scenes time]
   (let [time (* 0.001 time)]
@@ -175,7 +210,7 @@
                  (.setViewport renderer left positive-y-up-bottom width height)
 
                  (render! renderer {::width width ::height height} time)))))
-    (js/requestAnimationFrame (partial render! renderer scenes))))
+    #_(js/requestAnimationFrame (partial render! renderer scenes))))
 
 (defn ^:dev/after-load ^:export start!
   [parent]
@@ -187,7 +222,7 @@
         ;; The set of scenes really should be dynamic
         scenes (reduce (fn [acc element]
                          (let [preview-name (.-preview (.-dataset element))
-                               local-render! (renderer-factory element)]
+                               local-render! (renderer-factory canvas element)]
                            ;; This isn't good enough.
                            ;; Also need the element so we can handle all
                            ;; the details about things like off-screen
