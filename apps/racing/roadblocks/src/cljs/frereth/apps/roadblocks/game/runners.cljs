@@ -17,6 +17,8 @@
                      (complement neg?)))
 (s/def ::far (s/and number?
                     (complement neg?)))
+;; It would clean things up a bit if I
+;; renamed this to ::camera-wrapper
 (s/def ::camera (s/keys :req [::fov
                               ::aspect
                               ::near
@@ -43,7 +45,6 @@
              ::near nil
              ::far nil
              ::ui/camera nil}
-   ::ui/renderer nil
    ::ui/scene nil
    ::world []})
 
@@ -53,7 +54,7 @@
 ;;;; Internal Implementation
 
 (defn define-world!
-  [canvas]
+  []
   (.info js/console "Defining World")
   (let [w 512
         h 512
@@ -85,7 +86,6 @@
           ;; red flags about breaking the encapsulation I'm trying to
           ;; establish here.
           ;; So it isn't something to just automate away.
-          renderer (THREE/WebGLRenderer. #js{:canvas canvas})
           scene (THREE/Scene.)
           width 1
           height 1
@@ -124,60 +124,59 @@
           #_(THREE/WebGLRenderer. #js {:canvas (clj->js mock-canvas)})
           add-light! (fn
                        []
-                       (set! (.-background scene) (THREE/Color. 0x888888))
                        (let [color 0xffffff
                              intensity 1
                              light (THREE/DirectionalLight. color intensity)]
                          (.set (.-position light) -1 2 4)
                          (.add scene light)))]
       (add-light!)
+      (set! (.-background scene) (THREE/Color. 0x888888))
       (swap! state-atom into {::camera {::fov fov
                                         ::aspect aspect
                                         ::near near
                                         ::far far
                                         ::ui/camera camera}
-                              ::ui/renderer renderer
                               ::ui/scene scene
                               ::world cubes}))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Public
 
-(s/fdef render-and-animate!
+(s/fdef do-physics
   :args (s/cat :renderer :ui/renderer
                :time-stamp (s/and number? pos?))
-  :ret any?)
-(defn render-and-animate!
+  :ret ::ui/scene)
+(defn do-physics
   "This triggers all the interesting pieces"
   [time-stamp]
   (let [time (/ time-stamp 1000)
         {:keys [::destination
-                ::ui/renderer
                 ::ui/scene
                 ::world]
          {:keys [::ui/camera]
           :as camera-wrapper} ::camera
          :as state} @state-atom
-        ;; Using a map variant for side-effects feels wrong.
+        ;; Using a map variant to set up side-effects feels wrong.
         animation (map-indexed (fn [ndx obj]
                                  (let [speed (inc (* ndx 0.1))
-                                       rot (* time speed)
+                                       rot (* time-stamp speed)
                                        rotation (.-rotation obj)]
                                    (set! (.-x rotation) rot)
                                    (set! (.-y rotation) rot)))
                                world)]
     ;; Realize that lazy sequence
     (dorun animation)
-    (.info js/console
+    #_(.info js/console
            "Trying to render" scene
            "\nwhich consists of"(clj->js world)
            "\nfrom" (clj->js state)
            "\nfrom the camera" camera
            "a" (type camera)
-           "on renderer" renderer
-           "a" (type renderer)
            "from the state-keys" (clj->js (keys state)))
-    (try
+    ;; Don't try to do the rendering in here.
+    ;; We shouldn't even have access to the camera at
+    ;; this point.
+    #_(try
       (.render renderer scene camera)
       (catch :default ex
         (.error js/console ex
@@ -185,7 +184,8 @@
                 renderer
                 "to render"
                 scene)
-        (throw ex)))))
+        (throw ex)))
+    scene))
 
 (defn resize!
   [{:keys [::ui/width

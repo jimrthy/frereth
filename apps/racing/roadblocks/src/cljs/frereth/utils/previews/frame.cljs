@@ -82,13 +82,24 @@
 
 (defn setup-red-scene
   [element]
-  (let [{:keys [::scene]
+  (let [{:keys [::camera
+                ::controls
+                ::scene]
          :as scene-info} (make-scene element)
         geometry (THREE/BoxBufferGeometry. 1 1 1)
-        material (THREE/MeshPhongMaterial. #js{:color "red"})
+        material (THREE/MeshPhongMaterial. #js{:color "red" :flatShading true})
         mesh (THREE/Mesh. geometry material)]
     (.add scene mesh)
-    (assoc scene-info ::mesh mesh)))
+    {::render!
+     (fn [renderer {:keys [::width ::height]
+                    :as rect} time]
+       (set! (.-y (.-rotation mesh)) (* -0.1 time))
+       (set! (.-aspect camera) (/ width height))
+       (.updateProjectionMatrix camera)
+       (.handleResize controls)
+       (.update controls)
+       (.render renderer scene camera))
+     ::element element}))
 
 (defn setup-blue-scene
   [element]
@@ -97,7 +108,7 @@
                 ::scene]
          :as scene-info} (make-scene element)
         geometry (THREE/BoxBufferGeometry. 1 1 1)
-        material (THREE/MeshPhongMaterial. #js{:color "blue" :flatShading true})
+        material (THREE/MeshPhongMaterial. #js{:color "blue"})
         mesh (THREE/Mesh. geometry material)]
     (.add scene mesh)
     {::render!
@@ -113,10 +124,10 @@
      ::element element}))
 
 (defn setup-runner-preview
-  [canvas element]
+  [element]
   ;; Q: Can I get away without supplying the renderer at all?
   ;; Important problem with this approach:
-  (runners/define-world! canvas)
+  (runners/define-world!)
   (let [camera-wrapper (::runners/camera @runners/state-atom)
         {:keys [::ui/camera]} camera-wrapper
         _ (when-not camera
@@ -138,7 +149,20 @@
                 ;; in the "real" thing.
                 (.handleResize controls)
                 (.update controls)
-                (runners/render-and-animate! time-stamp))]
+                #_(runners/render-and-animate! time-stamp)
+                (let [scene (runners/do-physics time-stamp)
+                      ;; FIXME: Using this approach, the camera does not belong
+                      ;; with the runners' state
+                      camera (-> runners/state-atom deref ::runners/camera ::ui/camera)]
+                  (try
+                    (.render renderer scene camera)
+                    (catch :default ex
+                      (.error js/console ex
+                              "[PREVIEW FRAME] Trying to use "
+                              renderer
+                              " to render "
+                              scene)
+                      (throw ex)))))]
     (set! (.-noZoom controls) true)
     (set! (.-noPan controls) true)
     {::render! step!
@@ -147,10 +171,13 @@
 (defn renderer-factory
   "Returns a rendering function"
   [canvas element]
+  ;; This is a ridiculous approach.
+  ;; This is why Fulcro defines the factories and manually
+  ;; associates them with the appropriate element.
   (let [element-name (.-preview (.-dataset element))
         factories {:blue setup-blue-scene
                    :red setup-red-scene
-                   :runners (partial setup-runner-preview canvas)}
+                   :runners setup-runner-preview}
         factory (-> element-name keyword factories)]
     (factory element)))
 
@@ -171,7 +198,7 @@
 ;;; FIXME: Rename this so the internal ::render! inside
 ;;; doesn't shadow it.
 ;;; It isn't really a problem, but it's confusing.
-(defn render!
+(defn actual-render!
   [renderer scenes time]
   (let [time (* 0.001 time)]
     (resize-renderer-to-display-size! renderer)
@@ -210,7 +237,12 @@
                  (.setViewport renderer left positive-y-up-bottom width height)
 
                  (render! renderer {::width width ::height height} time)))))
-    #_(js/requestAnimationFrame (partial render! renderer scenes))))
+    ;; Deliberately limit it to 10 FPS to help avoid log messages sending it off
+    ;; the rails
+    #_(js/setTimeout
+     #(js/requestAnimationFrame (partial actual-render! renderer scenes))
+     100)
+    (js/requestAnimationFrame (partial actual-render! renderer scenes))))
 
 (defn ^:dev/after-load ^:export start!
   [parent]
@@ -223,6 +255,7 @@
         scenes (reduce (fn [acc element]
                          (let [preview-name (.-preview (.-dataset element))
                                local-render! (renderer-factory canvas element)]
+                           (.info js/console "Adding scene for" preview-name)
                            ;; This isn't good enough.
                            ;; Also need the element so we can handle all
                            ;; the details about things like off-screen
@@ -231,4 +264,19 @@
                        {}
                        node-seq)]
     (.info js/console "Scenes to manage:" (clj->js scenes))
-    (js/requestAnimationFrame (partial render! renderer scenes))))
+    ;; This will supply a default background color for scenes.
+    ;; Until I render a scene that does specify a background color.
+    ;; Scenes rendered after that one will switch back to the default
+    ;; white background.
+    ;; Actually, there's more to it than that.
+    ;; This version loads with the sort of strobe light effect that
+    ;; could very well trigger seizures.
+    ;; The main background color is flickering between white and magenta
+    ;; at 10 fps.
+    ;; Eventually, it settles back down to...generally white.
+    ;; And then flickers back on.
+    ;; This is pretty awful.
+    ;; But at least the animations are going, and I have a vague
+    ;; notion about why it's awful.
+    (.setClearColor renderer (THREE/Color. 0x880088))
+    (js/requestAnimationFrame (partial actual-render! renderer scenes))))
