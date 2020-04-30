@@ -51,21 +51,26 @@
 (s/fdef render-and-animate!
   :args (s/cat :clock ::lamport/clock
                :canvas ::ui/canvas
+               :renderer ::ui/renderer
+               ;; Q: Do we have a spec for this
                :time-stamp (s/and number? pos?))
   :ret any?)
 (defn render-and-animate!
-  [clock canvas time-stamp]
-  (runners/render-and-animate! time-stamp)
-  (let [img-bmp (.transferToImageBitmap canvas)]
-    ;; Here's an ugly piece where the abstraction leaks.
-    ;; I don't want this layer to know anything about underlying details
-    ;; like the clock.
-    ;; Its usage is scattered all over the place in here anyway.
-    ;; TODO: Invest some hammock time into hiding this detail.
-    (shared-worker/transfer-to-worker! clock
-                                       js/self
-                                       :frereth/render
-                                       img-bmp)))
+  [clock canvas renderer time-stamp]
+  (let [{:keys [::ui/camera]
+         :as camera-wrapper} (::runners/camera @runners/state-atom)
+        scene (runners/do-physics time-stamp)]
+    (.render renderer scene camera)
+    (let [img-bmp (.transferToImageBitmap canvas)]
+      ;; Here's an ugly piece where the abstraction leaks.
+      ;; I don't want this layer to know anything about underlying details
+      ;; like the clock.
+      ;; Its usage is scattered all over the place in here anyway.
+      ;; TODO: Invest some hammock time into hiding this detail.
+      (shared-worker/transfer-to-worker! clock
+                                         js/self
+                                         :frereth/render
+                                         img-bmp))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Event handlers
@@ -131,7 +136,7 @@
   (.info js/console
          "handle-incoming-message! :frereth/main" canvas
          "\nin" body)
-  (runners/define-world! canvas)
+  (runners/define-world!)
   (when has-animator
     ;; Initial implementation stored renderer in the world-state
     ;; when I passed in into define-world!

@@ -349,6 +349,16 @@
      :as this}
     world-key base-url params]
    (lamport/do-tick clock)
+
+   (.info js/console "Checking for OffscreenCanvas")
+   (when-not (exists? js/OffscreenCanvas)
+     (.warn js/console "No canvas available")
+     ;; Realistically, this isn't going to work outside Chrome/Chromium
+     ;; for the foreseeable future.
+     (js/alert "OffscreenCanvas not available. Please try again from Chrome")
+     (throw (js/Error. "Browser lacks OffscreenCanvas support")))
+
+   (.info js/console "OffscreenCanvas OK")
    (let [url (if (empty? params)
                base-url
                (do
@@ -370,7 +380,7 @@
      ;; time this gets called.
      ;; Which, really, should be to create the Login/Attract
      ;; Screen.
-     (.debug js/console "(.-requestAnimationFrame worker)"
+     (.info js/console "(.-requestAnimationFrame worker)"
              (.-requestAnimationFrame worker)
              "among"
              worker)

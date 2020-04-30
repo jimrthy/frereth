@@ -17,8 +17,12 @@
                      (complement neg?)))
 (s/def ::far (s/and number?
                     (complement neg?)))
+
 ;; It would clean things up a bit if I
 ;; renamed this to ::camera-wrapper
+;; FIXME: This does not belong in here.
+;; The scenes should not have any idea how they're getting
+;; rendered.
 (s/def ::camera (s/keys :req [::fov
                               ::aspect
                               ::near
@@ -52,6 +56,9 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Internal Implementation
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;; Public
 
 (defn define-world!
   []
@@ -139,12 +146,8 @@
                               ::ui/scene scene
                               ::world cubes}))))
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;;; Public
-
 (s/fdef do-physics
-  :args (s/cat :renderer :ui/renderer
-               :time-stamp (s/and number? pos?))
+  :args (s/cat :time-stamp (s/and number? pos?))
   :ret ::ui/scene)
 (defn do-physics
   "This triggers all the interesting pieces"
