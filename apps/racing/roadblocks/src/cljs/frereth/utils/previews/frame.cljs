@@ -149,7 +149,6 @@
                 ;; in the "real" thing.
                 (.handleResize controls)
                 (.update controls)
-                #_(runners/render-and-animate! time-stamp)
                 (let [scene (runners/do-physics time-stamp)
                       ;; FIXME: Using this approach, the camera does not belong
                       ;; with the runners' state
@@ -195,8 +194,6 @@
       (.setSize renderer width height false)
       true)))
 
-;;; FIXME: Rename this so the internal ::render! inside
-;;; doesn't shadow it.
 ;;; It isn't really a problem, but it's confusing.
 (defn actual-render!
   [renderer scenes time]

@@ -3,7 +3,6 @@
   (:require-macros
    [cljs.core.async.macros :refer [go]])
   (:require
-   #_[cemerick.url :as url]
    [cljs.core.async :as async]
    [clojure.spec.alpha :as s]
    [frereth.apps.shared.connection]  ; for specs
@@ -13,10 +12,7 @@
    [frereth.apps.shared.socket :as web-socket]
    [frereth.apps.shared.specs :as specs]
    [frereth.apps.shared.world :as world]
-   [integrant.core :as ig]
-   ;; Start by at least partially supporting this, since it's
-   ;; so popular
-   #_[reagent.core :as r]))
+   [integrant.core :as ig]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Specs
@@ -174,7 +170,7 @@
   (let [body (serial/serialize
               {:frereth/action action
                :frereth/body payload})]
-    (.info js/console
+    (.debug js/console
            "Trying to transfer" action
            "message to" worker
            "specifically:" body
@@ -214,7 +210,7 @@
                 :body payload}
         ;; What we're actually .post'ing
         envelope (clj->js letter)]
-    (.info js/console
+    (.debug js/console
            "Trying to transfer" payload
            "at" values-to-transfer
            "among" letter
@@ -222,7 +218,7 @@
     (.postMessage worker
                   envelope
                   values-to-transfer)
-    (.info js/console
+    (.debug js/console
            payload "transfer sent successfully")))
 
 (defmethod handle-worker-message :default
@@ -326,7 +322,8 @@
                       :frereth/body (.-body raw-data)
                       ::lamport/clock (.-clock raw-data)
                       :frereth/type :frereth/raw})]
-    (.log js/console "Message from" worker ":" action "in" data)
+    (when (not= action :frereth/render)
+      (.log js/console "Message from" worker ":" action "in" data))
     ;; This might have a clock-tick. Deciding how to keep clients
     ;; from knowing about that detail is an important API detail
     (if other-clock-tick
@@ -375,19 +372,21 @@
                  ;; in Chrome, at least, module scripts are not
                  ;; supported on DedicatedWorker
                  #js{"type" "classic"})]
-     ;; TODO: At least in theory, we shoulld be able to to
+     ;; At least in theory, we shoulld be able to to
      ;; set the ::workers-need-dom-animation value the first
      ;; time this gets called.
      ;; Which, really, should be to create the Login/Attract
      ;; Screen.
+     ;; Q: Is that theory correct?
+     ;; A: Nope. There's no such animal from the scope of whatever
+     ;; triggered the worker.
      (.info js/console "(.-requestAnimationFrame worker)"
              (.-requestAnimationFrame worker)
              "among"
              worker)
-     (let [;; FIXME: Those defaults don't make any sense, except as a
-           ;; starting point
-           w 300  ; canvas default
-           h 150  ; canvas default
+     (let [;; These need to be a power of 2
+           w 256  ; canvas default
+           h 128  ; canvas default
            worker-canvas (js/OffscreenCanvas. w h)]
        (set! (.-onmessage worker)
              (partial on-worker-message this world-key worker))

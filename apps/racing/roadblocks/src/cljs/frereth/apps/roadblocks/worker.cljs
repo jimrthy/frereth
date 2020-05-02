@@ -8,7 +8,8 @@
    [frereth.apps.shared.lamport :as lamport]
    [frereth.apps.shared.serialization :as serial]
    [frereth.apps.shared.worker :as shared-worker]
-   [frereth.apps.shared.ui :as ui]))
+   [frereth.apps.shared.ui :as ui]
+   ["three" :as THREE]))
 
 (enable-console-print!)
 (js/console.log "Worker top")
@@ -33,8 +34,8 @@
 ;; Can this animate itself?
 ;; Currently, in Firefox, at least, the main thread has to trigger each
 ;; frame.
-(defonce has-animator
-  (boolean js/requestAnimationFrame))
+(defonce has-animator?
+  (boolean (exists? js/requestAnimationFrame)))
 
 (def destination (atom {::ui/width 512
                         ::ui/height 512
@@ -53,14 +54,20 @@
                :canvas ::ui/canvas
                :renderer ::ui/renderer
                ;; Q: Do we have a spec for this
-               :time-stamp (s/and number? pos?))
+               :time-stamp (s/and number? (complement neg?)))
   :ret any?)
 (defn render-and-animate!
   [clock canvas renderer time-stamp]
   (let [{:keys [::ui/camera]
          :as camera-wrapper} (::runners/camera @runners/state-atom)
-        scene (runners/do-physics time-stamp)]
-    (.render renderer scene camera)
+        scene (runners/do-physics (/ time-stamp 1000))]
+    (try
+      (.render renderer scene camera)
+      (catch :default ex
+        (.error js/console "Failed to render" scene
+                "on" renderer
+                "from" camera)
+        (throw ex)))
     (let [img-bmp (.transferToImageBitmap canvas)]
       ;; Here's an ugly piece where the abstraction leaks.
       ;; I don't want this layer to know anything about underlying details
@@ -70,7 +77,39 @@
       (shared-worker/transfer-to-worker! clock
                                          js/self
                                          :frereth/render
-                                         img-bmp))))
+                                         img-bmp))
+    ;; When I uncomment this line, the scene getting BLT'd to the
+    ;; spinning cube on the window manager goes into spastic animation
+    ;; mode. So there's a difference between the way I'm handling
+    ;; time-stamp here and the way it's happening from
+    ;; utils.previews.frame.
+    ;; More importantly, for my immediate purposes, there's a slew of
+    ;; errors about
+    ;; INVALID_OPERATION: uniform3f: location not for current program
+    ;; and
+    ;; INVALID_OPERATION: uniformMatrix4fv: location is not from
+    ;; current program
+    ;; Nice detail: I can comment this line out, and the animation
+    ;; stops.
+    ;; Less nice: uncommenting it doesn't re-start the animation
+    ;; (of course)
+
+    ;; There's also a pile (probably 1 per frame) of errors about
+    ;; resizing the texture from 300x150 to 256x128.
+    ;; That seems more obvious (at least short term) and more
+    ;; immediate, but also seems likely to raise all sorts of
+    ;; issues with aspect ratios.
+    (when has-animator?
+      (if (or true (> 10 @global-clock))
+        (do
+          #_(.info js/console "Frame" @global-clock)
+          #_(js/setTimeout
+             #(js/requestAnimationFrame (partial render-and-animate! clock canvas renderer))
+             1000)
+          (js/requestAnimationFrame (partial render-and-animate!
+                                               clock canvas renderer))
+          (swap! global-clock inc))
+        (.info js/console "1 frame down. Stopping. Renderer:" renderer)))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Event handlers
@@ -78,9 +117,11 @@
 (set! (.-onerror js/self)
       (fn
         [error]
-        (.info js/console
-               "[WORKER] Error:" error
-               "'exception' type:" (type error))
+        (.error js/console
+                "[WORKER] Error:" error
+                "'exception' type:" (type error))
+        (when (exists? (.-stack error))
+          (.error js/console (.-stack error)))
         ;; We can call .preventDefault on error to "prevent the default
         ;; action from taking place."
         ;; Q: Do we want to?
@@ -136,17 +177,13 @@
   (.info js/console
          "handle-incoming-message! :frereth/main" canvas
          "\nin" body)
-  (runners/define-world!)
-  (when has-animator
-    ;; Initial implementation stored renderer in the world-state
-    ;; when I passed in into define-world!
-    ;; That approach was cheeseball, and it falls apart in terms of
-    ;; rendering from a preview/workspace/devcard.
-    ;; TODO: Need to come up with a replacement approach for the
-    ;; "real" use case.
-    (js/requestAnimationFrame (partial render-and-animate!
-                                       global-clock
-                                       canvas))))
+  (let [renderer (THREE/WebGLRenderer. #js{:canvas canvas :alpha true})]
+    (swap! destination assoc ::ui/renderer renderer)
+    (runners/define-world!)
+    (render-and-animate! global-clock
+                         canvas
+                         renderer
+                         1)))
 
 (defmethod handle-incoming-message! :frereth/resize
   [_ {:keys [::ui/width
@@ -199,7 +236,7 @@
   []
   (.log js/console "Background worker: init")
   ;; The shadow-cljs example shows this as
-  (js/self.addEventListener "message" message-handler)
+  #_(js/self.addEventListener "message" message-handler)
   (set! (.-onmessage js/self) message-handler)
 
   ;; It seems like this should include the cookie that arrived with ::forking
@@ -210,7 +247,7 @@
   ;; verification that this is what we expected.
   ;; Then again, that *is* one of the main points behind TLS.
   (let [message {:frereth/action :frereth/forked
-                 :frereth/needs-dom-animation? (if has-animator
+                 :frereth/needs-dom-animation? (if has-animator?
                                                  false  ; Probably no real need to tell it I can animate myself
                                                  :frereth/immediate  ; trigger next frame as fast as possible
                                                  )}]
