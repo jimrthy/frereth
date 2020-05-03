@@ -45,10 +45,12 @@
 ;;;; project lincense, but I am not a lawyer.
 ;;;; If I've done something wrong here, then please let me know so I
 ;;;; can fix it.
+
 (ns frereth.utils.previews.frame
   "Provide something similar to devcards/NuBank workspaces in a Canvas"
   (:require
    [frereth.apps.roadblocks.game.runners :as runners]
+   [frereth.apps.roadblocks.game.track :as track]
    [frereth.apps.shared.ui :as ui]
    ["three" :as THREE]
    ["three/examples/jsm/controls/TrackballControls":as trackball]))
@@ -125,8 +127,6 @@
 
 (defn setup-runner-preview
   [element]
-  ;; Q: Can I get away without supplying the renderer at all?
-  ;; Important problem with this approach:
   (runners/define-world!)
   (let [camera-wrapper (::runners/camera @runners/state-atom)
         {:keys [::ui/camera]} camera-wrapper
@@ -167,6 +167,45 @@
     {::render! step!
      ::element element}))
 
+(defn setup-track-preview
+  [element]
+  (track/define-world!)
+  (let [fov 60
+        w 512
+        h 512
+        aspect (/ w h)
+        near 0.1
+        far 100
+        camera (THREE/PerspectiveCamera. fov aspect near far)
+        controls (trackball/TrackballControls. camera element)
+        step! (fn [renderer
+                   {:keys [::width ::height]
+                    :as rect}
+                   time-stamp]
+                ;; Q: How does it make sense to get access to the camera here?
+                ;; It should be in @runners/state, but that's awful.
+                (set! (.-aspect camera) (/ width height))
+                (.updateProjectionMatrix camera)
+                ;; controls is even weirder, since it doesn't exist
+                ;; in the "real" thing.
+                (.handleResize controls)
+                (.update controls)
+                (let [scene (track/do-physics time-stamp)]
+                  (try
+                    (.render renderer scene camera)
+                    (catch :default ex
+                      (.error js/console ex
+                              "[PREVIEW FRAME] Trying to use "
+                              renderer
+                              " to render "
+                              scene)
+                      (throw ex)))))]
+    (set! (.-z (.-position camera)) 10)
+    (set! (.-noZoom controls) true)
+    (set! (.-noPan controls) true)
+    {::render! step!
+     ::element element}))
+
 (defn renderer-factory
   "Returns a rendering function"
   [canvas element]
@@ -176,7 +215,8 @@
   (let [element-name (.-preview (.-dataset element))
         factories {:blue setup-blue-scene
                    :red setup-red-scene
-                   :runners setup-runner-preview}
+                   :runners setup-runner-preview
+                   :track setup-track-preview}
         factory (-> element-name keyword factories)]
     (factory element)))
 

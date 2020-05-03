@@ -73,26 +73,9 @@
     ;; icck
     (set! (.-z (.-position camera)) 2)
 
-    (let [;; Q: How does this actually work?
-          ;; A: Pretty sure it produces a separate OpenGL context per
-          ;; thread.
-          ;; That seems safest, but it's actually quite limiting:
-          ;; on my current desktop, I'm limited to 16 contexts.
-          ;; (Yes, I have an ancient video card)
-          ;; To implement this approach, we really need an
-          ;; OffscreenCanvas.
-          ;; That means giving up on support for things like Firefox
-          ;; and iOS (well, maybe...according to google, you can
-          ;; install chrome from the app store now)
-          ;; Supplying something a bogus canvas here acts like it might
-          ;; work.
-          ;; Long-term, I think I want this to produce a js/Proxy that can
-          ;; feed back the functions with which it got called to replay
-          ;; on the main thread.
-          ;; That needs to be heavily vetted and raises all sorts of
-          ;; red flags about breaking the encapsulation I'm trying to
-          ;; establish here.
-          ;; So it isn't something to just automate away.
+    (let [;; Q: Does it make sense to define the scene in here?
+          ;; It seems like it would make much more sense to just
+          ;; return the
           scene (THREE/Scene.)
           width 1
           height 1
