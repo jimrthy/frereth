@@ -50,6 +50,8 @@
   "Provide something similar to devcards/NuBank workspaces in a Canvas"
   (:require
    [frereth.apps.roadblocks.game.runners :as runners]
+   [frereth.apps.roadblocks.game.runners.position :as position]
+   [frereth.apps.roadblocks.game.runners.red :as red]
    [frereth.apps.roadblocks.game.track :as track]
    [frereth.apps.shared.ui :as ui]
    ["three" :as THREE]
@@ -82,27 +84,6 @@
        ::element element
        ::scene scene})))
 
-(defn setup-red-scene
-  [element]
-  (let [{:keys [::camera
-                ::controls
-                ::scene]
-         :as scene-info} (make-scene element)
-        geometry (THREE/BoxBufferGeometry. 1 1 1)
-        material (THREE/MeshPhongMaterial. #js{:color "red" :flatShading true})
-        mesh (THREE/Mesh. geometry material)]
-    (.add scene mesh)
-    {::render!
-     (fn [renderer {:keys [::width ::height]
-                    :as rect} time]
-       (set! (.-y (.-rotation mesh)) (* -0.1 time))
-       (set! (.-aspect camera) (/ width height))
-       (.updateProjectionMatrix camera)
-       (.handleResize controls)
-       (.update controls)
-       (.render renderer scene camera))
-     ::element element}))
-
 (defn setup-blue-scene
   [element]
   (let [{:keys [::camera
@@ -115,7 +96,7 @@
     (.add scene mesh)
     {::render!
      (fn [renderer {:keys [::width ::height]
-                    :as rect} time]
+                    :as rect} prev-time time]
        ;; FIXME: Don't couple the physics with the animation
        (set! (.-y (.-rotation mesh)) (* 0.1 time))
        (set! (.-aspect camera) (/ width height))
@@ -140,6 +121,7 @@
         step! (fn [renderer
                    {:keys [::width ::height]
                     :as rect}
+                   previous-time-stamp
                    time-stamp]
                 ;; Q: How does it make sense to get access to the camera here?
                 ;; It should be in @runners/state, but that's awful.
@@ -157,7 +139,7 @@
                     (.render renderer scene camera)
                     (catch :default ex
                       (.error js/console ex
-                              "[PREVIEW FRAME] Trying to use "
+                              "[PREVIEW FRAME] Failed to use "
                               renderer
                               " to render "
                               scene)
@@ -167,44 +149,76 @@
     {::render! step!
      ::element element}))
 
+(defn setup-runner-on-track
+  "Draw the track from just behind the racer"
+  [element]
+  (throw (js/Error. "Write this")))
+
 (defn setup-track-preview
   [element]
-  (track/define-world!)
-  (let [fov 60
-        w 512
-        h 512
-        aspect (/ w h)
-        near 0.1
-        far 100
-        camera (THREE/PerspectiveCamera. fov aspect near far)
-        controls (trackball/TrackballControls. camera element)
-        step! (fn [renderer
-                   {:keys [::width ::height]
-                    :as rect}
-                   time-stamp]
-                ;; Q: How does it make sense to get access to the camera here?
-                ;; It should be in @runners/state, but that's awful.
-                (set! (.-aspect camera) (/ width height))
-                (.updateProjectionMatrix camera)
-                ;; controls is even weirder, since it doesn't exist
-                ;; in the "real" thing.
-                (.handleResize controls)
-                (.update controls)
-                (let [scene (track/do-physics time-stamp)]
+  (let [track-curve (track/define-sample-curve)  ; FIXME: Doesn't belong in here
+        track-group (track/define-group track-curve)
+        red-racer (red/define-group)
+        scene (THREE/Scene.)]
+    (.info js/console "Setting up a racer to cruise around" track-curve)
+    (.add scene track-group)
+    (.add scene red-racer)
+    (set! (.-background scene) (THREE/Color. 0x000000))
+    (let [fov 60
+          w 512
+          h 512
+          aspect (/ w h)
+          near 0.1
+          far 100
+          camera (THREE/PerspectiveCamera. fov aspect near far)
+          controls (trackball/TrackballControls. camera element)
+
+          curve-length (.getLength track-curve)
+          velocity (/ 1 120)         ; have each lap take 2 minutes
+          mob-atom (atom {::position/position 0
+                          ::position/velocity velocity})
+          step! (fn [renderer
+                     {:keys [::width ::height]
+                      :as rect}
+                     previous-time-stamp
+                     time-stamp]
+                  #_(.log js/console "Adjusting track position from time" previous-time-stamp "to" time-stamp)
+                  (set! (.-aspect camera) (/ width height))
+                  (.updateProjectionMatrix camera)
+                  ;; controls is even weirder, since it doesn't exist
+                  ;; in the "real" thing.
+                  (.handleResize controls)
+                  (.update controls)
+                  ;; Since this doesn't do anything, there isn't any point to call it yet.
+                  #_(track/step! track-group time-stamp)
+
+                  (let [{:keys [::ui/position
+                                ::position/direction]} (swap! mob-atom
+                                  (fn [mob]
+                                    (position/calculate-new-position-and-orientation track-curve
+                                                                                     mob
+                                                                                     (if previous-time-stamp
+                                                                                       (- time-stamp previous-time-stamp)
+                                                                                       0))))]
+                    ;; TODO: Need to set the racer's rotation (or quaternion?) based on direction
+                    ;; and up vectors.
+                    (set! (.-x (.-position red-racer)) (.-x position))
+                    (set! (.-y (.-position red-racer)) (.-y position))
+                    (set! (.-z (.-position red-racer)) (.-z position)))
                   (try
                     (.render renderer scene camera)
                     (catch :default ex
                       (.error js/console ex
-                              "[PREVIEW FRAME] Trying to use "
+                              "[PREVIEW FRAME] Failed to use "
                               renderer
                               " to render "
                               scene)
-                      (throw ex)))))]
-    (set! (.-z (.-position camera)) 10)
-    (set! (.-noZoom controls) true)
-    (set! (.-noPan controls) true)
-    {::render! step!
-     ::element element}))
+                      (throw ex))))]
+      (set! (.-z (.-position camera)) 25)
+      (set! (.-noZoom controls) true)
+      (set! (.-noPan controls) true)
+      {::render! step!
+       ::element element})))
 
 (defn renderer-factory
   "Returns a rendering function"
@@ -214,7 +228,7 @@
   ;; associates them with the appropriate element.
   (let [element-name (.-preview (.-dataset element))
         factories {:blue setup-blue-scene
-                   :red setup-red-scene
+                   :runner-on-track setup-runner-on-track
                    :runners setup-runner-preview
                    :track setup-track-preview}
         factory (-> element-name keyword factories)]
@@ -236,8 +250,9 @@
 
 ;;; It isn't really a problem, but it's confusing.
 (defn actual-render!
-  [renderer scenes time]
-  (let [time (* 0.001 time)]
+  [renderer scenes previous-time time]
+  (let [time (* 0.001 time)]  ; convert from milliseconds to seconds
+    #_(.log js/console "Rendering delta from " previous-time " to " time)
     (resize-renderer-to-display-size! renderer)
 
     (.setScissorTest renderer false)
@@ -273,13 +288,13 @@
                  (.setScissor renderer left positive-y-up-bottom width height)
                  (.setViewport renderer left positive-y-up-bottom width height)
 
-                 (render! renderer {::width width ::height height} time)))))
+                 (render! renderer {::width width ::height height} previous-time time)))))
     ;; Deliberately limit it to 10 FPS to help avoid log messages sending it off
     ;; the rails
     #_(js/setTimeout
-     #(js/requestAnimationFrame (partial actual-render! renderer scenes))
-     100)
-    (js/requestAnimationFrame (partial actual-render! renderer scenes))))
+     #(js/requestAnimationFrame (partial actual-render! renderer scenes time))
+     2000)
+    (js/requestAnimationFrame (partial actual-render! renderer scenes time))))
 
 (defn ^:dev/after-load ^:export start!
   [parent]
@@ -316,4 +331,4 @@
     ;; But at least the animations are going, and I have a vague
     ;; notion about why it's awful.
     (.setClearColor renderer (THREE/Color. 0x880088))
-    (js/requestAnimationFrame (partial actual-render! renderer scenes))))
+    (js/requestAnimationFrame (partial actual-render! renderer scenes nil))))

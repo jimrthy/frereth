@@ -1,15 +1,25 @@
 (ns frereth.apps.roadblocks.game.track
   (:require
    [clojure.spec.alpha :as s]
+   [frereth.apps.shared.ui :as ui]
    ["three" :as THREE]))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Specs
 
+(s/def ::forward-velocity (s/and number? (complement neg?)))
+(s/def ::position (s/and number? (complement neg?)))
+
+(s/def ::racer (s/keys :req [::object-3d
+                             ::forward-velocity
+                             ::position]))
+(s/def ::racers (s/coll-of ::racer))
+
+(s/def ::world (s/keys :req [::ui/group]
+                       :opt [::racers]))
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Globals
-
-(defonce world (atom nil))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Internal Implementation
@@ -17,9 +27,8 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Public
 
-(defn define-world!
+(defn define-sample-curve
   []
-  (.info js/console "Defining World")
   (let [positions [[0 0 0]
                    [20 20 -20]
                    [10 10 -10]
@@ -32,21 +41,33 @@
         points (mapv (fn [coord]
                        (apply #(new THREE/Vector3. %1 %2 %3) coord))
                      positions)
-        _ (.info js/console "Building curve from" points)
-        curve (THREE/CatmullRomCurve3. (clj->js points) true)
-        curve-points (.getPoints curve 50)
+        _ (.info js/console "Building curve from" points)]
+    (THREE/CatmullRomCurve3. (clj->js points) true)))
+
+(s/fdef define-group
+  :args (s/cat :curve ::curve)
+  :ret ::ui/group)
+(defn define-group
+  [curve]
+  (.info js/console "Defining World")
+  (let [curve-points (.getPoints curve 50)
         _ (.info js/console "Building geometry from" curve-points)
         geometry (.setFromPoints (THREE/BufferGeometry.) curve-points)
         _ (.info js/console "Creating Material")
-        material (THREE/LineBasicMaterial. (clj->js {:color 0xff0000}))
+        material (THREE/LineBasicMaterial. (clj->js {:color 0x006666}))
         curve-object (THREE/Line. geometry material)
-        scene (THREE/Scene.)]
+        group (THREE/Group.)]
     (.info js/console "Have scene created")
-    (.add scene curve-object)
-    (set! (.-background scene) (THREE/Color. 0x000000))
-    (reset! world scene)))
+    (.add group curve-object)
+    group))
 
-(defn do-physics
+(s/fdef step!
+  :args (s/cat :group ::ui/group
+               :time-stamp ::ui/timestamp))
+(defn step!
   "This triggers all the interesting pieces"
-  [time-stamp]
-  @world)
+  ;; This is really the place where three.js is a terrible match for
+  ;; clojurescript.
+  ;; I don't want to update the scenegraph in place.
+  [group time-stamp]
+  nil)
