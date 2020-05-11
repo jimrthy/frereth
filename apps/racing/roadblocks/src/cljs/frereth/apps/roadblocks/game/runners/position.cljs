@@ -60,9 +60,7 @@
         ;; Q: What are the performance implications for creating
         ;; new Vector3Ds each time, rather than doing an update
         ;; in place?
-        #_#_ _ (.log js/console "New position:" new-position-on-curve "among" (.-points track))
         new-location (.getPointAt track new-position-on-curve)
-        #_#_ _ (.log js/console "b")
         new-direction (.getTangentAt track new-position-on-curve)]
     #_(.log js/console "New position on" track "after" delta-t "seconds at position" new-position-on-curve "based on velocity" velocity "is" new-location)
     #_(js/alert "New track position after" delta-t " seconds at position " new-position-on-curve " based on velocity " velocity " is " new-location)

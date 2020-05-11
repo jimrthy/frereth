@@ -149,6 +149,73 @@
     {::render! step!
      ::element element}))
 
+(defn build-runner-step-along-track
+  "Return a function to be called every animation frame"
+  [scene camera track-curve racer post-camera-resize-callback!]
+  (let [velocity (/ 1 120)         ; have each lap take 2 minutes
+        mob-atom (atom {::position/position 0
+                        ::position/velocity velocity})]
+    ;; This function handles the common side-effects of moving the racer
+    ;; around the track.
+    (fn
+      [renderer
+       {:keys [::width ::height]
+        :as rect}
+       previous-time-stamp
+       time-stamp]
+      #_(.log js/console "Adjusting track position from time" previous-time-stamp "to" time-stamp)
+      (set! (.-aspect camera) (/ width height))
+      (.updateProjectionMatrix camera)
+
+      (when post-camera-resize-callback!
+        (post-camera-resize-callback!))
+
+      ;; Since this doesn't do anything, there isn't any point to call it yet.
+      #_(track/step! track-group time-stamp)
+
+      (let [{:keys [::ui/position
+                    ::position/direction]} (swap! mob-atom
+                                                  (fn [mob]
+                                                    (position/calculate-new-position-and-orientation track-curve
+                                                                                                     mob
+                                                                                                     (if previous-time-stamp
+                                                                                                       (- time-stamp previous-time-stamp)
+                                                                                                       0))))]
+        ;; TODO: Need to set the racer's rotation (or quaternion?) based on direction
+        ;; and up vectors.
+        (set! (.-x (.-position racer)) (.-x position))
+        (set! (.-y (.-position racer)) (.-y position))
+        (set! (.-z (.-position racer)) (.-z position)))
+      (try
+        (.render renderer scene camera)
+        (catch :default ex
+          (.error js/console ex
+                  "[PREVIEW FRAME] Failed to use "
+                  renderer
+                  " to render "
+                  scene)
+          (throw ex))))))
+
+(defn build-track-with-runner
+  []
+  (let [positions [[0 0 0]
+                   [20 20 -20]
+                   [10 10 -10]
+                   [20 -10 0]
+                   [-20 10 -10]
+                   [-5 0 -5]]
+        {:keys [::ui/curve
+                ::ui/group]
+         :as track-world} (track/define-group positions)
+        red-racer (red/define-group)
+        scene (THREE/Scene.)]
+    (.info js/console "Setting up a racer to cruise around" curve)
+    (.add scene group)
+    (.add scene red-racer)
+    {::ui/curve curve
+     ::racer red-racer
+     ::scene scene}))
+
 (defn setup-runner-on-track
   "Draw the track from just behind the racer"
   [element]
@@ -156,13 +223,9 @@
 
 (defn setup-track-preview
   [element]
-  (let [track-curve (track/define-sample-curve)  ; FIXME: Doesn't belong in here
-        track-group (track/define-group track-curve)
-        red-racer (red/define-group)
-        scene (THREE/Scene.)]
-    (.info js/console "Setting up a racer to cruise around" track-curve)
-    (.add scene track-group)
-    (.add scene red-racer)
+  (let [{:keys [::racer ::scene]
+         track-curve ::ui/curve
+         :as track-with-runner} (build-track-with-runner)]
     (set! (.-background scene) (THREE/Color. 0x000000))
     (let [fov 60
           w 512
@@ -173,47 +236,12 @@
           camera (THREE/PerspectiveCamera. fov aspect near far)
           controls (trackball/TrackballControls. camera element)
 
-          curve-length (.getLength track-curve)
-          velocity (/ 1 120)         ; have each lap take 2 minutes
-          mob-atom (atom {::position/position 0
-                          ::position/velocity velocity})
-          step! (fn [renderer
-                     {:keys [::width ::height]
-                      :as rect}
-                     previous-time-stamp
-                     time-stamp]
-                  #_(.log js/console "Adjusting track position from time" previous-time-stamp "to" time-stamp)
-                  (set! (.-aspect camera) (/ width height))
-                  (.updateProjectionMatrix camera)
-                  ;; controls is even weirder, since it doesn't exist
-                  ;; in the "real" thing.
-                  (.handleResize controls)
-                  (.update controls)
-                  ;; Since this doesn't do anything, there isn't any point to call it yet.
-                  #_(track/step! track-group time-stamp)
-
-                  (let [{:keys [::ui/position
-                                ::position/direction]} (swap! mob-atom
-                                  (fn [mob]
-                                    (position/calculate-new-position-and-orientation track-curve
-                                                                                     mob
-                                                                                     (if previous-time-stamp
-                                                                                       (- time-stamp previous-time-stamp)
-                                                                                       0))))]
-                    ;; TODO: Need to set the racer's rotation (or quaternion?) based on direction
-                    ;; and up vectors.
-                    (set! (.-x (.-position red-racer)) (.-x position))
-                    (set! (.-y (.-position red-racer)) (.-y position))
-                    (set! (.-z (.-position red-racer)) (.-z position)))
-                  (try
-                    (.render renderer scene camera)
-                    (catch :default ex
-                      (.error js/console ex
-                              "[PREVIEW FRAME] Failed to use "
-                              renderer
-                              " to render "
-                              scene)
-                      (throw ex))))]
+          post-camera-resize-callback (fn []
+                                        ;; controls is even weirder, since it doesn't exist
+                                        ;; in the "real" thing.
+                                        (.handleResize controls)
+                                        (.update controls))
+          step! (build-runner-step-along-track scene camera track-curve racer post-camera-resize-callback)]
       (set! (.-z (.-position camera)) 25)
       (set! (.-noZoom controls) true)
       (set! (.-noPan controls) true)
