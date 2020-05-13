@@ -151,6 +151,12 @@
 
 (defn build-runner-step-along-track
   "Return a function to be called every animation frame"
+  ;; FIXME: Need to convert the callbacks into a map if
+  ;; I want to get serious about this approach.
+  ;; I'm thinking
+  ;; ::on-camera-resize
+  ;; ::on-runner-move
+  ;; I have to remember: this is strictly a proof-of-concept
   [scene camera track-curve racer post-camera-resize-callback!]
   (let [velocity (/ 1 120)         ; have each lap take 2 minutes
         mob-atom (atom {::position/position 0
@@ -183,6 +189,14 @@
                                                                                                        0))))]
         ;; TODO: Need to set the racer's rotation (or quaternion?) based on direction
         ;; and up vectors.
+        ;; Q: What *is* the up vector here?
+        ;; I think I have an intuitive grasp, but I can't describe it
+        ;; formally.
+        ;; It's tempting to project the tangent onto, say, the x-y plane.
+        ;; Then rotate it 90 degrees and normalize that vector (with 0
+        ;; z component) as "up".
+        ;; But that would cheat the fun sideways loop-the-loops and
+        ;; swoops like you get around the curves at Nascar
         (set! (.-x (.-position racer)) (.-x position))
         (set! (.-y (.-position racer)) (.-y position))
         (set! (.-z (.-position racer)) (.-z position)))
@@ -219,7 +233,25 @@
 (defn setup-runner-on-track
   "Draw the track from just behind the racer"
   [element]
-  (throw (js/Error. "Write this")))
+  (let [{:keys [::racer ::scene]
+         track-curve ::ui/curve
+         :as track-with-runner} (build-track-with-runner)
+
+        fov 60
+        w 512
+        h 512
+        aspect 1
+        near 0.1
+        far 100
+        camera (THREE/PerspectiveCamera. fov aspect near far)
+
+        post-camera-resize-callback nil
+
+
+        step! (build-runner-step-along-track scene camera track-curve racer post-camera-resize-callback)]
+    (set! (.-background scene) (THREE/Color. 0x666666))
+    {::render! step!
+     ::element element}))
 
 (defn setup-track-preview
   [element]

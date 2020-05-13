@@ -58,6 +58,7 @@
         _ (.info js/console "Building geometry from" curve-points)
         geometry (.setFromPoints (THREE/BufferGeometry.) curve-points)
         _ (.info js/console "Creating Material")
+        ;; TODO: Switch to LineDashedMaterial
         material (THREE/LineBasicMaterial. (clj->js {:color 0x006666}))
         curve-object (THREE/Line. geometry material)
         group (THREE/Group.)]
