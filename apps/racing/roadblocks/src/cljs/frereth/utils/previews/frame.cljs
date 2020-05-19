@@ -84,28 +84,6 @@
        ::element element
        ::scene scene})))
 
-(defn setup-blue-scene
-  [element]
-  (let [{:keys [::camera
-                ::controls
-                ::scene]
-         :as scene-info} (make-scene element)
-        geometry (THREE/BoxBufferGeometry. 1 1 1)
-        material (THREE/MeshPhongMaterial. #js{:color "blue"})
-        mesh (THREE/Mesh. geometry material)]
-    (.add scene mesh)
-    {::render!
-     (fn [renderer {:keys [::width ::height]
-                    :as rect} prev-time time]
-       ;; FIXME: Don't couple the physics with the animation
-       (set! (.-y (.-rotation mesh)) (* 0.1 time))
-       (set! (.-aspect camera) (/ width height))
-       (.updateProjectionMatrix camera)
-       (.handleResize controls)
-       (.update controls)
-       (.render renderer scene camera))
-     ::element element}))
-
 (defn setup-runner-preview
   [element]
   (runners/define-world!)
@@ -157,7 +135,7 @@
   ;; ::on-camera-resize
   ;; ::on-runner-move
   ;; I have to remember: this is strictly a proof-of-concept
-  [scene camera track-curve racer post-camera-resize-callback!]
+  [scene camera track-curve racer post-camera-resize-callback! move-camera-callback!]
   (let [velocity (/ 1 120)         ; have each lap take 2 minutes
         mob-atom (atom {::position/position 0
                         ::position/velocity velocity})]
@@ -180,13 +158,20 @@
       #_(track/step! track-group time-stamp)
 
       (let [{:keys [::ui/position
-                    ::position/direction]} (swap! mob-atom
-                                                  (fn [mob]
-                                                    (position/calculate-new-position-and-orientation track-curve
-                                                                                                     mob
-                                                                                                     (if previous-time-stamp
-                                                                                                       (- time-stamp previous-time-stamp)
-                                                                                                       0))))]
+                    ::position/direction]
+             ;; It's tempting to just have this calculate the
+             ;; transformation matrix.
+             ;; But I'd still need the direction (TODO: and up vector)
+             ;; to set the camera
+             :as transformation} (swap! mob-atom
+                                        (fn [mob]
+                                          (position/calculate-new-position-and-orientation track-curve
+                                                                                           mob
+                                                                                           (if previous-time-stamp
+                                                                                             (- time-stamp previous-time-stamp)
+                                                                                             0))))]
+        (when move-camera-callback!
+          (move-camera-callback! transformation))
         ;; TODO: Need to set the racer's rotation (or quaternion?) based on direction
         ;; and up vectors.
         ;; Q: What *is* the up vector here?
@@ -197,9 +182,17 @@
         ;; z component) as "up".
         ;; But that would cheat the fun sideways loop-the-loops and
         ;; swoops like you get around the curves at Nascar
-        (set! (.-x (.-position racer)) (.-x position))
-        (set! (.-y (.-position racer)) (.-y position))
-        (set! (.-z (.-position racer)) (.-z position)))
+        (let [x' (.-x position)
+              y' (.-y position)
+              z' (.-z position)]
+          (set! (.-x (.-position racer)) x')
+          (set! (.-y (.-position racer)) y')
+          (set! (.-z (.-position racer)) z')
+
+          (.lookAt racer
+                   (+ x' (.-x direction))
+                   (+ y' (.-y direction))
+                   (+ z' (.-z direction)))))
       (try
         (.render renderer scene camera)
         (catch :default ex
@@ -210,14 +203,37 @@
                   scene)
           (throw ex))))))
 
+(defn on-camera-move!
+  [follower-camera follower-helper
+   {:keys [::ui/position ::position/direction ::ui/up-vector]}]
+  (let [dx (.-x direction)
+        dy (.-y direction)
+        dz (.-z direction)
+        ;; Current object position
+        x1 (.-x position)
+        y1 (.-y position)
+        z1 (.-z position)
+        ;; Want to look at the track ahead from slightly behind and
+        ;; above the racer.
+        ;; Really want a little left/right offset also
+        x2 (+ (- x1 (* 3 dx)) (* 2 (.-x up-vector)))
+        y2 (+ (- y1 (* 3 dy)) (* 2 (.-y up-vector)))
+        z2 (+ (- z1 (* 3 dz)) (* 2 (.-z up-vector)))]
+    (set! (.-x (.-position follower-camera)) x2)
+    (set! (.-y (.-position follower-camera)) y2)
+    (set! (.-z (.-position follower-camera)) z2)
+    (.lookAt follower-camera (+ x1 (* 4 dx)) (+ y1 (* 4 dy)) (+ z1 (* 4 dz)))
+    (when follower-helper
+      (.update follower-helper))))
+
 (defn build-track-with-runner
   []
   (let [positions [[0 0 0]
+                   [40 40 -40]
                    [20 20 -20]
-                   [10 10 -10]
-                   [20 -10 0]
-                   [-20 10 -10]
-                   [-5 0 -5]]
+                   [40 -20 0]
+                   [-40 20 -20]
+                   [-10 0 -10]]
         {:keys [::ui/curve
                 ::ui/group]
          :as track-world} (track/define-group positions)
@@ -247,8 +263,9 @@
 
         post-camera-resize-callback nil
 
+        on-camera-move! (partial on-camera-move! camera nil)
 
-        step! (build-runner-step-along-track scene camera track-curve racer post-camera-resize-callback)]
+        step! (build-runner-step-along-track scene camera track-curve racer post-camera-resize-callback on-camera-move!)]
     (set! (.-background scene) (THREE/Color. 0x666666))
     {::render! step!
      ::element element}))
@@ -258,23 +275,30 @@
   (let [{:keys [::racer ::scene]
          track-curve ::ui/curve
          :as track-with-runner} (build-track-with-runner)]
-    (set! (.-background scene) (THREE/Color. 0x000000))
+    (set! (.-background scene) (THREE/Color. 0x888888))
     (let [fov 60
           w 512
           h 512
           aspect (/ w h)
-          near 0.1
+          near 0.5
           far 100
-          camera (THREE/PerspectiveCamera. fov aspect near far)
-          controls (trackball/TrackballControls. camera element)
+          real-camera (THREE/PerspectiveCamera. fov aspect near far)
+          controls (trackball/TrackballControls. real-camera element)
+
+          follower-camera (THREE/PerspectiveCamera. fov aspect near far)
+          follower-helper (THREE/CameraHelper. follower-camera)
 
           post-camera-resize-callback (fn []
                                         ;; controls is even weirder, since it doesn't exist
                                         ;; in the "real" thing.
                                         (.handleResize controls)
                                         (.update controls))
-          step! (build-runner-step-along-track scene camera track-curve racer post-camera-resize-callback)]
-      (set! (.-z (.-position camera)) 25)
+
+          on-camera-move! (partial on-camera-move! follower-camera follower-helper)
+
+          step! (build-runner-step-along-track scene real-camera track-curve racer post-camera-resize-callback on-camera-move!)]
+      (.add scene follower-helper)
+      (set! (.-z (.-position real-camera)) 60)
       (set! (.-noZoom controls) true)
       (set! (.-noPan controls) true)
       {::render! step!
@@ -287,8 +311,7 @@
   ;; This is why Fulcro defines the factories and manually
   ;; associates them with the appropriate element.
   (let [element-name (.-preview (.-dataset element))
-        factories {:blue setup-blue-scene
-                   :runner-on-track setup-runner-on-track
+        factories {:runner-on-track setup-runner-on-track
                    :runners setup-runner-preview
                    :track setup-track-preview}
         factory (-> element-name keyword factories)]
@@ -308,7 +331,6 @@
       (.setSize renderer width height false)
       true)))
 
-;;; It isn't really a problem, but it's confusing.
 (defn actual-render!
   [renderer scenes previous-time time]
   (let [time (* 0.001 time)]  ; convert from milliseconds to seconds

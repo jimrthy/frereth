@@ -61,7 +61,11 @@
         ;; new Vector3Ds each time, rather than doing an update
         ;; in place?
         new-location (.getPointAt track new-position-on-curve)
-        new-direction (.getTangentAt track new-position-on-curve)]
+        ;; N.B. this is a unit vector
+        new-direction (.getTangentAt track new-position-on-curve)
+        up (THREE/Vector3. (.-x new-direction)
+                           (- (.-z new-direction))
+                           (.-y new-direction))]
     #_(.log js/console "New position on" track "after" delta-t "seconds at position" new-position-on-curve "based on velocity" velocity "is" new-location)
     #_(js/alert "New track position after" delta-t " seconds at position " new-position-on-curve " based on velocity " velocity " is " new-location)
     ;; I really want to define an "up" vector based on...what?
@@ -70,4 +74,5 @@
     (assoc racer
            ::direction new-direction
            ::position new-position-on-curve
-           ::ui/position new-location)))
+           ::ui/position new-location
+           ::ui/up-vector up)))
