@@ -273,7 +273,7 @@
        {img-bmp :frereth/body
         worker-clock ::lamport/clock
         :as raw-message}]
-      (.info js/console "Handling render request:" raw-message)
+      (.debug js/console "Handling render request:" raw-message)
       (let [texture (THREE/CanvasTexture. img-bmp)
             material (.-material cube)]
         (set! (.-map material) texture)

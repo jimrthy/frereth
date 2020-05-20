@@ -46,6 +46,8 @@
 
 (s/def ::time-in-state inst?)
 
+(s/def ::time-stamp (s/and number? (complement neg?)))
+
 #?(:cljs (s/def :frereth/web-worker #(instance? js/Worker %)))
 
 (s/def :frereth/world-stop-signal (s/or :symbol symbol?
