@@ -7,8 +7,7 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Specs
 
-;; FIXME: This is a 3-tuple of numbers
-(s/def ::curve-position any?)
+(s/def ::curve-position (s/tuple number? number? number?))
 (s/def ::curve-positions (s/coll-of ::curve-position))
 (s/def ::forward-velocity (s/and number? (complement neg?)))
 (s/def ::position (s/and number? (complement neg?)))
@@ -23,6 +22,8 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Globals
+
+(def +standard-v+ 10)  ; meters / second
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Internal Implementation
@@ -43,6 +44,19 @@
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Public
+
+(s/fdef generate-curve-position!
+  :args (s/cat :boundary number?)
+  :ret ::curve-position)
+(defn generate-curve-position!
+  "Generates a track position in the cube between
+  (-boundary -boundary -boundary) and (boundary boundary boundary)"
+  [boundary]
+  (let [max (* 2 boundary)
+        x (- (rand-int max) boundary)
+        y (- (rand-int max) boundary)
+        z (- (rand-int max) boundary)]
+    [x y z]))
 
 ;; Q: What should I name this?
 ;; Group seems too tightly coupled w/ implementation.

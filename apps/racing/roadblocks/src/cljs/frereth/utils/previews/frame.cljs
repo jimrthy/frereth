@@ -135,9 +135,8 @@
   ;; ::on-camera-resize
   ;; ::on-runner-move
   ;; I have to remember: this is strictly a proof-of-concept
-  [scene camera track-curve racer post-camera-resize-callback! move-camera-callback!]
-  (let [velocity (/ 1 120)         ; have each lap take 2 minutes
-        mob-atom (atom {::position/position 0
+  [scene camera track-curve racer velocity post-camera-resize-callback! move-camera-callback!]
+  (let [mob-atom (atom {::position/position 0
                         ::position/velocity velocity})]
     ;; This function handles the common side-effects of moving the racer
     ;; around the track.
@@ -157,8 +156,9 @@
       ;; Since this doesn't do anything, there isn't any point to call it yet.
       #_(track/step! track-group time-stamp)
 
-      (let [{:keys [::ui/position
-                    ::position/direction]
+      (let [{:keys [::position/direction
+                    ::ui/position
+                    ::ui/up-vector]
              ;; It's tempting to just have this calculate the
              ;; transformation matrix.
              ;; But I'd still need the direction (TODO: and up vector)
@@ -184,10 +184,18 @@
         ;; swoops like you get around the curves at Nascar
         (let [x' (.-x position)
               y' (.-y position)
-              z' (.-z position)]
+              z' (.-z position)
+
+              x-up (.-x up-vector)
+              y-up (.-y up-vector)
+              z-up (.-z up-vector)]
           (set! (.-x (.-position racer)) x')
           (set! (.-y (.-position racer)) y')
           (set! (.-z (.-position racer)) z')
+
+          (set! (.-x (.-up racer)) x-up)
+          (set! (.-y (.-up racer)) y-up)
+          (set! (.-z (.-up racer)) z-up)
 
           (.lookAt racer
                    (+ x' (.-x direction))
@@ -204,6 +212,7 @@
           (throw ex))))))
 
 (defn on-camera-move!
+  "This is for the 'real' camera that peeks over the Runner's shoulder"
   [follower-camera follower-helper
    {:keys [::ui/position ::position/direction ::ui/up-vector]}]
   (let [dx (.-x direction)
@@ -213,43 +222,57 @@
         x1 (.-x position)
         y1 (.-y position)
         z1 (.-z position)
+
+        x-up (.-x up-vector)
+        y-up (.-y up-vector)
+        z-up (.-z up-vector)
         ;; Want to look at the track ahead from slightly behind and
         ;; above the racer.
-        ;; Really want a little left/right offset also
-        x2 (+ (- x1 (* 3 dx)) (* 2 (.-x up-vector)))
-        y2 (+ (- y1 (* 3 dy)) (* 2 (.-y up-vector)))
-        z2 (+ (- z1 (* 3 dz)) (* 2 (.-z up-vector)))]
+        ;; TODO: want a little left/right offset also
+        x2 (+ (- x1 (* 3 dx)) (* 2 x-up))
+        y2 (+ (- y1 (* 3 dy)) (* 2 y-up))
+        z2 (+ (- z1 (* 3 dz)) (* 2 z-up))]
     (set! (.-x (.-position follower-camera)) x2)
     (set! (.-y (.-position follower-camera)) y2)
     (set! (.-z (.-position follower-camera)) z2)
+
+    (set! (.-x (.-up follower-camera)) x-up)
+    (set! (.-y (.-up follower-camera)) y-up)
+    (set! (.-z (.-up follower-camera)) z-up)
     (.lookAt follower-camera (+ x1 (* 4 dx)) (+ y1 (* 4 dy)) (+ z1 (* 4 dz)))
     (when follower-helper
       (.update follower-helper))))
 
 (defn build-track-with-runner
   []
-  (let [positions [[0 0 0]
-                   [40 40 -40]
-                   [20 20 -20]
-                   [40 -20 0]
-                   [-40 20 -20]
-                   [-10 0 -10]]
-        {:keys [::ui/curve
-                ::ui/group]
-         :as track-world} (track/define-group positions)
-        red-racer (red/define-group)
-        scene (THREE/Scene.)]
-    (.info js/console "Setting up a racer to cruise around" curve)
-    (.add scene group)
-    (.add scene red-racer)
-    {::ui/curve curve
-     ::racer red-racer
-     ::scene scene}))
+  (let [position-atom (atom [])]
+    ;; For a demo, this looks surprisingly good
+    (dotimes [_ 6]
+      (swap! position-atom #(conj % (track/generate-curve-position! 100))))
+    (let [positions @position-atom
+          {:keys [::ui/curve
+                  ::ui/group]
+           :as track-world} (track/define-group positions)
+          track-length (.getLength curve)
+          velocity (/ track/+standard-v+ track-length)
+          red-racer (red/define-group)
+          scene (THREE/Scene.)]
+      (.info js/console
+             "Setting up a racer to cruise around"
+             track-length
+             "meters on"
+             curve)
+      (.add scene group)
+      (.add scene red-racer)
+      {::ui/curve curve
+       ::racer red-racer
+       ::scene scene
+       ::velocity velocity})))
 
 (defn setup-runner-on-track
   "Draw the track from just behind the racer"
   [element]
-  (let [{:keys [::racer ::scene]
+  (let [{:keys [::racer ::scene ::velocity]
          track-curve ::ui/curve
          :as track-with-runner} (build-track-with-runner)
 
@@ -258,30 +281,33 @@
         h 512
         aspect 1
         near 0.1
-        far 100
+        far 200
         camera (THREE/PerspectiveCamera. fov aspect near far)
 
         post-camera-resize-callback nil
 
         on-camera-move! (partial on-camera-move! camera nil)
 
-        step! (build-runner-step-along-track scene camera track-curve racer post-camera-resize-callback on-camera-move!)]
+        step! (build-runner-step-along-track scene camera track-curve racer velocity post-camera-resize-callback on-camera-move!)]
     (set! (.-background scene) (THREE/Color. 0x666666))
     {::render! step!
      ::element element}))
 
 (defn setup-track-preview
+  "Build a debug view of the track with the racer and a Camera Helper to try to get an idea what's going on"
   [element]
-  (let [{:keys [::racer ::scene]
+  (let [{:keys [::racer ::scene ::velocity]
          track-curve ::ui/curve
          :as track-with-runner} (build-track-with-runner)]
     (set! (.-background scene) (THREE/Color. 0x888888))
-    (let [fov 60
+    ;; TODO: The "real-camera" really needs to take in the full track
+    ;; size so I can view the entire thing.
+    (let [fov 75
           w 512
           h 512
           aspect (/ w h)
           near 0.5
-          far 100
+          far 200
           real-camera (THREE/PerspectiveCamera. fov aspect near far)
           controls (trackball/TrackballControls. real-camera element)
 
@@ -296,7 +322,7 @@
 
           on-camera-move! (partial on-camera-move! follower-camera follower-helper)
 
-          step! (build-runner-step-along-track scene real-camera track-curve racer post-camera-resize-callback on-camera-move!)]
+          step! (build-runner-step-along-track scene real-camera track-curve racer velocity post-camera-resize-callback on-camera-move!)]
       (.add scene follower-helper)
       (set! (.-z (.-position real-camera)) 60)
       (set! (.-noZoom controls) true)
