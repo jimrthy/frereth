@@ -1,4 +1,5 @@
 (ns frereth.apps.roadblocks.game.track
+  "Represent the current track"
   (:require
    [clojure.spec.alpha :as s]
    [frereth.apps.shared.ui :as ui]
@@ -11,11 +12,6 @@
 (s/def ::curve-positions (s/coll-of ::curve-position))
 (s/def ::forward-velocity (s/and number? (complement neg?)))
 (s/def ::position (s/and number? (complement neg?)))
-
-(s/def ::racer (s/keys :req [::object-3d
-                             ::forward-velocity
-                             ::position]))
-(s/def ::racers (s/coll-of ::racer))
 
 (s/def ::world (s/keys :req [::ui/curve
                              ::ui/group]))

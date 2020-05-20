@@ -74,8 +74,10 @@
     (set! (.-z (.-position camera)) 2)
 
     (let [;; Q: Does it make sense to define the scene in here?
-          ;; It seems like it would make much more sense to just
-          ;; return the
+          ;; A: No.
+          ;; Just return a THREE/Group.
+          ;; It's up to the final compositor to compose everything into
+          ;; a Scene.
           scene (THREE/Scene.)
           width 1
           height 1

@@ -7,6 +7,7 @@
    [frereth.apps.roadblocks.game.runners :as runners]
    [frereth.apps.shared.lamport :as lamport]
    [frereth.apps.shared.serialization :as serial]
+   [frereth.apps.shared.specs :as specs]
    [frereth.apps.shared.worker :as shared-worker]
    [frereth.apps.shared.ui :as ui]
    ["three" :as THREE]))
@@ -53,8 +54,7 @@
   :args (s/cat :clock ::lamport/clock
                :canvas ::ui/canvas
                :renderer ::ui/renderer
-               ;; Q: Do we have a spec for this
-               :time-stamp (s/and number? (complement neg?)))
+               :time-stamp ::specs/time-stamp)
   :ret any?)
 (defn render-and-animate!
   [clock canvas renderer time-stamp]
@@ -94,11 +94,7 @@
     ;; Less nice: uncommenting it doesn't re-start the animation
     ;; (of course)
 
-    ;; There's also a pile (probably 1 per frame) of errors about
-    ;; resizing the texture from 300x150 to 256x128.
-    ;; That seems more obvious (at least short term) and more
-    ;; immediate, but also seems likely to raise all sorts of
-    ;; issues with aspect ratios.
+    ;; Q: Is this still true? Or have I gotten around to fixing it?
     (when has-animator?
       (if (or true (> 10 @global-clock))
         (do

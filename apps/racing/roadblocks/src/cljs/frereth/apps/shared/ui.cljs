@@ -41,8 +41,6 @@
 (s/def ::child (s/keys :req [::object-3d]))
 (s/def ::children (s/coll-of ::child))
 
-(s/def ::time-stamp (s/and number? (complement neg?)))
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;;; Public
 

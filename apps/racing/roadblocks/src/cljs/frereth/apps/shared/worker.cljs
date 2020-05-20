@@ -372,7 +372,7 @@
                  ;; in Chrome, at least, module scripts are not
                  ;; supported on DedicatedWorker
                  #js{"type" "classic"})]
-     ;; At least in theory, we shoulld be able to to
+     ;; At least in theory, we should be able to to
      ;; set the ::workers-need-dom-animation value the first
      ;; time this gets called.
      ;; Which, really, should be to create the Login/Attract

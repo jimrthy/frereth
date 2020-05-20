@@ -68,9 +68,6 @@
                            (.-y new-direction))]
     #_(.log js/console "New position on" track "after" delta-t "seconds at position" new-position-on-curve "based on velocity" velocity "is" new-location)
     #_(js/alert "New track position after" delta-t " seconds at position " new-position-on-curve " based on velocity " velocity " is " new-location)
-    ;; I really want to define an "up" vector based on...what?
-    ;; I need to get the basics working before I start trying
-    ;; to cope with the physics behind a really gnarly track.
     (assoc racer
            ::direction new-direction
            ::position new-position-on-curve
