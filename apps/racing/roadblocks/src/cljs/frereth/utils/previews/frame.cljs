@@ -288,8 +288,21 @@
 
         on-camera-move! (partial on-camera-move! camera nil)
 
+        loader (THREE/CubeTextureLoader.)
+        ;; This looks pretty cool, but pieces simply are not in the proper order.
+        ;; My best guess is that it has something to do w/ left-hand vs. right-hand
+        ;; coordinate systems.
+        ;; TODO: Add this to the initial "racer proof of concept" frame so I can figure
+        ;; out what it's doing.
+        sky-box (.load loader (clj->js ["static/images/skybox/rainbow/rainbow_lf.png"
+                                        "static/images/skybox/rainbow/rainbow_rt.png"
+                                        "static/images/skybox/rainbow/rainbow_up.png"
+                                        "static/images/skybox/rainbow/rainbow_dn.png"
+                                        "static/images/skybox/rainbow/rainbow_bk.png"
+                                        "static/images/skybox/rainbow/rainbow_ft.png"]))
+
         step! (build-runner-step-along-track scene camera track-curve racer velocity post-camera-resize-callback on-camera-move!)]
-    (set! (.-background scene) (THREE/Color. 0x666666))
+    (set! (.-background scene) sky-box)
     {::render! step!
      ::element element}))
 
@@ -324,7 +337,9 @@
 
           step! (build-runner-step-along-track scene real-camera track-curve racer velocity post-camera-resize-callback on-camera-move!)]
       (.add scene follower-helper)
+      ;; TODO: Set up this and the fov so I can see the entire track
       (set! (.-z (.-position real-camera)) 60)
+
       (set! (.-noZoom controls) true)
       (set! (.-noPan controls) true)
       {::render! step!
