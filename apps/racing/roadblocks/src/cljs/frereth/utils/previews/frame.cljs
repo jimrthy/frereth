@@ -57,7 +57,8 @@
    ["three" :as THREE]
    ["three/examples/jsm/controls/TrackballControls":as trackball]))
 
-(defn make-scene
+(defn make-scene-obsolete
+  "For preliminary red/blue boxes while I was proving concept"
   [element]
   (let [scene (THREE/Scene.)
         fov 45
@@ -251,9 +252,9 @@
         ;; Want to look at the track ahead from slightly behind and
         ;; above the racer.
         ;; TODO: want a little left/right offset also
-        x2 (+ (- x1 (* 3 dx)) (* 2 x-up))
-        y2 (+ (- y1 (* 3 dy)) (* 2 y-up))
-        z2 (+ (- z1 (* 3 dz)) (* 2 z-up))]
+        x2 (+ (- x1 (* 5 dx)) (* 3 x-up))
+        y2 (+ (- y1 (* 5 dy)) (* 3 y-up))
+        z2 (+ (- z1 (* 5 dz)) (* 3 z-up))]
     (set! (.-x (.-position follower-camera)) x2)
     (set! (.-y (.-position follower-camera)) y2)
     (set! (.-z (.-position follower-camera)) z2)
@@ -266,15 +267,17 @@
       (.update follower-helper))))
 
 (defn build-track-with-runner
+  "Generate a sample track w/ runner cruising along"
   []
   (let [position-atom (atom [])]
     ;; For a demo, this looks surprisingly good
     (dotimes [_ 6]
+      ;; Q: Does cljs support the volaile equivalent for locals?
       (swap! position-atom #(conj % (track/generate-curve-position! 100))))
-    (let [positions @position-atom
+    (let [positions (vec @position-atom)
           {:keys [::ui/curve
                   ::ui/group]
-           :as track-world} (track/define-group positions)
+           :as track-world} (track/define-group positions 0x006666)
           track-length (.getLength curve)
           velocity (/ track/+standard-v+ track-length)
           red-racer (red/define-group)
@@ -286,25 +289,51 @@
              curve)
       (.add scene group)
       (.add scene red-racer)
+      #_(.info js/console "Adding curve to left of" (clj->js positions) "\na" (type positions) "\nstarting with" (clj->js (first positions)))
+      (let [positions-left (mapv (fn [[x y z]]
+                                   #_(.info js/console "New track position at" (- x 2) y z)
+                                   [(- x 5) y z])
+                                 positions)
+            #_#__ (.info js/console "Setting up new track to left of original at" (clj->js positions-left))
+            {:keys [::ui/curve ::ui/group] :as left-track} (track/define-group positions-left 0xaaaa00)]
+        (.add scene group))
+      (let [positions-left (mapv (fn [[x y z]]
+                                   #_(.info js/console "New track position at" (- x 2) y z)
+                                   [(+ x 5) y z])
+                                 positions)
+            #_#__ (.info js/console "Setting up new track to left of original at" (clj->js positions-left))
+            {:keys [::ui/curve ::ui/group] :as left-track} (track/define-group positions-left 0xaa00aa)]
+        (.add scene group))
       {::ui/curve curve
        ::racer red-racer
        ::scene scene
        ::velocity velocity})))
 
-(defn setup-runner-on-track
-  "Draw the track from just behind the racer"
-  [element]
-  (let [{:keys [::racer ::scene ::velocity]
-         track-curve ::ui/curve
-         :as track-with-runner} (build-track-with-runner)
-
-        fov 60
+(defn do-build-common-camera
+  "Build the camera that follows the racer"
+  ;; Refactoring common functionality between a couple of different
+  ;; views
+  []
+  (let [fov 85
         w 512
         h 512
         aspect 1
         near 0.1
-        far 200
-        camera (THREE/PerspectiveCamera. fov aspect near far)
+        far 200]
+    (THREE/PerspectiveCamera. fov aspect near far)))
+
+(defn setup-runner-on-track
+  "Draw the track from just behind the racer"
+  [element]
+  ;; It would be nice to coordinate this w/ setup-trackpreview to
+  ;; compare what's going on side by side.
+  ;; I keep forgetting that these are two totally different tracks, and
+  ;; that gets confusing.
+  (let [{:keys [::racer ::scene ::velocity]
+         track-curve ::ui/curve
+         :as track-with-runner} (build-track-with-runner)
+
+        camera (do-build-common-camera)
 
         post-camera-resize-callback nil
 
@@ -326,16 +355,16 @@
     (set! (.-background scene) (THREE/Color. 0x888888))
     ;; TODO: The "real-camera" really needs to take in the full track
     ;; size so I can view the entire thing.
-    (let [fov 75
+    (let [fov 60
           w 512
           h 512
           aspect (/ w h)
-          near 0.5
+          near 0.1
           far 200
           real-camera (THREE/PerspectiveCamera. fov aspect near far)
           controls (trackball/TrackballControls. real-camera element)
 
-          follower-camera (THREE/PerspectiveCamera. fov aspect near far)
+          follower-camera (do-build-common-camera)
           follower-helper (THREE/CameraHelper. follower-camera)
 
           post-camera-resize-callback (fn []

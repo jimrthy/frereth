@@ -61,8 +61,8 @@
   :args (s/cat :curve-positions ::curve-positions)
   :ret ::world)
 (defn define-group
-  [positions]
-  (.info js/console "Defining World")
+  [positions color]
+  (.info js/console "Defining" color " color track group based around" (clj->js positions))
   (let [curve (points->curve positions)
         curve-points (.getPoints curve 50)
         _ (.info js/console "Building geometry from" curve-points)
@@ -72,7 +72,7 @@
         ;; :dashSize - "both the gap with the stroke." Default 3
         ;; :gapSize - size of the gap. Default 1
         ;; :scale - scale of the dashed part of a line. Default is 1
-        material (THREE/LineDashedMaterial. (clj->js {:color 0x006666
+        material (THREE/LineDashedMaterial. (clj->js {:color color
                                                       :gapSize 2
                                                       :linewidth 3}))
         curve-object (THREE/Line. geometry material)

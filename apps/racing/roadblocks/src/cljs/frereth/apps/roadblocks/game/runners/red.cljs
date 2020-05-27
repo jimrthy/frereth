@@ -25,6 +25,7 @@
         depth 1.5
         geometry  (THREE/BoxGeometry. width height depth)
         material (THREE/MeshBasicMaterial. #js {:color 0xff0000})]
+    (.translate geometry 0 0.75 0)
     ;; This doesn't really satisfy the spec, since Mesh derives
     ;; from Object3D rather than Group.
     ;; The thing is, there are a lot of other details that need
