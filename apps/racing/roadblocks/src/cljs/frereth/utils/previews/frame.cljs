@@ -57,34 +57,6 @@
    ["three" :as THREE]
    ["three/examples/jsm/controls/TrackballControls":as trackball]))
 
-(defn make-scene-obsolete
-  "For preliminary red/blue boxes while I was proving concept"
-  [element]
-  (let [scene (THREE/Scene.)
-        fov 45
-        aspect 2
-        near 0.1
-        far 5
-        camera (THREE/PerspectiveCamera. fov aspect near far)]
-    (.set (.-position camera) 0 1 2)
-    (.lookAt camera 0 0 0)
-    (.add scene camera)
-
-    (let [color 0xffffff
-          intensity 1
-          light (THREE/DirectionalLight. color intensity)]
-      (.set (.-position light) -1 2 4)
-      (.add camera light))
-
-    (let [controls (trackball/TrackballControls. camera element)]
-      (set! (.-noZoom controls) true)
-      (set! (.-noPan controls) true)
-
-      {::camera camera
-       ::controls controls
-       ::element element
-       ::scene scene})))
-
 (defn load-skybox!
   []
   (let [loader (THREE/CubeTextureLoader.)]
@@ -101,6 +73,7 @@
                             "static/images/skybox/rainbow/rainbow_bk.png"]))))
 
 (defn setup-runner-preview
+  "Look at a gallery of racers"
   [element]
   (runners/define-world!)
   (let [{:keys [::ui/scene]
@@ -176,7 +149,13 @@
       (when post-camera-resize-callback!
         (post-camera-resize-callback!))
 
-      ;; Since this doesn't do anything, there isn't any point to call it yet.
+      ;; Since this doesn't do anything, there isn't any point to calling it yet.
+      ;; Q: Would there ever be?
+      ;; A: Well...what about dynamic tracks?
+      ;; Temporary objects that live on different parts of the track seem like
+      ;; one thing.
+      ;; Tracks that actually morph around seem like something different, and
+      ;; are probably out of scope.
       #_(track/step! track-group time-stamp)
 
       (let [{:keys [::position/direction
@@ -292,14 +271,14 @@
       #_(.info js/console "Adding curve to left of" (clj->js positions) "\na" (type positions) "\nstarting with" (clj->js (first positions)))
       (let [positions-left (mapv (fn [[x y z]]
                                    #_(.info js/console "New track position at" (- x 2) y z)
-                                   [(- x 5) y z])
+                                   [(- x 2) y z])
                                  positions)
             #_#__ (.info js/console "Setting up new track to left of original at" (clj->js positions-left))
             {:keys [::ui/curve ::ui/group] :as left-track} (track/define-group positions-left 0xaaaa00)]
         (.add scene group))
       (let [positions-left (mapv (fn [[x y z]]
                                    #_(.info js/console "New track position at" (- x 2) y z)
-                                   [(+ x 5) y z])
+                                   [(+ x 2) y z])
                                  positions)
             #_#__ (.info js/console "Setting up new track to left of original at" (clj->js positions-left))
             {:keys [::ui/curve ::ui/group] :as left-track} (track/define-group positions-left 0xaa00aa)]
@@ -343,6 +322,26 @@
 
         step! (build-runner-step-along-track scene camera track-curve racer velocity post-camera-resize-callback on-camera-move!)]
     (set! (.-background scene) sky-box)
+
+    (.info js/console "Setting up keydown listener for" element)
+    (set! (.-tabindex element) 1)
+    ;; TODO: Experiment w/ zIndex (sp?)
+    (.addEventListener element "click"
+                       (fn [evt]
+                         (.info js/console "Click:" evt "on"
+                                element
+                                "\ntabindex:" (.-tabindex element)
+                                "\nz-index:" (.-zIndex element))))
+    (.addEventListener element "focus"
+                       (fn []
+                         (.info js/console "Has focus. Press a key")))
+    (.addEventListener element "keydown"
+                       (fn [evt]
+                         (js/alert "key down")
+                         (let [key-code (.-keyCode evt)]
+                           (.info js/console "Key down:" key-code)
+                           (when (= key-code ui/+keycode-space+)
+                             (.info js/console "Jump")))))
     {::render! step!
      ::element element}))
 
