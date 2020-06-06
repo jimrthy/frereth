@@ -61,9 +61,6 @@
 ;;;; Public
 
 (defmethod ig/init-key ::interface
-  ;; This recursive definition is ridiculous.
-  ;; It doesn't make any sense for the ::interface to
-  ;; have a reference to itself.
   [_ {{:keys [::ctor]} ::factory
       :as this}]
   (if ctor
