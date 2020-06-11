@@ -1,51 +1,3 @@
-;;;; The original version of this was heavily influenced by
-;;;; https://threejsfundamentals.org/threejs/lessons/threejs-multiple-scenes.html
-;;;; and the related code at
-;;;; https://github.com/gfxfundamentals/threejsfundamentals/blob/master/threejs/lessons/threejs-multiple-scenes.md
-;;;; That code is Copyright 2018, Google Inc. All rights reserved.
-;;;; I think
-
-;;;; # Copyright 2018, Google Inc.
-;;;; # All rights reserved.
-;;;; #
-;;;; # Redistribution and use in source and binary forms, with or without
-;;;; # modification, are permitted provided that the following conditions are
-;;;; # met:
-;;;; #
-;;;; #     * Redistributions of source code must retain the above copyright
-;;;; #       notice, this list of conditions and the following disclaimer.
-;;;; #
-;;;; #     * Redistributions in binary form must reproduce the above
-;;;; #       copyright notice, this list of conditions and the following disclaimer
-;;;; #       in the documentation and/or other materials provided with the
-;;;; #       distribution.
-;;;; #
-;;;; #     * Neither the name of Google Inc. nor the names of their
-;;;; #       contributors may be used to endorse or promote products derived from
-;;;; #       this software without specific prior written permission.
-;;;; #
-;;;; # THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
-;;;; # "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
-;;;; # LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
-;;;; # A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
-;;;; # OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
-;;;; # SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
-;;;; # LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
-;;;; # DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
-;;;; # THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-;;;; # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-;;;; # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-
-;;;; is a pretty standard MIT license.
-
-;;;; I think this probably qualifies as a derivative work,
-;;;; since I've translated big chunks of it from javascript.
-;;;; I don't think that google owns the copyright to this code,
-;;;; so I think this falls under my overall frereth
-;;;; project lincense, but I am not a lawyer.
-;;;; If I've done something wrong here, then please let me know so I
-;;;; can fix it.
-
 (ns frereth.utils.previews.frame
   "Provide something similar to devcards/NuBank workspaces in a Canvas"
   (:require
@@ -57,42 +9,9 @@
    ["three" :as THREE]
    ["three/examples/jsm/controls/TrackballControls":as trackball]))
 
-(defn make-scene-obsolete
-  "For preliminary red/blue boxes while I was proving concept"
-  [element]
-  (let [scene (THREE/Scene.)
-        fov 45
-        aspect 2
-        near 0.1
-        far 5
-        camera (THREE/PerspectiveCamera. fov aspect near far)]
-    (.set (.-position camera) 0 1 2)
-    (.lookAt camera 0 0 0)
-    (.add scene camera)
-
-    (let [color 0xffffff
-          intensity 1
-          light (THREE/DirectionalLight. color intensity)]
-      (.set (.-position light) -1 2 4)
-      (.add camera light))
-
-    (let [controls (trackball/TrackballControls. camera element)]
-      (set! (.-noZoom controls) true)
-      (set! (.-noPan controls) true)
-
-      {::camera camera
-       ::controls controls
-       ::element element
-       ::scene scene})))
-
 (defn load-skybox!
   []
   (let [loader (THREE/CubeTextureLoader.)]
-    ;; This looks pretty cool, but pieces simply are not in the proper order.
-    ;; My best guess is that it has something to do w/ left-hand vs. right-hand
-    ;; coordinate systems.
-    ;; TODO: Add this to the initial "racer proof of concept" frame so I can figure
-    ;; out what it's doing.
     (.load loader (clj->js ["static/images/skybox/rainbow/rainbow_lf.png"
                             "static/images/skybox/rainbow/rainbow_rt.png"
                             "static/images/skybox/rainbow/rainbow_up.png"
