@@ -272,13 +272,15 @@
 
     (.info js/console "Setting up keydown listener for" element)
     (set! (.-tabindex element) 1)
+    (set! (.-zIndex (.-style element)) 1)
     ;; TODO: Experiment w/ zIndex (sp?)
     (.addEventListener element "click"
                        (fn [evt]
                          (.info js/console "Click:" evt "on"
                                 element
                                 "\ntabindex:" (.-tabindex element)
-                                "\nz-index:" (.-zIndex element))))
+                                "\nz-index:" (.-z-index element)
+                                "\nstyle:" (.-style element))))
     (.addEventListener element "focus"
                        (fn []
                          (.info js/console "Has focus. Press a key")))
@@ -288,7 +290,7 @@
                          (let [key-code (.-keyCode evt)]
                            (.info js/console "Key down:" key-code)
                            (when (= key-code ui/+keycode-space+)
-                             (.info js/console "Jump")))))
+                             (.info js/console "TODO: Jump")))))
     {::render! step!
      ::element element}))
 
@@ -398,6 +400,7 @@
                  (.setViewport renderer left positive-y-up-bottom width height)
 
                  (render! renderer {::width width ::height height} previous-time time)))))
+    ;; TODO: Move this (and the one in the real game loops) to the top
     ;; Deliberately limit it to 10 FPS to help avoid log messages sending it off
     ;; the rails
     #_(js/setTimeout
