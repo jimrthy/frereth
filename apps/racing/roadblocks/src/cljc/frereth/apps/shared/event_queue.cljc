@@ -1,14 +1,7 @@
 (ns frereth.apps.shared.event-queue
   "Implement the Event Queue pattern.
 
-  This version is meant to be simple, not efficient.
-
-  In particular, your event handlers must be fast.
-
-  As implemented, this is just the Observer Pattern.
-
-  It completely misses the point that handlers need to be decoupled in
-  time from the notifications"
+  This version is meant to be simple, not efficient."
   (:require
    [#?(:clj clojure.core.async
        :cljs cljs.core.async) :as async]
@@ -83,11 +76,11 @@
   [_ this]
   (tear-down! this))
 
-(s/fdef register
+(s/fdef register!
   :args (s/cat :this ::queue
                :event-type ::event-type
                :handler ::handler)
-  :ret (s/keys :req [::handler-key ::queue]))
+  :ret ::handler-key)
 (defn register!
   [{:keys [::registry]
     :as this} event-type handler]

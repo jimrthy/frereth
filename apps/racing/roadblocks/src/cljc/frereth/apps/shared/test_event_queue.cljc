@@ -24,12 +24,13 @@
         (sut/register! e-q ::bar bar-handler)
         (sut/register! e-q ::bar bar-handler)
 
-        #_(sut/publish! e-q ::foo {::baz nil})
-        #_(sut/publish! e-q ::bar ::quux)
         ;; This gets into implementation details
         ;; that should not be tested.
-        ;; But I'm not sure where these messages are
-        ;; disappearing
+        ;; All we should really be doing is calling
+        ;; publish! and shouldn't need to know anything
+        ;; about the async parts underneath the hood.
+        ;; Race conditions from that approach make
+        ;; testing extremely difficult.
         (let [foo-pub (sut/publish! e-q ::foo {::baz nil})
               bar-pub (sut/publish! e-q ::bar ::quux)]
           (async/go
@@ -52,48 +53,52 @@
 (t/deftest deregistration
   (let [e-q (sut/build)
         foo-count (atom 0)
-        bar-count (atom 0)]
-    (let [foo-handler (fn [_] (swap! foo-count inc))
-          bar-handler (fn [_] (swap! bar-count inc))
+        bar-count (atom 0)
+        foo-handler (fn [_] (swap! foo-count inc))
+        bar-handler (fn [_] (swap! bar-count inc))
 
-          foo-id-1 (sut/register! e-q ::foo foo-handler)
-          foo-id-2 (sut/register! e-q ::foo foo-handler)
+        foo-id-1 (sut/register! e-q ::foo foo-handler)
+        foo-id-2 (sut/register! e-q ::foo foo-handler)
 
-          bar-id-1 (sut/register! e-q ::bar bar-handler)
-          bar-id-2 (sut/register! e-q ::bar bar-handler)]
+        bar-id-1 (sut/register! e-q ::bar bar-handler)
+        bar-id-2 (sut/register! e-q ::bar bar-handler)]
 
-      (async/go
-        (println "Starting the publishing sequence")
-        (try
-          (async/<! (sut/publish! e-q ::foo {::baz :anything}))
-          ;; Now that the event queue is async, it's subject to race
-          ;; conditions.
-          (t/is (= @foo-count 2))
-          (t/is (= @bar-count 0))
+    ;; Doing this in the way that end-user really should
+    ;; gets into even worse race conditions.
+    ;; Maybe there's a way I can write a real test
+    ;; that demonstrates actual usage without needing
+    ;; to expose the async parts. I'm not sure what
+    ;; it could possibly do reliably.
+    (async/go
+      (println "Starting the publishing sequence")
+      (try
+        (async/<! (sut/publish! e-q ::foo {::baz :anything}))
+        (t/is (= @foo-count 2))
+        (t/is (= @bar-count 0))
 
-          (async/<! (sut/publish! e-q ::bar {::quux ::something-else}))
-          (t/is (= @foo-count 2))
-          (t/is (= @bar-count 2))
+        (async/<! (sut/publish! e-q ::bar {::quux ::something-else}))
+        (t/is (= @foo-count 2))
+        (t/is (= @bar-count 2))
 
-          (sut/de-register! e-q ::foo foo-id-1)
-          (async/<! (sut/publish! e-q ::foo {::baz :anything}))
+        (sut/de-register! e-q ::foo foo-id-1)
+        (async/<! (sut/publish! e-q ::foo {::baz :anything}))
+        (t/is (= @foo-count 3))
+        (t/is (= @bar-count 2))
+
+        (sut/publish! e-q ::bar {::quux ::something-else})
+        (t/is (= @foo-count 3))
+        (t/is (= @bar-count 4))
+
+        ;; Deregistering a handler that doesn't exist.
+        ;; Should not have any effect
+        (sut/de-register! e-q ::bar -1)
+        (sut/publish! e-q ::bar {::quux ::something-else})
+        (t/is (= @foo-count 3))
+        (t/is (= @bar-count 6))
+
+        (sut/de-register! e-q ::bar bar-id-1)
+        (sut/publish! e-q ::bar {::quux ::something-else})
+        (finally
+          (sut/tear-down! e-q)
           (t/is (= @foo-count 3))
-          (t/is (= @bar-count 2))
-
-          (sut/publish! e-q ::bar {::quux ::something-else})
-          (t/is (= @foo-count 3))
-          (t/is (= @bar-count 4))
-
-          ;; Deregistering a handler that doesn't exist.
-          ;; Should not have any effect
-          (sut/de-register! e-q ::bar -1)
-          (sut/publish! e-q ::bar {::quux ::something-else})
-          (t/is (= @foo-count 3))
-          (t/is (= @bar-count 6))
-
-          (sut/de-register! e-q ::bar bar-id-1)
-          (sut/publish! e-q ::bar {::quux ::something-else})
-          (finally
-            (sut/tear-down! e-q)
-            (t/is (= @foo-count 3))
-            (t/is (= @bar-count 7))))))))
+          (t/is (= @bar-count 7)))))))
