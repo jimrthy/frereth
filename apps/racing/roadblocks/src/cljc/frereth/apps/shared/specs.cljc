@@ -4,7 +4,13 @@
              [clojure.core.async.impl.protocols :as async-protocols]
              [clojure.spec.alpha :as s]))
 
+(defn class-predicate
+  "Returns a predicate to check whether an object is an instance of the supplied class."
+  [klass]
+  #(instance? klass %))
+
 (s/def ::async/chan #(satisfies? async-protocols/Channel %))
+(s/def ::atom (class-predicate (class (atom nil))))
 
 ;; It's tempting to make this a limited set.
 ;; But it's not like specifying that here would
