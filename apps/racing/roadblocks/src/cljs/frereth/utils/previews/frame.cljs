@@ -72,13 +72,13 @@
 
 (defn build-runner-step-along-track
   "Return a function to be called every animation frame"
-  ;; FIXME: Need to convert the callbacks into a map if
-  ;; I want to get serious about this approach.
-  ;; I'm thinking
-  ;; ::on-camera-resize
-  ;; ::on-runner-move
-  ;; I have to remember: this is strictly a proof-of-concept
-  [scene camera track-curve racer velocity post-camera-resize-callback! move-camera-callback!]
+  [{:keys [::on-camera-resize!
+           ::on-runner-move!
+           ::racer
+           ::ui/scene
+           ::velocity
+           ::ui/camera]
+      track-curve ::ui/curve}]
   (let [mob-atom (atom {::position/position 0
                         ::position/velocity velocity})]
     ;; This function handles the common side-effects of moving the racer
@@ -90,11 +90,14 @@
        previous-time-stamp
        time-stamp]
       #_(.log js/console "Adjusting track position from time" previous-time-stamp "to" time-stamp)
+
+      ;; Don't need this resize unless the aspect ratio changes
+      ;; FIXME: Add that check
       (set! (.-aspect camera) (/ width height))
       (.updateProjectionMatrix camera)
 
-      (when post-camera-resize-callback!
-        (post-camera-resize-callback!))
+      (when on-camera-resize!
+        (on-camera-resize!))
 
       ;; Since this doesn't do anything, there isn't any point to calling it yet.
       ;; Q: Would there ever be?
@@ -110,7 +113,7 @@
                     ::ui/up-vector]
              ;; It's tempting to just have this calculate the
              ;; transformation matrix.
-             ;; But I'd still need the direction (TODO: and up vector)
+             ;; But I'd still need the direction and up vector
              ;; to set the camera
              :as transformation} (swap! mob-atom
                                         (fn [mob]
@@ -119,18 +122,9 @@
                                                                                            (if previous-time-stamp
                                                                                              (- time-stamp previous-time-stamp)
                                                                                              0))))]
-        (when move-camera-callback!
-          (move-camera-callback! transformation))
-        ;; TODO: Need to set the racer's rotation (or quaternion?) based on direction
-        ;; and up vectors.
-        ;; Q: What *is* the up vector here?
-        ;; I think I have an intuitive grasp, but I can't describe it
-        ;; formally.
-        ;; It's tempting to project the tangent onto, say, the x-y plane.
-        ;; Then rotate it 90 degrees and normalize that vector (with 0
-        ;; z component) as "up".
-        ;; But that would cheat the fun sideways loop-the-loops and
-        ;; swoops like you get around the curves at Nascar
+        (when on-runner-move!
+          (on-runner-move! transformation))
+
         (let [x' (.-x position)
               y' (.-y position)
               z' (.-z position)
@@ -138,6 +132,7 @@
               x-up (.-x up-vector)
               y-up (.-y up-vector)
               z-up (.-z up-vector)]
+          #_(.info js/console "Updating the .-position of" racer)
           (set! (.-x (.-position racer)) x')
           (set! (.-y (.-position racer)) y')
           (set! (.-z (.-position racer)) z')
@@ -231,8 +226,8 @@
             {:keys [::ui/curve ::ui/group] :as left-track} (track/define-group positions-left 0xaa00aa)]
         (.add scene group))
       {::ui/curve curve
+       ::ui/scene scene
        ::racer red-racer
-       ::scene scene
        ::velocity velocity})))
 
 (defn do-build-common-camera
@@ -255,7 +250,7 @@
   ;; compare what's going on side by side.
   ;; I keep forgetting that these are two totally different tracks, and
   ;; that gets confusing.
-  (let [{:keys [::racer ::scene ::velocity]
+  (let [{:keys [::racer ::ui/scene ::velocity]
          track-curve ::ui/curve
          :as track-with-runner} (build-track-with-runner)
 
@@ -267,7 +262,13 @@
 
         sky-box (load-skybox!)
 
-        step! (build-runner-step-along-track scene camera track-curve racer velocity post-camera-resize-callback on-camera-move!)]
+        step! (build-runner-step-along-track {::ui/camera camera
+                                              ::ui/curve track-curve
+                                              ::ui/scene scene
+                                              ::racer racer
+                                              ::velocity velocity
+                                              ::on-camera-resize! post-camera-resize-callback
+                                              ::on-runner-move! on-camera-move!})]
     (set! (.-background scene) sky-box)
 
     (.info js/console "Setting up keydown listener for" element)
@@ -286,6 +287,8 @@
                          (.info js/console "Has focus. Press a key")))
     (.addEventListener element "keydown"
                        (fn [evt]
+                         ;; Not hitting this.
+                         ;; Q: Why not?
                          (js/alert "key down")
                          (let [key-code (.-keyCode evt)]
                            (.info js/console "Key down:" key-code)
@@ -297,7 +300,7 @@
 (defn setup-track-preview
   "Build a debug view of the track with the racer and a Camera Helper to try to get an idea what's going on"
   [element]
-  (let [{:keys [::racer ::scene ::velocity]
+  (let [{:keys [::racer ::ui/scene ::velocity]
          track-curve ::ui/curve
          :as track-with-runner} (build-track-with-runner)]
     (set! (.-background scene) (THREE/Color. 0x888888))
@@ -323,7 +326,13 @@
 
           on-camera-move! (partial on-camera-move! follower-camera follower-helper)
 
-          step! (build-runner-step-along-track scene real-camera track-curve racer velocity post-camera-resize-callback on-camera-move!)]
+          step! (build-runner-step-along-track {::ui/camera real-camera
+                                                ::ui/curve track-curve
+                                                ::ui/scene scene
+                                                ::racer racer
+                                                ::velocity velocity
+                                                ::on-camera-resize! post-camera-resize-callback
+                                                ::on-runner-move! on-camera-move!})]
       (.add scene follower-helper)
       ;; TODO: Set up this and the fov so I can see the entire track
       (set! (.-z (.-position real-camera)) 60)

@@ -10,7 +10,7 @@
   #(instance? klass %))
 
 (s/def ::async/chan #(satisfies? async-protocols/Channel %))
-(s/def ::atom (class-predicate (class (atom nil))))
+(s/def ::atom (class-predicate (type (atom nil))))
 
 ;; It's tempting to make this a limited set.
 ;; But it's not like specifying that here would
