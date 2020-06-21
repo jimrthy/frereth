@@ -125,7 +125,7 @@ Then, in a different terminal:
 
 `$ shadow-cljs cljs-repl ${build-id}`
 
-Or connect over CIDER, which is way out of scope.
+Or connect over CIDER, which is way out of scope for this README.
 
 ##### Integrated REPL
 
@@ -160,6 +160,11 @@ map directly to the CLI. By default, it is aliased as `shadow`.
 
 `;; shadow-cljs browser-repl
 (shadow/browser-repl)`
+
+Note about connecting to this from CIDER:
+
+As things stand, I get a warning that it's missing cider-nrepl and
+refactor-nrepl.
 
 #### node.js, raw
 

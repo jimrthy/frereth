@@ -19,6 +19,7 @@
         :output-dir "public/js"
         :target :browser}
   :cards {:asset-path "/js"
+          :externs "gl-matrix.ext.js"
           :modules {:main {:init-fn frereth.apps.roadblocks.cards/main}}
           #_#_:compiler-options {:devcards true}
           ;; This seems like it should go to a completely different dir
