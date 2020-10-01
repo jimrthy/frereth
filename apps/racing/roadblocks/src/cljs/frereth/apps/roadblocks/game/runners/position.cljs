@@ -3,8 +3,14 @@
   (:require
    [clojure.spec.alpha :as s]
    [frereth.apps.shared.ui :as ui]
-   ;; This doesn't compile
-   [glMatrix :as gl-matrix]
+   ;; This doesn't compile at all
+   #_[glMatrix :as gl-matrix]
+   ;; This looks under node_modules
+   #_["net.glmatrix.gl-matrix" :as gl-matrix]
+   ;; Q: Where is this looking?
+   ;; (wherever it is, it doesn't find what I want)
+   [net.glmatrix.gl-matrix :as gl-matrix]
+   #_[gl-matrix]
    ;; FIXME: This usage needs to go away.
    ;; It's fine for a proof of concept where I'm happy using
    ;; shadow-cljs.
@@ -85,7 +91,7 @@
           x0 (.-x physical-location)
           y0 (.-y physical-location)
           z0 (.z physical-location)
-          p0 (gl-matrix.vec3/fromValues x0 y0 z0)
+          p0 (glMatrix.vec3.fromValues x0 y0 z0)
 
           new-vec-on-track (gl-matrix.vec3/fromValues (.-x new-location-on-track)
                                                       (.-y new-location-on-track)

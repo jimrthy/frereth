@@ -19,7 +19,11 @@
         :output-dir "public/js"
         :target :browser}
   :cards {:asset-path "/js"
-          :externs "gl-matrix.ext.js"
+          :externs ["./src/js/net/glmatrix/gl-matrix.ext.js"]
+          :foreign-libs [{:file "./src/js/net/glmatrix/gl-matrix.js"
+                          :file-min "./src/js/net/glmatrix/gl-matrix-min.js"
+                          :provides ["net.glmatrix.gl-matrix"]}
+                         #_{:file "./src/js/"}]
           :modules {:main {:init-fn frereth.apps.roadblocks.cards/main}}
           #_#_:compiler-options {:devcards true}
           ;; This seems like it should go to a completely different dir
@@ -37,4 +41,4 @@
  :deps {:alias [:dev]}
  :dev-http {3000 "public"}
  :nrepl {:port 3333}
- :source-paths ["src/clj" "src/cljs" "src/cljc"]}
+ #_#_:source-paths ["src/clj" "src/cljs" "src/cljc"]}
