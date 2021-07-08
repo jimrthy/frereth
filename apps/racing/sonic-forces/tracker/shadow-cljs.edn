@@ -10,7 +10,7 @@
                      :dev        {:compiler-options
                                   {:external-config {:ghostwheel {}}}}
 
-                     :devtools   {:after-load app.client/refresh
+                     :devtools   {:after-load tracker.client/refresh
                                   :preloads   [com.fulcrologic.fulcro.inspect.preload tracker.development-preload]}}
 
           :test     {:target           :browser-test
@@ -30,10 +30,10 @@
                      :ns-regexp        "-test$"}
 
           :workspaces {:target     nubank.workspaces.shadow-cljs.target
-                           :ns-regexp  "-(test|ws)$"
-                           :output-dir "resources/public/workspaces/js"
-                           :asset-path "/static/workspaces/js"
-                           :devtools   {:preloads           [com.fulcrologic.fulcro.inspect.preload]
-                                        :http-root          "resources/public"
-                                        :http-port          8023
-                                        :http-resource-root "."}}}}
+                       :ns-regexp  "-(test|ws)$"
+                       :output-dir "resources/public/workspaces/js"
+                       :asset-path "/static/workspaces/js"
+                       :devtools   {:preloads           [com.fulcrologic.fulcro.inspect.preload]
+                                    :http-root          "resources/public"
+                                    :http-port          8023
+                                    :http-resource-root "."}}}}
